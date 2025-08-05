@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Gerador de Release PM</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <style>
+        .portfolio-item { transition: all 0.3s ease; }
+        .portfolio-item:hover { transform: scale(1.05); }
+        .portfolio-item.selected { 
+            transform: scale(1.1); 
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+        }
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .sidebar-nav { position: sticky; top: 0; }
+        
+        /* Mobile optimizations */
+        @media (max-width: 768px) {
+            .container { padding: 0 1rem; }
+            .sidebar-nav { position: relative; margin-bottom: 1rem; }
+            .grid { grid-template-columns: 1fr; }
+            .flex { flex-direction: column; }
+            .flex-wrap { flex-wrap: wrap; }
+            .portfolio-item { padding: 0.5rem; }
+            .text-2xl { font-size: 1.5rem; }
+            .text-3xl { font-size: 2rem; }
+            .p-6 { padding: 1rem; }
+            .p-4 { padding: 0.75rem; }
+            .p-3 { padding: 0.5rem; }
+            .gap-6 { gap: 1rem; }
+            .gap-4 { gap: 0.75rem; }
+            .space-y-4 > * + * { margin-top: 0.75rem; }
+            .space-y-6 > * + * { margin-top: 1rem; }
+            .min-h-32 { min-height: 8rem; }
+        }
+        
+        /* Touch-friendly buttons */
+        @media (max-width: 768px) {
+            button, .nav-btn { min-height: 44px; }
+            input, textarea, select { min-height: 44px; }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans">
+    <!-- Header -->
+    <header class="bg-blue-900 shadow-lg">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between flex-wrap">
+                <div class="flex items-center space-x-4 mb-2 sm:mb-0">
+                    <i class="fas fa-shield-alt text-2xl sm:text-3xl text-yellow-400"></i>
+                    <div>
+                        <h1 class="text-xl sm:text-2xl font-bold">Sistema PM</h1>
+                        <p class="text-sm sm:text-base text-blue-200">Gerador de Release Profissional</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="text-right text-sm sm:text-base">
+                        <div class="text-yellow-400 font-bold">🔺 1ª RPM 🔺</div>
+                        <div class="text-xs sm:text-sm">1° BATALHÃO PM</div>
+                        <div id="ciaSelecionadaHeader" class="text-xs sm:text-sm text-blue-200">6ª CIA PMMG</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container mx-auto px-4 py-6">
+        <div class="flex flex-wrap -mx-4">
+            <!-- Sidebar Navigation -->
+            <div class="w-full lg:w-1/4 px-4 mb-6">
+                <nav class="bg-gray-800 rounded-lg p-4 sidebar-nav">
+                    <h3 class="text-lg font-semibold mb-4 text-yellow-400">
+                        <i class="fas fa-bars mr-2"></i>Menu
+                    </h3>
+                    <ul class="space-y-2">
+                        <li><button onclick="showSection('generator')" class="nav-btn w-full text-left p-3 rounded hover:bg-gray-700 transition-colors bg-blue-600">
+                            <i class="fas fa-plus-circle mr-2"></i>Novo Release
+                        </button></li>
+                        <li><button onclick="showSection('templates')" class="nav-btn w-full text-left p-3 rounded hover:bg-gray-700 transition-colors">
+                            <i class="fas fa-file-alt mr-2"></i>Templates
+                        </button></li>
+                    </ul>
+                </nav>
+            </div>
+
+            <!-- Main Content -->
+            <div class="w-full lg:w-3/4 px-4">
+                <!-- Generator Section -->
+                <div id="generator-section" class="section bg-gray-800 rounded-lg p-6 mb-6">
+                    <h2 class="text-2xl font-bold mb-6 text-yellow-400">
+                        <i class="fas fa-plus-circle mr-2"></i>Gerador de Release
+                    </h2>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Left Column -->
+                        <div class="space-y-4">
+                            <!-- CIA Selection -->
+                            <div>
+                                <label class="block text-sm font-semibold mb-2">
+                                    <i class="fas fa-building mr-1"></i>CIA PMMG:
+                                </label>
+                                <select id="cia" onchange="atualizarCia()" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500">
+                                    <option value="3ª CIA PMMG">3ª CIA PMMG</option>
+                                    <option value="4ª CIA PMMG">4ª CIA PMMG</option>
+                                    <option value="5ª CIA PMMG">5ª CIA PMMG</option>
+                                    <option value="6ª CIA PMMG" selected>6ª CIA PMMG</option>
+                                    <option value="CIA TM PMMG">CIA TM PMMG</option>
+                                </select>
+                            </div>
+
+                            <!-- Basic Info -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-semibold mb-2">
+                                        <i class="fas fa-file-text mr-1"></i>Natureza:
+                                    </label>
+                                    <input type="text" id="natureza" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Ex: Furto, Roubo, Tráfico...">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold mb-2">
+                                        <i class="fas fa-clock mr-1"></i>Hora:
+                                    </label>
+                                    <input type="time" id="hora" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-semibold mb-2">
+                                    <i class="fas fa-map-marker-alt mr-1"></i>Local:
+                                </label>
+                                <input type="text" id="local" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Endereço completo da ocorrência">
+                            </div>
+
+                            <!-- Portfolio Selection -->
+                            <div>
+                                <label class="block text-sm font-semibold mb-3">
+                                    <i class="fas fa-users mr-1"></i>Equipe Principal:
+                                </label>
+                                <select id="portfolioSelect" onchange="selecionarPortfolio()" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 mb-3">
+                                    <option value="">Selecione o tipo de recurso</option>
+                                    <option value="🚓">🚓 Viatura</option>
+                                    <option value="🏍️">🏍️ Moto</option>
+                                    <option value="👁️">👁️ Olho Vivo</option>
+                                    <option value="🚶">🚶 Patrulha</option>
+                                    <option value="🦉">🦉 P2</option>
+                                </select>
+                                <input type="text" id="equipe" placeholder="Nome da Equipe/VP" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            </div>
+                        </div>
+
+                        <!-- Right Column -->
+                        <div class="space-y-4">
+                            <!-- Guarnição -->
+                            <div>
+                                <label class="block text-sm font-semibold mb-2">
+                                    <i class="fas fa-user-shield mr-1"></i>Guarnição:
+                                </label>
+                                <div id="guarnicao" class="space-y-2 mb-2"></div>
+                                <button onclick="addPolicial('guarnicao')" class="w-full p-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+                                    <i class="fas fa-plus mr-1"></i>Adicionar Policial
+                                </button>
+                            </div>
+
+                            <!-- Apoio -->
+                            <div>
+                                <label class="block text-sm font-semibold mb-2">
+                                    <i class="fas fa-hands-helping mr-1"></i>Apoio:
+                                </label>
+                                <div id="apoio" class="space-y-2 mb-2"></div>
+                                <div class="flex gap-2">
+                                    <button onclick="addEquipeApoio()" class="flex-1 p-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors">
+                                        <i class="fas fa-users mr-1"></i>Equipe
+                                    </button>
+                                    <button onclick="addPolicial('apoio')" class="flex-1 p-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
+                                        <i class="fas fa-plus mr-1"></i>Policial
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Full Width Sections -->
+                    <div class="mt-6 space-y-4">
+                        <!-- Material Apreendido -->
+                        <div>
+                            <label class="block text-sm font-semibold mb-2">
+                                <i class="fas fa-box mr-1"></i>Material Apreendido:
+                            </label>
+                            <textarea id="material" rows="3" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Liste os materiais apreendidos (um por linha)"></textarea>
+                        </div>
+
+                        <!-- Autores -->
+                        <div>
+                            <label class="block text-sm font-semibold mb-2">
+                                <i class="fas fa-user-times mr-1"></i>Autor(es) Preso(s):
+                            </label>
+                            <div id="autores" class="space-y-2 mb-2"></div>
+                            <button onclick="addAutor()" class="p-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors">
+                                <i class="fas fa-plus mr-1"></i>Adicionar Autor
+                            </button>
+                        </div>
+
+                        <!-- Histórico -->
+                        <div>
+                            <label class="block text-sm font-semibold mb-2">
+                                <i class="fas fa-history mr-1"></i>Histórico:
+                            </label>
+                            <textarea id="historico" rows="4" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Descreva o histórico da ocorrência de forma detalhada"></textarea>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="flex flex-col sm:flex-row flex-wrap gap-3 pt-4">
+                            <button onclick="gerarRelease()" class="flex-1 min-w-0 p-3 bg-yellow-600 hover:bg-yellow-700 text-gray-900 font-semibold rounded-lg transition-colors">
+                                <i class="fas fa-magic mr-2"></i>Gerar Release
+                            </button>
+                            <button onclick="salvarRascunho()" class="p-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+                                <i class="fas fa-save mr-1"></i>Salvar Rascunho
+                            </button>
+                            <button onclick="copiarRelease()" class="p-3 bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
+                                <i class="fas fa-copy mr-1"></i>Copiar
+                            </button>
+                            <button onclick="limparCampos()" class="p-3 bg-gray-600 hover:bg-gray-700 rounded-lg transition-colors">
+                                <i class="fas fa-broom mr-1"></i>Limpar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Output -->
+                    <div class="mt-6">
+                        <h3 class="text-lg font-semibold mb-3 text-yellow-400">
+                            <i class="fas fa-file-alt mr-2"></i>Release Gerado:
+                        </h3>
+                        <div id="output" class="bg-gray-900 p-4 rounded-lg border border-gray-600 whitespace-pre-line min-h-32 font-mono text-sm"></div>
+                    </div>
+                </div>
+
+                <!-- Templates Section -->
+                <div id="templates-section" class="section bg-gray-800 rounded-lg p-6 mb-6 hidden">
+                    <h2 class="text-2xl font-bold mb-6 text-yellow-400">
+                        <i class="fas fa-file-alt mr-2"></i>Templates Predefinidos
+                    </h2>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <h3 class="font-semibold mb-2 text-green-400">🚗 Furto de Veículo</h3>
+                            <p class="text-sm text-gray-300 mb-3">Template para ocorrências de furto de veículos</p>
+                            <div class="flex gap-2">
+                                <button onclick="aplicarTemplate('furtoVeiculo')" class="flex-1 p-2 bg-blue-600 hover:bg-blue-700 rounded transition-colors">
+                                    Aplicar
+                                </button>
+                                <button onclick="editarTemplate('furtoVeiculo')" class="p-2 bg-yellow-600 hover:bg-yellow-700 rounded transition-colors">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <h3 class="font-semibold mb-2 text-red-400">🔫 Roubo à Mão Armada</h3>
+                            <p class="text-sm text-gray-300 mb-3">Template para roubos com uso de arma</p>
+                            <div class="flex gap-2">
+                                <button onclick="aplicarTemplate('rouboArmado')" class="flex-1 p-2 bg-blue-600 hover:bg-blue-700 rounded transition-colors">
+                                    Aplicar
+                                </button>
+                                <button onclick="editarTemplate('rouboArmado')" class="p-2 bg-yellow-600 hover:bg-yellow-700 rounded transition-colors">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <h3 class="font-semibold mb-2 text-purple-400">💊 Tráfico de Drogas</h3>
+                            <p class="text-sm text-gray-300 mb-3">Template para apreensões de entorpecentes</p>
+                            <div class="flex gap-2">
+                                <button onclick="aplicarTemplate('traficoDropgas')" class="flex-1 p-2 bg-blue-600 hover:bg-blue-700 rounded transition-colors">
+                                    Aplicar
+                                </button>
+                                <button onclick="editarTemplate('traficoDropgas')" class="p-2 bg-yellow-600 hover:bg-yellow-700 rounded transition-colors">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <h3 class="font-semibold mb-2 text-orange-400">🏠 Furto Residencial</h3>
+                            <p class="text-sm text-gray-300 mb-3">Template para furtos em residências</p>
+                            <div class="flex gap-2">
+                                <button onclick="aplicarTemplate('furtoResidencial')" class="flex-1 p-2 bg-blue-600 hover:bg-blue-700 rounded transition-colors">
+                                    Aplicar
+                                </button>
+                                <button onclick="editarTemplate('furtoResidencial')" class="p-2 bg-yellow-600 hover:bg-yellow-700 rounded transition-colors">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <h3 class="font-semibold mb-2 text-blue-400">🛍️ Furto em Estabelecimento</h3>
+                            <p class="text-sm text-gray-300 mb-3">Template para furtos comerciais</p>
+                            <div class="flex gap-2">
+                                <button onclick="aplicarTemplate('furtoComercial')" class="flex-1 p-2 bg-blue-600 hover:bg-blue-700 rounded transition-colors">
+                                    Aplicar
+                                </button>
+                                <button onclick="editarTemplate('furtoComercial')" class="p-2 bg-yellow-600 hover:bg-yellow-700 rounded transition-colors">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <h3 class="font-semibold mb-2 text-yellow-400">⚖️ Prisão em Flagrante</h3>
+                            <p class="text-sm text-gray-300 mb-3">Template para prisões em flagrante</p>
+                            <div class="flex gap-2">
+                                <button onclick="aplicarTemplate('prisaoFlagrante')" class="flex-1 p-2 bg-blue-600 hover:bg-blue-700 rounded transition-colors">
+                                    Aplicar
+                                </button>
+                                <button onclick="editarTemplate('prisaoFlagrante')" class="p-2 bg-yellow-600 hover:bg-yellow-700 rounded transition-colors">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Custom Template Creation -->
+                    <div class="mt-8 bg-gray-700 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold mb-4 text-yellow-400">
+                            <i class="fas fa-plus mr-2"></i>Criar Template Personalizado
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input type="text" id="templateName" placeholder="Nome do Template" class="p-3 bg-gray-600 border border-gray-500 rounded-lg">
+                            <input type="text" id="templateCategory" placeholder="Categoria" class="p-3 bg-gray-600 border border-gray-500 rounded-lg">
+                        </div>
+                        <textarea id="templateDescription" rows="2" placeholder="Descrição do template" class="w-full mt-4 p-3 bg-gray-600 border border-gray-500 rounded-lg"></textarea>
+                        <button onclick="salvarTemplate()" class="mt-4 p-3 bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
+                            <i class="fas fa-save mr-2"></i>Salvar Template
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success/Error Messages -->
+    <div id="messages" class="fixed bottom-4 right-4 space-y-2 z-50"></div>
+
+    <script>
+        // Global Variables
+        let selectedPortfolio = '';
+        let lastSelectedDiv = null;
+        let autoSaveInterval = null;
+
+        // Templates Data
+        const templates = {
+            furtoVeiculo: {
+                natureza: "Furto de Veículo",
+                historico: "Equipe foi acionada via COPOM para verificar ocorrência de furto de veículo. No local, a vítima relatou que deixou o veículo estacionado e ao retornar constatou o furto. Realizadas diligências na região sem êxito. Vítima orientada quanto aos procedimentos.",
+                material: "Nenhum material apreendido"
+            },
+            rouboArmado: {
+                natureza: "Roubo à Mão Armada",
+                historico: "Equipe foi acionada para atender ocorrência de roubo. No local, a vítima relatou que foi abordada por indivíduo armado que subtraiu seus pertences mediante grave ameaça. Realizadas diligências na região para localização do autor. Vítima orientada quanto aos procedimentos legais.",
+                material: "Nenhum material apreendido"
+            },
+            traficoDropgas: {
+                natureza: "Tráfico de Entorpecentes",
+                historico: "Durante patrulhamento de rotina, a equipe avistou indivíduo em atitude suspeita. Ao realizar abordagem, foi localizado material entorpecente. Autor conduzido à delegacia para procedimentos legais. Material apreendido e lacrado conforme protocolo.",
+                material: "Porções de substância análoga à maconha\nPorções de substância análoga à cocaína"
+            },
+            furtoResidencial: {
+                natureza: "Furto Qualificado",
+                historico: "Equipe acionada para atender ocorrência de furto em residência. No local, a vítima relatou que ao retornar à residência constatou que a mesma havia sido violada e diversos objetos subtraídos. Realizadas diligências na região. Vítima orientada quanto aos procedimentos.",
+                material: "Nenhum material apreendido"
+            },
+            furtoComercial: {
+                natureza: "Furto em Estabelecimento Comercial",
+                historico: "Equipe acionada para atender ocorrência de furto em estabelecimento comercial. No local, o responsável relatou que durante o período noturno o estabelecimento foi violado e produtos foram subtraídos. Realizadas diligências na região. Responsável orientado quanto aos procedimentos.",
+                material: "Nenhum material apreendido"
+            },
+            prisaoFlagrante: {
+                natureza: "Prisão em Flagrante",
+                historico: "Durante patrulhamento, a equipe foi acionada para atender ocorrência em andamento. No local, foi constatada a prática delituosa e realizada a prisão em flagrante do autor. Conduzido à delegacia para procedimentos legais.",
+                material: "Material relacionado ao delito apreendido"
+            }
+        };
+
+        // Initialize system when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            inicializarSistema();
+            showSection('generator');
+        });
+
+        // System Initialization
+        function inicializarSistema() {
+            // Set default time
+            const now = new Date();
+            document.getElementById('hora').value = now.toTimeString().slice(0, 5);
+        }
+
+        // Auto-save functionality
+        function iniciarAutoSave() {
+            const interval = parseInt(localStorage.getItem('autoSaveInterval') || '30') * 1000;
+            
+            if (autoSaveInterval) clearInterval(autoSaveInterval);
+            
+            autoSaveInterval = setInterval(() => {
+                salvarRascunhoAutomatico();
+            }, interval);
+        }
+
+        function salvarRascunhoAutomatico() {
+            const formData = coletarDadosFormulario();
+            if (formData.natureza || formData.local || formData.historico) {
+                localStorage.setItem('rascunhoAtual', JSON.stringify({
+                    ...formData,
+                    timestamp: new Date().toISOString()
+                }));
+            }
+        }
+
+        // Navigation
+        function showSection(sectionName) {
+            // Hide all sections
+            document.querySelectorAll('.section').forEach(section => {
+                section.classList.add('hidden');
+            });
+            
+            // Show selected section
+            document.getElementById(sectionName + '-section').classList.remove('hidden');
+            
+            // Update navigation buttons
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600');
+                btn.classList.add('hover:bg-gray-700');
+            });
+            
+            // Highlight active button
+            const activeButton = event.target.closest('.nav-btn');
+            if (activeButton) {
+                activeButton.classList.add('bg-blue-600');
+                activeButton.classList.remove('hover:bg-gray-700');
+            }
+        }
+
+        // Company Selection
+        function atualizarCia() {
+            const cia = document.getElementById('cia').value;
+            document.getElementById('ciaSelecionadaHeader').textContent = cia;
+            salvarRascunhoAutomatico();
+        }
+
+        // Portfolio Selection
+        function selecionarPortfolio() {
+            const select = document.getElementById('portfolioSelect');
+            selectedPortfolio = select.value;
+            salvarRascunhoAutomatico();
+        }
+
+        // Função antiga mantida para compatibilidade com equipes de apoio
+        function selectPortfolio(element, emoji) {
+            element.parentElement.querySelectorAll('div').forEach(div => {
+                div.classList.remove('selected', 'border-blue-500');
+            });
+            element.classList.add('selected', 'border-blue-500');
+            element.parentElement.dataset.selected = emoji;
+            salvarRascunhoAutomatico();
+        }
+
+        // Personnel Management
+        function addPolicial(section) {
+            const container = document.getElementById(section);
+            const div = document.createElement('div');
+            div.className = 'flex gap-2 items-center bg-gray-600 p-3 rounded-lg';
+            div.innerHTML = `
+                <input type="text" placeholder="Nome do Policial" class="flex-1 p-2 bg-gray-700 border border-gray-500 rounded">
+                <select class="p-2 bg-gray-700 border border-gray-500 rounded">
+                    <option value="👮">👮 Masculino</option>
+                    <option value="👮‍♀️">👮‍♀️ Feminino</option>
+                </select>
+                <button onclick="this.parentElement.remove(); salvarRascunhoAutomatico();" class="p-2 bg-red-600 hover:bg-red-700 rounded transition-colors">
+                    <i class="fas fa-trash"></i>
+                </button>
+            `;
+            container.appendChild(div);
+            salvarRascunhoAutomatico();
+        }
+
+        function addEquipeApoio() {
+            const container = document.getElementById('apoio');
+            const div = document.createElement('div');
+            div.className = 'bg-gray-600 p-3 rounded-lg space-y-2';
+            div.innerHTML = `
+                <input type="text" placeholder="Nome da Equipe de Apoio" class="w-full p-2 bg-gray-700 border border-gray-500 rounded">
+                <div class="grid grid-cols-5 gap-2" data-selected="">
+                    <div onclick="selectPortfolio(this, '🚓')" class="portfolio-item bg-gray-700 p-2 rounded text-center cursor-pointer hover:bg-gray-600 border-2 border-transparent">
+                        <div class="text-lg">🚓</div>
+                        <div class="text-xs">Viatura</div>
+                    </div>
+                    <div onclick="selectPortfolio(this, '🏍️')" class="portfolio-item bg-gray-700 p-2 rounded text-center cursor-pointer hover:bg-gray-600 border-2 border-transparent">
+                        <div class="text-lg">🏍️</div>
+                        <div class="text-xs">Moto</div>
+                    </div>
+                    <div onclick="selectPortfolio(this, '👁️')" class="portfolio-item bg-gray-700 p-2 rounded text-center cursor-pointer hover:bg-gray-600 border-2 border-transparent">
+                        <div class="text-lg">👁️</div>
+                        <div class="text-xs">Olho Vivo</div>
+                    </div>
+                    <div onclick="selectPortfolio(this, '🚶')" class="portfolio-item bg-gray-700 p-2 rounded text-center cursor-pointer hover:bg-gray-600 border-2 border-transparent">
+                        <div class="text-lg">🚶</div>
+                        <div class="text-xs">Patrulha</div>
+                    </div>
+                    <div onclick="selectPortfolio(this, '🦉')" class="portfolio-item bg-gray-700 p-2 rounded text-center cursor-pointer hover:bg-gray-600 border-2 border-transparent">
+                        <div class="text-lg">🦉</div>
+                        <div class="text-xs">P2</div>
+                    </div>
+                </div>
+                <button onclick="this.parentElement.remove(); salvarRascunhoAutomatico();" class="w-full p-2 bg-red-600 hover:bg-red-700 rounded transition-colors">
+                    <i class="fas fa-trash mr-1"></i>Remover Equipe
+                </button>
+            `;
+            container.appendChild(div);
+            salvarRascunhoAutomatico();
+        }
+
+        function addAutor() {
+            const container = document.getElementById('autores');
+            const div = document.createElement('div');
+            div.className = 'flex gap-2 items-center bg-gray-600 p-3 rounded-lg';
+            div.innerHTML = `
+                <span class="text-xl">🔗</span>
+                <input type="text" placeholder="Nome do Autor" class="flex-1 p-2 bg-gray-700 border border-gray-500 rounded">
+                <button onclick="this.parentElement.remove(); salvarRascunhoAutomatico();" class="p-2 bg-red-600 hover:bg-red-700 rounded transition-colors">
+                    <i class="fas fa-trash"></i>
+                </button>
+            `;
+            container.appendChild(div);
+            salvarRascunhoAutomatico();
+        }
+
+        // Material Enhancement
+        function adicionarEmojiMaterial(texto) {
+            const linhas = texto.split(/\n|\r/);
+            const resultado = linhas.map(linha => {
+                const t = linha.toLowerCase();
+                let emoji = '';
+
+                // Enhanced emoji mapping
+                if (t.includes('faca') || t.includes('punhal')) emoji = '🔪';
+                else if (t.includes('revólver') || t.includes('revolver') || t.includes('pistola') || t.includes('arma de fogo')) emoji = '🔫';
+                else if (t.includes('computador') || t.includes('notebook') || t.includes('laptop')) emoji = '💻';
+                else if (t.includes('celular') || t.includes('telefone') || t.includes('smartphone')) emoji = '📱';
+                else if (t.includes('dinheiro') || t.includes('cédula') || t.includes('real')) emoji = '💵';
+                else if (t.includes('droga') || t.includes('maconha') || t.includes('cocaína') || t.includes('crack')) emoji = '💊';
+                else if (t.includes('munição') || t.includes('bala') || t.includes('cartucho')) emoji = '💣';
+                else if (t.includes('carro') || t.includes('veículo') || t.includes('automóvel')) emoji = '🚗';
+                else if (t.includes('moto') || t.includes('motocicleta')) emoji = '🏍️';
+                else if (t.includes('bicicleta')) emoji = '🚲';
+                else if (t.includes('joias') || t.includes('ouro') || t.includes('prata')) emoji = '💎';
+                else if (t.includes('documento') || t.includes('identidade') || t.includes('cpf')) emoji = '📄';
+                else if (t.includes('cartão') || t.includes('crédito') || t.includes('débito')) emoji = '💳';
+
+                return linha.trim() + (emoji ? ' - ' + emoji : '');
+            });
+            return resultado.join('\n');
+        }
+
+        // Form Data Collection
+        function coletarDadosFormulario() {
+            const cia = document.getElementById('cia').value;
+            const natureza = document.getElementById('natureza').value;
+            const local = document.getElementById('local').value;
+            const hora = document.getElementById('hora').value;
+            const equipe = document.getElementById('equipe').value;
+            const historico = document.getElementById('historico').value;
+            let material = document.getElementById('material').value;
+            material = adicionarEmojiMaterial(material);
+
+            // Collect personnel data
+            let guarnicao = '';
+            document.querySelectorAll('#guarnicao > div').forEach(p => {
+                const nome = p.querySelector('input').value;
+                const emoji = p.querySelector('select') ? p.querySelector('select').value : '';
+                if (nome) guarnicao += `\n${emoji} ${nome}`;
+            });
+
+            let apoio = '';
+            document.querySelectorAll('#apoio > div').forEach(p => {
+                const input = p.querySelector('input');
+                if (input) {
+                    const nome = input.value;
+                    const portfolioDiv = p.querySelector('[data-selected]');
+                    const emoji = portfolioDiv ? portfolioDiv.dataset.selected || '' : '';
+                    if (nome) apoio += `\n${emoji} ${nome}`;
+                }
+            });
+
+            let autores = '';
+            document.querySelectorAll('#autores > div').forEach(p => {
+                const nome = p.querySelector('input').value;
+                if (nome) autores += `\n🔗 ${nome}`;
+            });
+
+            return { cia, natureza, local, hora, equipe, historico, material, guarnicao, apoio, autores };
+        }
+
+        // Release Generation
+        function gerarRelease() {
+            const data = coletarDadosFormulario();
+            
+            let output = `*🔺 1ª RPM 🔺*\n*1° BATALHÃO PM*\n*${data.cia}*\n*📂 ${data.natureza}*\n*📍 ${data.local}*\n*⏰ ${data.hora}*\n\n${selectedPortfolio} *${data.equipe}* ${data.guarnicao}`;
+
+            if (data.apoio.trim()) {
+                output += `\n\n🤝 *APOIO:*${data.apoio}`;
+            }
+
+            if (data.material.trim()) {
+                output += `\n\n📦 *MATERIAL APREENDIDO:*\n${data.material}`;
+            }
+
+            if (data.autores.trim()) {
+                output += `\n\n🔗 *AUTOR(ES) PRESO(S)*:${data.autores}`;
+            }
+
+            output += `\n\n📜 *HISTÓRICO:*\n${data.historico}`;
+
+            if (data.cia.includes('6')) {
+                output += `\n\n*🔺 6 CIA PM - AQUI SE FORJAM HERÓIS BELORIZONTINOS!!!🔺*`;
+            }
+
+            output += `\n\n*🔺135 ANOS DO 1º BATALHÃO: PASSADO QUE INSPIRA, PRESENTE QUE PROTEGE.🔺*`;
+            output += `\n\n*🔺POLÍCIA MILITAR DE MINAS GERAIS, RUMO AOS 250 ANOS.🔺*`;
+
+            document.getElementById('output').textContent = output;
+            
+            // Save to database
+            salvarRelease(output, data);
+            mostrarMensagem('Release gerado com sucesso!', 'success');
+        }
+
+        // Release Management
+        function salvarRelease(output, data) {
+            const releases = JSON.parse(localStorage.getItem('releases') || '[]');
+            const novoRelease = {
+                id: Date.now(),
+                timestamp: new Date().toISOString(),
+                data: data,
+                output: output,
+                cia: data.cia,
+                natureza: data.natureza,
+                local: data.local,
+                hora: data.hora
+            };
+            
+            releases.unshift(novoRelease);
+            localStorage.setItem('releases', JSON.stringify(releases));
+        }
+
+        function salvarRascunho() {
+            const data = coletarDadosFormulario();
+            const rascunhos = JSON.parse(localStorage.getItem('rascunhos') || '[]');
+            
+            const novoRascunho = {
+                id: Date.now(),
+                timestamp: new Date().toISOString(),
+                data: data,
+                nome: `Rascunho - ${data.natureza || 'Sem título'}`
+            };
+            
+            rascunhos.unshift(novoRascunho);
+            localStorage.setItem('rascunhos', JSON.stringify(rascunhos));
+            mostrarMensagem('Rascunho salvo com sucesso!', 'success');
+        }
+
+        function copiarRelease() {
+            const texto = document.getElementById('output').textContent;
+            if (texto) {
+                // Tentar usar a API moderna do clipboard
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(texto).then(() => {
+                        mostrarMensagem('Release copiado para a área de transferência!', 'success');
+                    }).catch(() => {
+                        // Fallback para método antigo
+                        copiarTextoFallback(texto);
+                    });
+                } else {
+                    // Fallback para navegadores mais antigos
+                    copiarTextoFallback(texto);
+                }
+            } else {
+                mostrarMensagem('Nenhum release para copiar', 'warning');
+            }
+        }
+
+        function copiarTextoFallback(texto) {
+            const textArea = document.createElement('textarea');
+            textArea.value = texto;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    mostrarMensagem('Release copiado para a área de transferência!', 'success');
+                } else {
+                    mostrarMensagem('Erro ao copiar release. Tente selecionar e copiar manualmente.', 'error');
+                }
+            } catch (err) {
+                mostrarMensagem('Erro ao copiar release. Tente selecionar e copiar manualmente.', 'error');
+            }
+            
+            document.body.removeChild(textArea);
+        }
+
+        function limparCampos() {
+            document.getElementById('natureza').value = '';
+            document.getElementById('local').value = '';
+            document.getElementById('hora').value = new Date().toTimeString().slice(0, 5);
+            document.getElementById('equipe').value = '';
+            document.getElementById('portfolioSelect').value = '';
+            document.getElementById('historico').value = '';
+            document.getElementById('material').value = '';
+            document.getElementById('guarnicao').innerHTML = '';
+            document.getElementById('apoio').innerHTML = '';
+            document.getElementById('autores').innerHTML = '';
+            document.getElementById('output').textContent = '';
+            
+            selectedPortfolio = '';
+            
+            localStorage.removeItem('rascunhoAtual');
+            mostrarMensagem('Campos limpos com sucesso!', 'info');
+        }
+
+        // Template Management
+        function aplicarTemplate(templateName) {
+            const template = templates[templateName];
+            if (template) {
+                document.getElementById('natureza').value = template.natureza;
+                document.getElementById('historico').value = template.historico;
+                document.getElementById('material').value = template.material;
+                salvarRascunhoAutomatico();
+                mostrarMensagem(`Template "${templateName}" aplicado com sucesso!`, 'success');
+                showSection('generator');
+            }
+        }
+
+        function editarTemplate(templateName) {
+            const template = templates[templateName];
+            if (template) {
+                // Aplicar template nos campos para edição
+                document.getElementById('natureza').value = template.natureza;
+                document.getElementById('historico').value = template.historico;
+                document.getElementById('material').value = template.material;
+                
+                // Ir para a seção de gerador
+                showSection('generator');
+                
+                // Mostrar mensagem informativa
+                mostrarMensagem(`Template "${templateName}" carregado para edição. Faça as alterações desejadas e gere o release.`, 'info');
+            }
+        }
+
+        function salvarTemplate() {
+            const nome = document.getElementById('templateName').value;
+            const categoria = document.getElementById('templateCategory').value;
+            const descricao = document.getElementById('templateDescription').value;
+            
+            if (!nome) {
+                mostrarMensagem('Nome do template é obrigatório', 'error');
+                return;
+            }
+            
+            const data = coletarDadosFormulario();
+            const customTemplates = JSON.parse(localStorage.getItem('customTemplates') || '{}');
+            
+            customTemplates[nome] = {
+                nome: nome,
+                categoria: categoria,
+                descricao: descricao,
+                natureza: data.natureza,
+                historico: data.historico,
+                material: data.material
+            };
+            
+            localStorage.setItem('customTemplates', JSON.stringify(customTemplates));
+            mostrarMensagem('Template personalizado salvo com sucesso!', 'success');
+            
+            // Clear form
+            document.getElementById('templateName').value = '';
+            document.getElementById('templateCategory').value = '';
+            document.getElementById('templateDescription').value = '';
+        }
+
+        // Message System
+        function mostrarMensagem(texto, tipo) {
+            const container = document.getElementById('messages');
+            const div = document.createElement('div');
+            
+            const cores = {
+                success: 'bg-green-600',
+                error: 'bg-red-600',
+                warning: 'bg-yellow-600',
+                info: 'bg-blue-600'
+            };
+            
+            div.className = `${cores[tipo]} text-white p-3 rounded-lg shadow-lg fade-in`;
+            div.textContent = texto;
+            
+            container.appendChild(div);
+            
+            setTimeout(() => {
+                div.remove();
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
+
