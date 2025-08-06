@@ -135,6 +135,13 @@
                                 <input type="text" id="local" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Endereço completo da ocorrência">
                             </div>
 
+                            <div>
+                                <label class="block text-sm font-semibold mb-2">
+                                    <i class="fas fa-hashtag mr-1"></i>Número do REDS:
+                                </label>
+                                <input type="text" id="reds" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Ex: 2024123456789">
+                            </div>
+
                             <!-- Portfolio Selection -->
                             <div>
                                 <label class="block text-sm font-semibold mb-3">
@@ -476,7 +483,7 @@
             div.innerHTML = `
                 <input type="text" placeholder="Nome do Policial" class="flex-1 p-2 bg-gray-700 border border-gray-500 rounded">
                 <select class="p-2 bg-gray-700 border border-gray-500 rounded">
-                    <option value="👮">👮 Masculino</option>
+                    <option value="👮🏻‍♂️">👮🏻‍♂️ Masculino</option>
                     <option value="👮‍♀️">👮‍♀️ Feminino</option>
                 </select>
                 <button onclick="this.parentElement.remove(); salvarRascunhoAutomatico();" class="p-2 bg-red-600 hover:bg-red-700 rounded transition-colors">
@@ -570,6 +577,7 @@
             const cia = document.getElementById('cia').value;
             const natureza = document.getElementById('natureza').value;
             const local = document.getElementById('local').value;
+            const reds = document.getElementById('reds').value;
             const hora = document.getElementById('hora').value;
             const equipe = document.getElementById('equipe').value;
             const historico = document.getElementById('historico').value;
@@ -581,7 +589,7 @@
             document.querySelectorAll('#guarnicao > div').forEach(p => {
                 const nome = p.querySelector('input').value;
                 const emoji = p.querySelector('select') ? p.querySelector('select').value : '';
-                if (nome) guarnicao += `\n${emoji} ${nome}`;
+                if (nome) guarnicao += `\n${emoji} ${nome.toUpperCase()}`;
             });
 
             let apoio = '';
@@ -591,38 +599,52 @@
                     const nome = input.value;
                     const portfolioDiv = p.querySelector('[data-selected]');
                     const emoji = portfolioDiv ? portfolioDiv.dataset.selected || '' : '';
-                    if (nome) apoio += `\n${emoji} ${nome}`;
+                    if (nome) apoio += `\n${emoji} ${nome.toUpperCase()}`;
                 }
             });
 
             let autores = '';
             document.querySelectorAll('#autores > div').forEach(p => {
                 const nome = p.querySelector('input').value;
-                if (nome) autores += `\n🔗 ${nome}`;
+                if (nome) autores += `\n🔗 ${nome.toUpperCase()}`;
             });
 
-            return { cia, natureza, local, hora, equipe, historico, material, guarnicao, apoio, autores };
+            return { cia, natureza, local, reds, hora, equipe, historico, material, guarnicao, apoio, autores };
         }
 
         // Release Generation
         function gerarRelease() {
             const data = coletarDadosFormulario();
             
-            let output = `*🔺 1ª RPM 🔺*\n*1° BATALHÃO PM*\n*${data.cia}*\n*📂 ${data.natureza}*\n*📍 ${data.local}*\n*⏰ ${data.hora}*\n\n${selectedPortfolio} *${data.equipe}* ${data.guarnicao}`;
+            // Converter textos para caixa alta
+            const naturezaUpper = data.natureza.toUpperCase();
+            const localUpper = data.local.toUpperCase();
+            const equipeUpper = data.equipe.toUpperCase();
+            const historicoUpper = data.historico.toUpperCase();
+            const materialUpper = data.material.toUpperCase();
+            
+            let output = `*🔺 1ª RPM 🔺*\n*1° BATALHÃO PM*\n*${data.cia}*\n*📂 ${naturezaUpper}*\n*📍 ${localUpper}*`;
+            
+            // Adicionar REDS se preenchido
+            if (data.reds.trim()) {
+                output += `\n*📋 REDS: ${data.reds}*`;
+            }
+            
+            output += `\n*⏰ ${data.hora}*\n\n${selectedPortfolio} *${equipeUpper}* ${data.guarnicao}`;
 
             if (data.apoio.trim()) {
                 output += `\n\n🤝 *APOIO:*${data.apoio}`;
             }
 
             if (data.material.trim()) {
-                output += `\n\n📦 *MATERIAL APREENDIDO:*\n${data.material}`;
+                output += `\n\n📦 *MATERIAL APREENDIDO:*\n${materialUpper}`;
             }
 
             if (data.autores.trim()) {
                 output += `\n\n🔗 *AUTOR(ES) PRESO(S)*:${data.autores}`;
             }
 
-            output += `\n\n📜 *HISTÓRICO:*\n${data.historico}`;
+            output += `\n\n📜 *HISTÓRICO:*\n${historicoUpper}`;
 
             if (data.cia.includes('6')) {
                 output += `\n\n*🔺 6 CIA PM - AQUI SE FORJAM HERÓIS BELORIZONTINOS!!!🔺*`;
@@ -719,6 +741,7 @@
         function limparCampos() {
             document.getElementById('natureza').value = '';
             document.getElementById('local').value = '';
+            document.getElementById('reds').value = '';
             document.getElementById('hora').value = new Date().toTimeString().slice(0, 5);
             document.getElementById('equipe').value = '';
             document.getElementById('portfolioSelect').value = '';
