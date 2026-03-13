@@ -1,2 +1,0 @@
-# release
-Gerador de release
