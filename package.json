@@ -10,11 +10,15 @@
     "typescript": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "@supabase/supabase-js": "latest",
-    "lucide-react": "latest"
+    "lucide-react": "latest",
+    "framer-motion": "latest",
+    "@supabase/supabase-js": "latest"
   },
   "devDependencies": {
     "@types/react": "latest",
-    "@types/react-dom": "latest"
+    "@types/react-dom": "latest",
+    "tailwindcss": "^3.4.17",
+    "postcss": "latest",
+    "autoprefixer": "latest"
   }
 }

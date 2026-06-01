@@ -10,7 +10,11 @@
     "skipLibCheck": true,
     "types": ["vite/client"],
     "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
   },
   "include": ["src", "vite-env.d.ts"]
 }
