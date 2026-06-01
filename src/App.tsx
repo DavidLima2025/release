@@ -40,9 +40,9 @@ import {
   Edit3,
   Copy,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "./components/ui/card";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
 
 const today = new Date().toISOString().slice(0, 10);
 
