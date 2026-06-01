@@ -1,566 +1,1058 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gerador de Release PM - PMMG</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            background-color: #1a1a1a;
-            color: #e0e0e0;
-            font-family: 'Roboto', Arial, sans-serif;
-            padding: 20px;
-            line-height: 1.6;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-        
-        @media (max-width: 768px) {
-            .container {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        .card {
-            background-color: #2a2a2a;
-            border: 2px solid #b8860b;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        
-        h1 {
-            color: #d4af37;
-            margin-bottom: 20px;
-            text-align: center;
-            font-size: 28px;
-        }
-        
-        h2 {
-            color: #d4af37;
-            margin-bottom: 15px;
-            font-size: 18px;
-            border-bottom: 2px solid #b8860b;
-            padding-bottom: 10px;
-        }
-        
-        h3 {
-            color: #d4af37;
-            margin-top: 15px;
-            margin-bottom: 10px;
-            font-size: 14px;
-        }
-        
-        label {
-            display: block;
-            margin-bottom: 5px;
-            color: #d4af37;
-            font-weight: bold;
-            font-size: 13px;
-        }
-        
-        input, select, textarea {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 15px;
-            background-color: #1a1a1a;
-            border: 1px solid #b8860b;
-            color: #e0e0e0;
-            border-radius: 4px;
-            font-family: 'Roboto', Arial, sans-serif;
-        }
-        
-        input:focus, select:focus, textarea:focus {
-            outline: none;
-            border-color: #d4af37;
-            box-shadow: 0 0 5px rgba(212, 175, 55, 0.3);
-        }
-        
-        textarea {
-            resize: vertical;
-            min-height: 100px;
-        }
-        
-        button {
-            background-color: #b8860b;
-            color: #000;
-            padding: 12px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 14px;
-            margin-right: 10px;
-            margin-bottom: 10px;
-            transition: background-color 0.3s;
-        }
-        
-        button:hover {
-            background-color: #d4af37;
-        }
-        
-        button:disabled {
-            background-color: #666;
-            cursor: not-allowed;
-            color: #999;
-        }
-        
-        .btn-group {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-bottom: 15px;
-        }
-        
-        .btn-small {
-            padding: 8px 12px;
-            font-size: 12px;
-            margin-right: 5px;
-        }
-        
-        .btn-danger {
-            background-color: #666;
-        }
-        
-        .btn-danger:hover {
-            background-color: #888;
-        }
-        
-        .preview {
-            background-color: #000;
-            border: 1px solid #b8860b;
-            padding: 15px;
-            border-radius: 4px;
-            max-height: 400px;
-            overflow-y: auto;
-            margin-bottom: 15px;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            color: #d4af37;
-            line-height: 1.4;
-        }
-        
-        .item-list {
-            background-color: #1a1a1a;
-            border: 1px solid #b8860b;
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 10px;
-        }
-        
-        .item {
-            background-color: #2a2a2a;
-            padding: 8px;
-            margin-bottom: 5px;
-            border-left: 3px solid #b8860b;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .item button {
-            margin: 0;
-            padding: 4px 8px;
-            font-size: 11px;
-        }
-        
-        .toggle-btn {
-            background-color: #666;
-            padding: 10px 15px;
-            margin: 5px;
-        }
-        
-        .toggle-btn.active {
-            background-color: #b8860b;
-            color: #000;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <!-- FORMULÁRIO -->
-        <div>
-            <h1>🔺 GERADOR DE RELEASE PM 🔺</h1>
-            
-            <div class="card">
-                <h2>CIA PMMG</h2>
-                <select id="cia">
-                    <option value="1ª RPM">1ª RPM</option>
-                    <option value="2ª RPM">2ª RPM</option>
-                    <option value="3ª RPM">3ª RPM</option>
-                    <option value="4ª RPM">4ª RPM</option>
-                    <option value="5ª RPM">5ª RPM</option>
-                    <option value="6ª RPM">6ª RPM</option>
-                </select>
-            </div>
-            
-            <div class="card">
-                <h2>NATUREZA</h2>
-                <input type="text" id="natureza" placeholder="Ex: FURTO, ROUBO, TRÁFICO...">
-            </div>
-            
-            <div class="card">
-                <h2>INFORMAÇÕES BÁSICAS</h2>
-                <label>Local</label>
-                <input type="text" id="local" placeholder="Ex: RUA GUARANI, 390">
-                
-                <label>REDS</label>
-                <input type="text" id="reds" placeholder="Ex: 2026-011501710-001">
-                
-                <label>Hora</label>
-                <input type="time" id="hora">
-            </div>
-            
-            <div class="card">
-                <h2>EQUIPE PRINCIPAL</h2>
-                <label>Tipo</label>
-                <select id="equipeTipo">
-                    <option value="GT">GT (Moto)</option>
-                    <option value="VIATURA">VIATURA</option>
-                    <option value="BICICLETA">BICICLETA</option>
-                    <option value="A PÉ">A PÉ</option>
-                </select>
-                
-                <label>Nome da Guarnição</label>
-                <input type="text" id="equipeNome" placeholder="Ex: GT6, GEPAR 6">
-                
-                <h3>Militares</h3>
-                <input type="text" id="novoMilitar" placeholder="Nome do militar">
-                <button onclick="adicionarMilitar()">+ Adicionar Militar</button>
-                <div class="item-list" id="militaresList"></div>
-            </div>
-            
-            <div class="card">
-                <h2>APOIO</h2>
-                <label>Tipo de Equipe</label>
-                <select id="apoioTipo" onchange="atualizarApoioLabel()">
-                    <option value="OLHO VIVO">👁️ OLHO VIVO</option>
-                    <option value="P2">🕵️ P2</option>
-                    <option value="VIATURA">VIATURA</option>
-                    <option value="MOTO">MOTO</option>
-                </select>
-                
-                <label id="nomeApoioLabel">Nome da Guarnição</label>
-                <input type="text" id="apoioNome" placeholder="Ex: GEPAR 6">
-                
-                <h3>Militares</h3>
-                <input type="text" id="novoApoioMilitar" placeholder="Nome do militar">
-                <button onclick="adicionarApoioMilitar()">+ Adicionar Militar</button>
-                <div class="item-list" id="apoioMilitaresList"></div>
-                
-                <button onclick="adicionarApoio()">+ Adicionar Equipe de Apoio</button>
-                <div class="item-list" id="apoioList"></div>
-            </div>
-            
-            <div class="card">
-                <h2>RECURSOS ESPECIAIS</h2>
-                <button class="toggle-btn" id="olhoVivoBtn" onclick="toggleOlhoVivo()">👁️ OLHO VIVO</button>
-                <button class="toggle-btn" id="p2Btn" onclick="toggleP2()">🕵️ P2</button>
-            </div>
-            
-            <div class="card">
-                <h2>MATERIAL APREENDIDO</h2>
-                <input type="text" id="novoMaterial" placeholder="Ex: 8 PRODUTOS PARA CABELO">
-                <button onclick="adicionarMaterial()">+ Adicionar Material</button>
-                <div class="item-list" id="materialList"></div>
-            </div>
-            
-            <div class="card">
-                <h2>AUTOR(ES) PRESO(S)</h2>
-                <input type="text" id="novoAutor" placeholder="Nome do autor">
-                <button onclick="adicionarAutor()">+ Adicionar Autor</button>
-                <div class="item-list" id="autorList"></div>
-            </div>
-            
-            <div class="card">
-                <h2>HISTÓRICO</h2>
-                <textarea id="historico" placeholder="Descreva os detalhes da ocorrência..."></textarea>
-            </div>
-        </div>
-        
-        <!-- PREVIEW -->
-        <div>
-            <h1>📱 PREVIEW</h1>
-            <div class="preview" id="preview">Clique em "Gerar Release" para ver o resultado...</div>
-            <button onclick="gerarRelease()" style="width: 100%; margin-bottom: 10px;">🔄 Gerar Release</button>
-            <button onclick="copiarWhatsApp()" style="width: 100%; background-color: #25d366; margin-bottom: 10px;">📱 Copiar para WhatsApp</button>
-            <button onclick="baixarTXT()" style="width: 100%; background-color: #4CAF50;">📥 Baixar TXT</button>
-        </div>
+import React, { useMemo, useState } from "react";
+import { motion } from "framer-motion";
+import {
+  CalendarDays,
+  CheckCircle2,
+  ClipboardCheck,
+  Clock,
+  Eye,
+  Filter,
+  Lock,
+  Plus,
+  Search,
+  Shield,
+  Users,
+  AlertTriangle,
+  PauseCircle,
+  LayoutDashboard,
+  ListChecks,
+  Repeat,
+  UserRound,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  Mail,
+  Phone,
+  Building2,
+  UserPlus,
+  Settings,
+  Activity,
+  Trash2,
+  Check,
+  RotateCcw,
+  ArrowLeft,
+  Edit3,
+  Copy,
+} from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
+const today = new Date().toISOString().slice(0, 10);
+
+const workflows = ["Triagem", "Produção", "Validação", "Encaminhamento", "Conclusão"];
+const statuses = ["A fazer", "Atrasada", "Paralisada", "Risco de prazo", "Concluída"];
+const userRoles = ["Administrador", "Gestor", "Analista", "Colaborador"];
+
+const initialTasks = [
+  {
+    id: 1,
+    title: "Analisar denúncias recebidas",
+    type: "Inteligência",
+    status: "A fazer",
+    priority: "Alta",
+    responsible: "Sd Lima",
+    manager: "Sgt Operacional",
+    date: today,
+    officialDeadline: "2026-06-05",
+    internalDeadline: "2026-06-03",
+    workflow: "Triagem",
+    checklist: ["Conferir origem", "Validar vínculo", "Registrar providência"],
+    done: [true, false, false],
+    notes: "Demanda recebida para levantamento preliminar e organização das informações.",
+  },
+  {
+    id: 2,
+    title: "Consolidar alvos e vínculos",
+    type: "Dossiê",
+    status: "Atrasada",
+    priority: "Crítica",
+    responsible: "Equipe Intel",
+    manager: "Gestor",
+    date: today,
+    officialDeadline: "2026-05-31",
+    internalDeadline: "2026-05-29",
+    workflow: "Produção",
+    checklist: ["Separar imagens", "Criar linha do tempo", "Gerar relatório"],
+    done: [true, true, false],
+    notes: "Pendência de fechamento de relatório operacional.",
+  },
+  {
+    id: 3,
+    title: "Revisar checklist de campana",
+    type: "Operacional",
+    status: "Paralisada",
+    priority: "Média",
+    responsible: "Colaborador 01",
+    manager: "Sd Lima",
+    date: today,
+    officialDeadline: "2026-06-08",
+    internalDeadline: "2026-06-06",
+    workflow: "Validação",
+    checklist: ["Pontos de observação", "Canais de comunicação", "Plano de acionamento"],
+    done: [true, false, false],
+    notes: "Aguardando conferência do gestor.",
+  },
+  {
+    id: 4,
+    title: "Atualizar painel de demandas",
+    type: "Gestão",
+    status: "Concluída",
+    priority: "Baixa",
+    responsible: "Analista",
+    manager: "Gestor",
+    date: today,
+    officialDeadline: "2026-06-01",
+    internalDeadline: "2026-06-01",
+    workflow: "Conclusão",
+    checklist: ["Atualizar números", "Revisar pendências", "Publicar dashboard"],
+    done: [true, true, true],
+    notes: "Painel pronto para exibição em tela.",
+  },
+  {
+    id: 5,
+    title: "Conferir prazo de relatório sigiloso",
+    type: "Relatório",
+    status: "Risco de prazo",
+    priority: "Alta",
+    responsible: "Analista",
+    manager: "Gestor",
+    date: today,
+    officialDeadline: "2026-06-02",
+    internalDeadline: "2026-06-01",
+    workflow: "Validação",
+    checklist: ["Revisar minuta", "Conferir anexos", "Encaminhar gestor"],
+    done: [true, false, false],
+    notes: "Demanda com prazo crítico para fechamento e encaminhamento.",
+  },
+];
+
+const initialUsers = [
+  {
+    id: 1,
+    name: "David Lima",
+    warName: "Sd Lima",
+    register: "PM-0001",
+    unit: "1º BPM / GT6",
+    role: "Gestor",
+    email: "david@corujaintel.local",
+    phone: "(31) 99999-0000",
+    login: "sd.lima",
+    status: "Ativo",
+  },
+  {
+    id: 2,
+    name: "Equipe Intel",
+    warName: "Equipe Intel",
+    register: "PM-0002",
+    unit: "Núcleo de Inteligência",
+    role: "Analista",
+    email: "intel@corujaintel.local",
+    phone: "(31) 98888-0000",
+    login: "intel",
+    status: "Ativo",
+  },
+  {
+    id: 3,
+    name: "Colaborador 01",
+    warName: "Colaborador 01",
+    register: "PM-0003",
+    unit: "Apoio Operacional",
+    role: "Colaborador",
+    email: "apoio@corujaintel.local",
+    phone: "(31) 97777-0000",
+    login: "apoio01",
+    status: "Inativo",
+  },
+];
+
+function getStatusCounts(tasks) {
+  return statuses.reduce((acc, status) => {
+    acc[status] = tasks.filter((task) => task.status === status).length;
+    return acc;
+  }, {});
+}
+
+function buildCalendarDays(monthDate) {
+  const year = monthDate.getFullYear();
+  const month = monthDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const days = [];
+
+  for (let i = 0; i < firstDay.getDay(); i += 1) days.push(null);
+
+  for (let day = 1; day <= lastDay.getDate(); day += 1) {
+    const date = new Date(year, month, day);
+    days.push(date.toISOString().slice(0, 10));
+  }
+
+  while (days.length % 7 !== 0) days.push(null);
+  return days;
+}
+
+function runSelfTests() {
+  const feb2026 = buildCalendarDays(new Date(2026, 1, 1));
+  console.assert(feb2026.includes("2026-02-01"), "Teste calendário: fevereiro/2026 deve conter 01/02/2026.");
+  console.assert(feb2026.filter(Boolean).length === 28, "Teste calendário: fevereiro/2026 deve ter 28 dias.");
+
+  const testCounts = getStatusCounts([
+    { status: "A fazer" },
+    { status: "A fazer" },
+    { status: "Concluída" },
+  ]);
+  console.assert(testCounts["A fazer"] === 2, "Teste contadores: A fazer deve ser 2.");
+  console.assert(testCounts["Concluída"] === 1, "Teste contadores: Concluída deve ser 1.");
+}
+
+if (typeof window !== "undefined" && !window.__CORUJA_INTEL_TESTS__) {
+  window.__CORUJA_INTEL_TESTS__ = true;
+  runSelfTests();
+}
+
+function Badge({ children, tone = "default" }) {
+  const tones = {
+    default: "bg-slate-100 text-slate-700",
+    high: "bg-red-100 text-red-700",
+    medium: "bg-yellow-100 text-yellow-700",
+    low: "bg-emerald-100 text-emerald-700",
+    dark: "bg-emerald-950 text-emerald-50",
+  };
+
+  return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${tones[tone] || tones.default}`}>{children}</span>;
+}
+
+function OwlLogo() {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-600 shadow-lg shadow-orange-950/30">
+        <Eye className="absolute left-2 h-5 w-5 text-white" />
+        <Eye className="absolute right-2 h-5 w-5 text-white" />
+        <Shield className="mt-5 h-5 w-5 text-emerald-950" />
+      </div>
+      <div>
+        <p className="text-xl font-black tracking-tight text-white">SI 6ª CIA</p>
+        <p className="text-xs uppercase tracking-[0.25em] text-emerald-200">Centro de inteligência</p>
+      </div>
     </div>
+  );
+}
 
-    <script>
-        let militares = [];
-        let apoioMilitares = [];
-        let apoios = [];
-        let materiais = [];
-        let autores = [];
-        let temOlhoVivo = false;
-        let temP2 = false;
+function Login({ onLogin }) {
+  const [login, setLogin] = useState("");
+  const [password, setPassword] = useState("");
 
-        function atualizarApoioLabel() {
-            const tipo = document.getElementById('apoioTipo').value;
-            const nomeLabel = document.getElementById('nomeApoioLabel');
-            const nomeInput = document.getElementById('apoioNome');
-            if (tipo === 'OLHO VIVO' || tipo === 'P2') {
-                nomeLabel.style.display = 'none';
-                nomeInput.style.display = 'none';
-            } else {
-                nomeLabel.style.display = 'block';
-                nomeInput.style.display = 'block';
-            }
-        }
+  const submitLogin = () => {
+    if (!login.trim() || !password.trim()) {
+      alert("Informe usuário e senha para acessar.");
+      return;
+    }
+    onLogin();
+  };
 
-        function adicionarMilitar() {
-            const nome = document.getElementById('novoMilitar').value.trim().toUpperCase();
-            if (nome) {
-                militares.push(nome);
-                document.getElementById('novoMilitar').value = '';
-                atualizarMilitaresList();
-                gerarRelease();
-            }
-        }
+  return (
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-black p-6 text-white">
+      <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/mnt/data/image(2).png')" }} />
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-[2px]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(234,88,12,0.34),transparent_34%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,transparent_0%,rgba(0,0,0,0.25)_42%,rgba(0,0,0,0.92)_100%)]" />
 
-        function removerMilitar(index) {
-            militares.splice(index, 1);
-            atualizarMilitaresList();
-            gerarRelease();
-        }
+      <motion.section initial={{ opacity: 0, scale: 0.96, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="relative z-10 w-full max-w-md">
+        <div className="mb-5 text-center">
+          <div className="mx-auto mb-4 inline-flex rounded-full border border-orange-500/40 bg-black/55 px-5 py-2 text-xs font-black uppercase tracking-[0.28em] text-orange-300 shadow-lg shadow-orange-950/40 backdrop-blur">
+            Inteligência Operacional
+          </div>
+          <h1 className="text-5xl font-black tracking-tight text-white drop-shadow-2xl">SI 6ª CIA</h1>
+          <p className="mt-3 text-sm font-semibold uppercase tracking-[0.22em] text-orange-200">Observar • Analisar • Antecipar</p>
+        </div>
 
-        function atualizarMilitaresList() {
-            const list = document.getElementById('militaresList');
-            list.innerHTML = militares.map((m, i) => 
-                `<div class="item">👮🏻‍♂️ ${m} <button class="btn-small btn-danger" onclick="removerMilitar(${i})">✕</button></div>`
-            ).join('');
-        }
+        <div className="rounded-3xl border border-orange-500/30 bg-black/72 p-8 shadow-2xl shadow-orange-950/50 backdrop-blur-xl">
+          <div className="mb-8 text-center">
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-orange-600 shadow-lg shadow-orange-700/40 ring-1 ring-orange-300/40">
+              <Eye className="h-9 w-9 text-white" />
+            </div>
+            <h2 className="text-2xl font-black tracking-tight text-white">Acesso Restrito</h2>
+            <p className="mt-2 text-sm text-zinc-400">Sistema Integrado de Inteligência</p>
+          </div>
 
-        function adicionarApoioMilitar() {
-            const nome = document.getElementById('novoApoioMilitar').value.trim().toUpperCase();
-            if (nome) {
-                apoioMilitares.push(nome);
-                document.getElementById('novoApoioMilitar').value = '';
-                atualizarApoioMilitaresList();
-                gerarRelease();
-            }
-        }
+          <div className="space-y-4">
+            <Input value={login} onChange={(event) => setLogin(event.target.value)} placeholder="Usuário" className="h-12 border-white/10 bg-white/10 text-white placeholder:text-zinc-400" />
+            <Input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Senha" type="password" className="h-12 border-white/10 bg-white/10 text-white placeholder:text-zinc-400" onKeyDown={(event) => event.key === "Enter" && submitLogin()} />
+            <Button onClick={submitLogin} className="h-12 w-full bg-orange-600 text-base font-black uppercase tracking-wide hover:bg-orange-700">
+              <Lock className="mr-2 h-4 w-4" /> Entrar
+            </Button>
+            <div className="flex items-center justify-between text-xs text-zinc-400">
+              <span>Ambiente operacional</span>
+              <button type="button" onClick={() => alert("Solicitação registrada. Procure o administrador do SI 6ª CIA para redefinir a senha.")} className="text-orange-300 hover:text-orange-200">
+                Esqueci minha senha
+              </button>
+            </div>
+          </div>
+        </div>
+      </motion.section>
+    </main>
+  );
+}
 
-        function removerApoioMilitar(index) {
-            apoioMilitares.splice(index, 1);
-            atualizarApoioMilitaresList();
-            gerarRelease();
-        }
+function StatCard({ label, value, icon: Icon, className }) {
+  return (
+    <Card className={`${className} border-0 text-white shadow-lg transition hover:scale-[1.02]`}>
+      <CardContent className="flex items-center justify-between p-5">
+        <div>
+          <p className="text-sm font-bold opacity-90">{label}</p>
+          <p className="mt-1 text-3xl font-black">{value}</p>
+        </div>
+        <Icon className="h-10 w-10 opacity-90" />
+      </CardContent>
+    </Card>
+  );
+}
 
-        function atualizarApoioMilitaresList() {
-            const list = document.getElementById('apoioMilitaresList');
-            list.innerHTML = apoioMilitares.map((m, i) => 
-                `<div class="item">👮🏻‍♂️ ${m} <button class="btn-small btn-danger" onclick="removerApoioMilitar(${i})">✕</button></div>`
-            ).join('');
-        }
+function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMonthDate, addQuickTask, updateTaskStatus, deleteTask }) {
+  const [quickTitle, setQuickTitle] = useState("");
+  const [quickResponsible, setQuickResponsible] = useState("");
+  const [quickType, setQuickType] = useState("Inteligência");
+  const [quickPriority, setQuickPriority] = useState("Média");
+  const [quickNotes, setQuickNotes] = useState("");
+  const [dayPanelOpen, setDayPanelOpen] = useState(false);
+  const [dayPanelMode, setDayPanelMode] = useState("view");
+  const selectedTasks = tasks.filter((task) => task.date === selectedDate);
+  const monthDays = buildCalendarDays(monthDate);
+  const monthLabel = monthDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 
-        function adicionarApoio() {
-            const tipo = document.getElementById('apoioTipo').value;
-            const nome = document.getElementById('apoioNome').value.trim().toUpperCase();
-            
-            if (tipo === 'OLHO VIVO' || tipo === 'P2') {
-                if (apoioMilitares.length > 0) {
-                    const apoio = {
-                        tipo: tipo,
-                        nome: '',
-                        militares: apoioMilitares.slice()
-                    };
-                    apoios.push(apoio);
-                    apoioMilitares = [];
-                    document.getElementById('apoioNome').value = '';
-                    atualizarApoioMilitaresList();
-                    atualizarApoioList();
-                    gerarRelease();
-                } else {
-                    alert('Adicione pelo menos um militar antes de adicionar a equipe de apoio');
-                }
-            } else {
-                if (nome && apoioMilitares.length > 0) {
-                    const apoio = {
-                        tipo: tipo,
-                        nome: nome,
-                        militares: apoioMilitares.slice()
-                    };
-                    apoios.push(apoio);
-                    apoioMilitares = [];
-                    document.getElementById('apoioNome').value = '';
-                    atualizarApoioMilitaresList();
-                    atualizarApoioList();
-                    gerarRelease();
-                } else {
-                    alert('Preencha o nome da guarnição e adicione militares');
-                }
-            }
-        }
+  const moveMonth = (amount) => setMonthDate(new Date(monthDate.getFullYear(), monthDate.getMonth() + amount, 1));
 
-        function removerApoio(index) {
-            apoios.splice(index, 1);
-            atualizarApoioList();
-            gerarRelease();
-        }
+  const saveQuickTask = () => {
+    if (!quickTitle.trim()) return;
+    addQuickTask({
+      title: quickTitle,
+      responsible: quickResponsible || "Sem responsável",
+      date: selectedDate,
+      type: quickType,
+      priority: quickPriority,
+      notes: quickNotes || "Demanda criada diretamente pelo calendário visual.",
+    });
+    setQuickTitle("");
+    setQuickResponsible("");
+    setQuickType("Inteligência");
+    setQuickPriority("Média");
+    setQuickNotes("");
+    setDayPanelMode("view");
+  };
 
-        function atualizarApoioList() {
-            const list = document.getElementById('apoioList');
-            list.innerHTML = apoios.map((a, i) => 
-                `<div class="item">${a.tipo} ${a.nome} (${a.militares.length} militares) <button class="btn-small btn-danger" onclick="removerApoio(${i})">✕</button></div>`
-            ).join('');
-        }
+  const openDayPanel = (date, mode = "view") => {
+    setSelectedDate(date);
+    setDayPanelMode(mode);
+    setDayPanelOpen(true);
+  };
 
-        function adicionarMaterial() {
-            const material = document.getElementById('novoMaterial').value.trim().toUpperCase();
-            if (material) {
-                materiais.push(material);
-                document.getElementById('novoMaterial').value = '';
-                atualizarMaterialList();
-                gerarRelease();
-            }
-        }
+  return (
+    <Card className="rounded-3xl border-0 shadow-sm">
+      <CardContent className="p-6">
+        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 text-xl font-black">
+              <CalendarDays className="h-5 w-5 text-orange-600" /> Calendário visual de atividades
+            </h2>
+            <p className="text-sm text-slate-500">Clique em um dia para ver atividades feitas e cadastrar nova demanda direto no calendário.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={() => moveMonth(-1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="min-w-44 rounded-xl bg-emerald-950 px-4 py-2 text-center text-sm font-bold capitalize text-white">{monthLabel}</div>
+            <Button variant="outline" size="icon" onClick={() => moveMonth(1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
 
-        function removerMaterial(index) {
-            materiais.splice(index, 1);
-            atualizarMaterialList();
-            gerarRelease();
-        }
+        <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+          <div>
+            <div className="grid grid-cols-7 gap-2 text-center text-xs font-black uppercase text-slate-500">
+              {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((day) => (
+                <div key={day}>{day}</div>
+              ))}
+            </div>
+            <div className="mt-2 grid grid-cols-7 gap-2">
+              {monthDays.map((date, index) => {
+                const dayTasks = date ? tasks.filter((task) => task.date === date) : [];
+                const doneCount = dayTasks.filter((task) => task.status === "Concluída").length;
+                const pendingCount = dayTasks.length - doneCount;
+                const isSelected = date === selectedDate;
+                const dayNumber = date ? Number(date.slice(8, 10)) : "";
 
-        function atualizarMaterialList() {
-            const list = document.getElementById('materialList');
-            list.innerHTML = materiais.map((m, i) => 
-                `<div class="item">📦 ${m} <button class="btn-small btn-danger" onclick="removerMaterial(${i})">✕</button></div>`
-            ).join('');
-        }
+                return (
+                  <button
+                    type="button"
+                    key={`${date || "blank"}-${index}`}
+                    disabled={!date}
+                    onClick={() => date && openDayPanel(date, "view")}
+                    className={`min-h-28 rounded-2xl border p-2 text-left transition hover:shadow-md ${isSelected ? "border-orange-600 bg-orange-50 ring-2 ring-orange-200" : "bg-white"} ${!date ? "cursor-default opacity-0" : ""}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-black ${isSelected ? "bg-orange-600 text-white" : "bg-slate-100"}`}>{dayNumber}</span>
+                      {dayTasks.length > 0 && <span className="rounded-full bg-emerald-950 px-2 py-0.5 text-xs font-bold text-white">{dayTasks.length}</span>}
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      {dayTasks.slice(0, 3).map((task) => (
+                        <div key={task.id} className={`truncate rounded-lg px-2 py-1 text-[11px] font-semibold ${task.status === "Concluída" ? "bg-green-100 text-green-700" : task.status === "Atrasada" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-700"}`}>
+                          {task.title}
+                        </div>
+                      ))}
+                    </div>
+                    {dayTasks.length > 0 && (
+                      <div className="mt-2 flex gap-1 text-[10px] font-bold">
+                        <span className="rounded bg-green-100 px-1.5 py-0.5 text-green-700">{doneCount} feitas</span>
+                        <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-yellow-700">{pendingCount} pend.</span>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-        function adicionarAutor() {
-            const autor = document.getElementById('novoAutor').value.trim().toUpperCase();
-            if (autor) {
-                autores.push(autor);
-                document.getElementById('novoAutor').value = '';
-                atualizarAutorList();
-                gerarRelease();
-            }
-        }
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-emerald-950 p-4 text-white">
+              <p className="text-sm text-emerald-100">Dia selecionado</p>
+              <p className="text-2xl font-black">{selectedDate.split("-").reverse().join("/")}</p>
+            </div>
 
-        function removerAutor(index) {
-            autores.splice(index, 1);
-            atualizarAutorList();
-            gerarRelease();
-        }
+            <div className="rounded-2xl border bg-white p-4">
+              <h3 className="mb-3 flex items-center gap-2 font-black">
+                <Plus className="h-4 w-4 text-orange-600" /> Ações do dia
+              </h3>
+              <div className="grid gap-2">
+                <Button onClick={() => setDayPanelOpen(true) || setDayPanelMode("create")} className="w-full bg-orange-600 hover:bg-orange-700">
+                  <Plus className="mr-2 h-4 w-4" /> Cadastrar demanda
+                </Button>
+                <Button variant="outline" onClick={() => setDayPanelOpen(true) || setDayPanelMode("view")} className="w-full">
+                  <FileText className="mr-2 h-4 w-4" /> Visualizar demandas do dia
+                </Button>
+              </div>
+            </div>
 
-        function atualizarAutorList() {
-            const list = document.getElementById('autorList');
-            list.innerHTML = autores.map((a, i) => 
-                `<div class="item">🔗 ${a} <button class="btn-small btn-danger" onclick="removerAutor(${i})">✕</button></div>`
-            ).join('');
-        }
+            <div className="rounded-2xl border bg-white p-4">
+              <h3 className="mb-3 flex items-center gap-2 font-black">
+                <FileText className="h-4 w-4 text-orange-600" /> Atividades do dia
+              </h3>
+              <div className="max-h-80 space-y-2 overflow-auto pr-1">
+                {selectedTasks.length === 0 && <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Nenhuma atividade cadastrada neste dia.</p>}
+                {selectedTasks.map((task) => (
+                  <div key={task.id} className="rounded-xl border p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-black">{task.title}</p>
+                      <Badge tone={task.status === "Concluída" ? "low" : task.status === "Atrasada" ? "high" : "medium"}>{task.status}</Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">{task.responsible} • {task.workflow}</p>
+                    <p className="mt-2 text-xs text-slate-600">{task.notes}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "Concluída")}><Check className="mr-1 h-3 w-3" /> Feita</Button>
+                      <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "A fazer")}><RotateCcw className="mr-1 h-3 w-3" /> Reabrir</Button>
+                      <Button size="sm" variant="outline" onClick={() => deleteTask(task.id)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
 
-        function toggleOlhoVivo() {
-            temOlhoVivo = !temOlhoVivo;
-            document.getElementById('olhoVivoBtn').classList.toggle('active');
-            gerarRelease();
-        }
+        {dayPanelOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+            <div className="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-3xl bg-white shadow-2xl">
+              <div className="sticky top-0 z-10 flex flex-col gap-3 border-b bg-emerald-950 p-5 text-white md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.25em] text-orange-300">Calendário visual</p>
+                  <h3 className="text-2xl font-black">{selectedDate.split("-").reverse().join("/")}</h3>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" onClick={() => setDayPanelMode("create")} className="bg-orange-600 text-white hover:bg-orange-700">
+                    <Plus className="mr-2 h-4 w-4" /> Cadastrar demanda
+                  </Button>
+                  <Button variant="secondary" onClick={() => setDayPanelMode("view")} className="bg-white/10 text-white hover:bg-white/20">
+                    <FileText className="mr-2 h-4 w-4" /> Ver demandas
+                  </Button>
+                  <Button variant="secondary" onClick={() => setDayPanelOpen(false)} className="bg-white text-emerald-950 hover:bg-slate-100">
+                    Fechar
+                  </Button>
+                </div>
+              </div>
 
-        function toggleP2() {
-            temP2 = !temP2;
-            document.getElementById('p2Btn').classList.toggle('active');
-            gerarRelease();
-        }
+              <div className="p-5">
+                {dayPanelMode === "create" && (
+                  <div className="rounded-2xl border bg-slate-50 p-5">
+                    <h4 className="mb-4 flex items-center gap-2 text-xl font-black"><Plus className="h-5 w-5 text-orange-600" /> Nova demanda para este dia</h4>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Input placeholder="Título da demanda" value={quickTitle} onChange={(event) => setQuickTitle(event.target.value)} />
+                      <Input placeholder="Responsável" value={quickResponsible} onChange={(event) => setQuickResponsible(event.target.value)} />
+                      <select value={quickType} onChange={(event) => setQuickType(event.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm">
+                        <option>Inteligência</option>
+                        <option>Dossiê</option>
+                        <option>Operacional</option>
+                        <option>Relatório</option>
+                        <option>Gestão</option>
+                      </select>
+                      <select value={quickPriority} onChange={(event) => setQuickPriority(event.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm">
+                        <option>Baixa</option>
+                        <option>Média</option>
+                        <option>Alta</option>
+                        <option>Crítica</option>
+                      </select>
+                      <textarea
+                        className="min-h-28 rounded-md border bg-white p-3 text-sm md:col-span-2"
+                        placeholder="Informações da demanda, observações, providências ou contexto operacional"
+                        value={quickNotes}
+                        onChange={(event) => setQuickNotes(event.target.value)}
+                      />
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button onClick={saveQuickTask} className="bg-orange-600 hover:bg-orange-700"><Plus className="mr-2 h-4 w-4" /> Salvar demanda</Button>
+                      <Button variant="outline" onClick={() => setDayPanelMode("view")}>Cancelar</Button>
+                    </div>
+                  </div>
+                )}
 
-        function gerarRelease() {
-            const cia = document.getElementById('cia').value;
-            const natureza = document.getElementById('natureza').value.toUpperCase();
-            const local = document.getElementById('local').value.toUpperCase();
-            const reds = document.getElementById('reds').value;
-            const hora = document.getElementById('hora').value;
-            const equipeTipo = document.getElementById('equipeTipo').value;
-            const equipeNome = document.getElementById('equipeNome').value.toUpperCase();
-            const historico = document.getElementById('historico').value.toUpperCase();
+                {dayPanelMode === "view" && (
+                  <div>
+                    <div className="mb-4 flex items-center justify-between">
+                      <h4 className="text-xl font-black">Demandas cadastradas neste dia</h4>
+                      <Badge tone="dark">{selectedTasks.length} demandas</Badge>
+                    </div>
+                    <div className="grid gap-3">
+                      {selectedTasks.length === 0 && <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">Nenhuma demanda cadastrada neste dia. Clique em “Cadastrar demanda”.</p>}
+                      {selectedTasks.map((task) => (
+                        <div key={task.id} className="rounded-2xl border bg-white p-4 shadow-sm">
+                          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h5 className="text-lg font-black">{task.title}</h5>
+                                <Badge tone={task.status === "Concluída" ? "low" : task.status === "Atrasada" ? "high" : "medium"}>{task.status}</Badge>
+                                <Badge tone={task.priority === "Crítica" || task.priority === "Alta" ? "high" : task.priority === "Média" ? "medium" : "low"}>{task.priority}</Badge>
+                              </div>
+                              <p className="mt-2 text-sm text-slate-600">{task.notes}</p>
+                              <p className="mt-2 text-xs text-slate-500">Responsável: {task.responsible} • Workflow: {task.workflow}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "Concluída")}><Check className="mr-1 h-3 w-3" /> Feita</Button>
+                              <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "A fazer")}><RotateCcw className="mr-1 h-3 w-3" /> Reabrir</Button>
+                              <Button size="sm" variant="outline" onClick={() => deleteTask(task.id)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
-            let texto = '';
-            texto += `🔺 *${cia}* 🔺\n`;
-            texto += `*1° BATALHÃO PM*\n`;
-            texto += `*6ª CIA PMMG*\n\n`;
+function UserManagement({ users, addUser, deleteUser, toggleUserStatus }) {
+  const emptyForm = {
+    name: "",
+    warName: "",
+    register: "",
+    unit: "",
+    role: "Analista",
+    email: "",
+    phone: "",
+    login: "",
+    password: "",
+    status: "Ativo",
+  };
 
-            if (natureza) texto += `⚖️ *${natureza}*\n`;
-            if (local) texto += `📍 *${local}*\n`;
-            if (reds) texto += `📋 *REDS:* ${reds}\n`;
-            if (hora) texto += `⏰ ${hora}\n\n`;
+  const [form, setForm] = useState(emptyForm);
+  const activeUsers = users.filter((user) => user.status === "Ativo").length;
+  const inactiveUsers = users.length - activeUsers;
 
-            if (equipeTipo && equipeNome) {
-                const emoji = equipeTipo === 'GT' ? '🏍️' : '🚓';
-                texto += `${emoji} *${equipeTipo} ${equipeNome}*\n`;
-                militares.forEach(m => texto += `👮🏻‍♂️ ${m}\n`);
-                texto += '\n';
-            }
+  const updateForm = (field, value) => setForm({ ...form, [field]: value });
 
-            apoios.forEach(a => {
-                const emoji = a.tipo === 'OLHO VIVO' ? '👁️' : '🕵️';
-                texto += `${emoji} *${a.tipo}*`;
-                if (a.nome) texto += ` ${a.nome}`;
-                texto += '\n';
-                a.militares.forEach(m => texto += `👮🏻‍♂️ ${m}\n`);
-            });
+  const saveUser = () => {
+    if (!form.name.trim() || !form.login.trim()) return;
+    addUser(form);
+    setForm(emptyForm);
+  };
 
-            if (temOlhoVivo) texto += `👁️ *OLHO VIVO*\n`;
-            if (temP2) texto += `🕵️ *P2*\n`;
+  return (
+    <Card className="rounded-3xl border-0 shadow-sm">
+      <CardContent className="p-6">
+        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 text-xl font-black"><UserPlus className="h-5 w-5 text-orange-600" /> Cadastro e gestão de usuários</h2>
+            <p className="text-sm text-slate-500">Controle de acesso, responsáveis, gestores, analistas e colaboradores.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center text-sm">
+            <div className="rounded-2xl bg-emerald-950 px-4 py-3 text-white"><p className="text-2xl font-black">{users.length}</p><p>Total</p></div>
+            <div className="rounded-2xl bg-green-600 px-4 py-3 text-white"><p className="text-2xl font-black">{activeUsers}</p><p>Ativos</p></div>
+            <div className="rounded-2xl bg-zinc-600 px-4 py-3 text-white"><p className="text-2xl font-black">{inactiveUsers}</p><p>Inativos</p></div>
+          </div>
+        </div>
 
-            if (materiais.length > 0) {
-                texto += `\n📦 *MATERIAL APREENDIDO:*\n`;
-                materiais.forEach(m => texto += `${m}\n`);
-            }
+        <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+          <div className="rounded-2xl border bg-white p-4">
+            <h3 className="mb-4 flex items-center gap-2 font-black"><Settings className="h-4 w-4 text-orange-600" /> Novo usuário</h3>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+              <Input placeholder="Nome completo" value={form.name} onChange={(event) => updateForm("name", event.target.value)} />
+              <Input placeholder="Nome de guerra" value={form.warName} onChange={(event) => updateForm("warName", event.target.value)} />
+              <Input placeholder="Matrícula" value={form.register} onChange={(event) => updateForm("register", event.target.value)} />
+              <Input placeholder="Unidade" value={form.unit} onChange={(event) => updateForm("unit", event.target.value)} />
+              <select value={form.role} onChange={(event) => updateForm("role", event.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm">
+                {userRoles.map((role) => <option key={role}>{role}</option>)}
+              </select>
+              <Input placeholder="E-mail" value={form.email} onChange={(event) => updateForm("email", event.target.value)} />
+              <Input placeholder="Telefone" value={form.phone} onChange={(event) => updateForm("phone", event.target.value)} />
+              <Input placeholder="Login" value={form.login} onChange={(event) => updateForm("login", event.target.value)} />
+              <Input placeholder="Senha provisória" type="password" value={form.password} onChange={(event) => updateForm("password", event.target.value)} />
+              <select value={form.status} onChange={(event) => updateForm("status", event.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm">
+                <option>Ativo</option>
+                <option>Inativo</option>
+              </select>
+              <Button onClick={saveUser} className="bg-orange-600 hover:bg-orange-700"><UserPlus className="mr-2 h-4 w-4" /> Cadastrar usuário</Button>
+            </div>
+          </div>
 
-            if (autores.length > 0) {
-                texto += `\n🔗 *AUTOR(ES) PRESO(S):*\n`;
-                autores.forEach(a => texto += `🔗 ${a}\n`);
-            }
+          <div className="space-y-3">
+            {users.map((user) => (
+              <div key={user.id} className="rounded-2xl border bg-white p-4 shadow-sm">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg font-black">{user.warName || user.name}</h3>
+                      <Badge tone={user.status === "Ativo" ? "low" : "default"}>{user.status}</Badge>
+                      <Badge tone={user.role === "Administrador" ? "high" : user.role === "Gestor" ? "medium" : "default"}>{user.role}</Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-600">{user.name} • Matrícula: {user.register || "não informada"}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <div className="rounded-2xl bg-emerald-950 px-4 py-2 text-sm font-bold text-white"><Activity className="mr-1 inline h-4 w-4" /> {user.login}</div>
+                    <Button size="sm" variant="outline" onClick={() => toggleUserStatus(user.id)}>{user.status === "Ativo" ? "Inativar" : "Ativar"}</Button>
+                    <Button size="sm" variant="outline" onClick={() => deleteUser(user.id)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-2 text-sm md:grid-cols-3">
+                  <div className="rounded-xl bg-slate-50 p-3"><Building2 className="mr-1 inline h-4 w-4 text-orange-600" /> {user.unit || "Unidade não informada"}</div>
+                  <div className="rounded-xl bg-slate-50 p-3"><Mail className="mr-1 inline h-4 w-4 text-orange-600" /> {user.email || "E-mail não informado"}</div>
+                  <div className="rounded-xl bg-slate-50 p-3"><Phone className="mr-1 inline h-4 w-4 text-orange-600" /> {user.phone || "Telefone não informado"}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
-            if (historico) {
-                texto += `\n📜 *HISTÓRICO:*\n${historico}\n`;
-            }
+function DemandCenter({ status, tasks, onBack, updateTaskStatus, deleteTask, duplicateTask, toggleChecklistItem }) {
+  const [selectedId, setSelectedId] = useState(tasks[0]?.id || null);
+  const [query, setQuery] = useState("");
+  const visibleTasks = tasks.filter((task) => `${task.title} ${task.responsible} ${task.workflow} ${task.notes}`.toLowerCase().includes(query.toLowerCase()));
+  const selectedTask = visibleTasks.find((task) => task.id === selectedId) || visibleTasks[0];
+  const title = status === "Todas" ? "CENTRAL DE DEMANDAS" : `DEMANDAS ${status.toUpperCase()}`;
 
-            texto += `\n🔺 6 CIA PM - AQUI SE FORJAM HERÓIS BELORIZONTINOS!!!🔺\n`;
-            texto += `🔺 135 ANOS DO 1º BATALHÃO: PASSADO QUE INSPIRA, PRESENTE QUE PROTEGE.🔺`;
+  return (
+    <Card className="rounded-3xl border-0 shadow-sm">
+      <CardContent className="p-6">
+        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 text-2xl font-black"><ClipboardCheck className="h-6 w-6 text-orange-600" /> {title}</h2>
+            <p className="text-sm text-slate-500">Tela aberta pelo card do dashboard, com demandas filtradas por status.</p>
+          </div>
+          <Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao painel</Button>
+        </div>
 
-            document.getElementById('preview').textContent = texto;
-        }
+        <div className="mb-4 grid gap-3 md:grid-cols-4">
+          <Input className="md:col-span-2" placeholder="Pesquisar demanda, responsável ou workflow" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <div className="rounded-2xl bg-emerald-950 px-4 py-3 text-center font-bold text-white">{visibleTasks.length} demandas</div>
+          <Button className="bg-orange-600 hover:bg-orange-700" onClick={() => alert("Use o calendário ou a tela de tarefas para criar uma nova demanda.")}><Plus className="mr-2 h-4 w-4" /> Nova demanda</Button>
+        </div>
 
-        function copiarWhatsApp() {
-            const preview = document.getElementById('preview').textContent;
-            navigator.clipboard.writeText(preview).then(() => {
-                alert('✅ Copiado para a área de transferência!\n\nAgora é só colar no WhatsApp!');
-            }).catch(() => {
-                alert('Erro ao copiar. Tente selecionar o texto manualmente.');
-            });
-        }
+        <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+          <div className="space-y-3">
+            {visibleTasks.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">Nenhuma demanda encontrada neste status.</div>}
+            {visibleTasks.map((task) => (
+              <button key={task.id} type="button" onClick={() => setSelectedId(task.id)} className={`w-full rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:shadow-md ${selectedTask?.id === task.id ? "border-orange-600 ring-2 ring-orange-100" : ""}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-black">{task.title}</h3>
+                    <p className="mt-1 text-xs text-slate-500">Responsável: {task.responsible}</p>
+                  </div>
+                  <Badge tone={task.status === "Concluída" ? "low" : task.status === "Atrasada" ? "high" : "medium"}>{task.status}</Badge>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-lg bg-slate-50 p-2"><b>Interno:</b> {task.internalDeadline}</div>
+                  <div className="rounded-lg bg-slate-50 p-2"><b>Oficial:</b> {task.officialDeadline}</div>
+                </div>
+              </button>
+            ))}
+          </div>
 
-        function baixarTXT() {
-            const preview = document.getElementById('preview').textContent;
-            const element = document.createElement('a');
-            element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(preview));
-            element.setAttribute('download', 'release_pm.txt');
-            element.style.display = 'none';
-            document.body.appendChild(element);
-            element.click();
-            document.body.removeChild(element);
-        }
+          {selectedTask && (
+            <div className="rounded-3xl border bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.25em] text-orange-600">Demanda #{selectedTask.id}</p>
+                  <h3 className="mt-2 text-2xl font-black">{selectedTask.title}</h3>
+                  <p className="mt-2 text-sm text-slate-600">{selectedTask.notes}</p>
+                </div>
+                <Badge tone={selectedTask.status === "Concluída" ? "low" : selectedTask.status === "Atrasada" ? "high" : "medium"}>{selectedTask.status}</Badge>
+              </div>
 
-        // Inicializar
-        atualizarApoioLabel();
-        gerarRelease();
-    </script>
-</body>
-</html>
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <div className="rounded-2xl bg-slate-50 p-4"><b>Tipo:</b> {selectedTask.type}</div>
+                <div className="rounded-2xl bg-slate-50 p-4"><b>Workflow:</b> {selectedTask.workflow}</div>
+                <div className="rounded-2xl bg-slate-50 p-4"><b>Responsável:</b> {selectedTask.responsible}</div>
+                <div className="rounded-2xl bg-slate-50 p-4"><b>Gestor:</b> {selectedTask.manager}</div>
+                <div className="rounded-2xl bg-slate-50 p-4"><b>Prazo interno:</b> {selectedTask.internalDeadline}</div>
+                <div className="rounded-2xl bg-slate-50 p-4"><b>Prazo oficial:</b> {selectedTask.officialDeadline}</div>
+              </div>
+
+              <div className="mt-5">
+                <h4 className="mb-3 font-black"><ClipboardCheck className="mr-1 inline h-4 w-4 text-orange-600" /> Checklist da demanda</h4>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {selectedTask.checklist.map((item, index) => (
+                    <label key={item} className="flex cursor-pointer items-center gap-2 rounded-xl border p-3 text-sm">
+                      <input type="checkbox" checked={selectedTask.done[index]} onChange={() => toggleChecklistItem(selectedTask.id, index)} /> {item}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => alert(`Visualizando demanda: ${selectedTask.title}`)}><Eye className="mr-1 h-4 w-4" /> Visualizar</Button>
+                <Button variant="outline" onClick={() => alert("Edição completa será ligada ao banco de dados na versão final.")}><Edit3 className="mr-1 h-4 w-4" /> Editar</Button>
+                <Button variant="outline" onClick={() => duplicateTask(selectedTask.id)}><Copy className="mr-1 h-4 w-4" /> Duplicar</Button>
+                <Button variant="outline" onClick={() => updateTaskStatus(selectedTask.id, "Concluída")}><Check className="mr-1 h-4 w-4" /> Encerrar</Button>
+                <Button variant="outline" onClick={() => updateTaskStatus(selectedTask.id, "A fazer")}><RotateCcw className="mr-1 h-4 w-4" /> Reabrir</Button>
+                <Button variant="outline" className="text-red-600" onClick={() => deleteTask(selectedTask.id)}><Trash2 className="mr-1 h-4 w-4" /> Excluir</Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function App() {
+  const [logged, setLogged] = useState(false);
+  const [tasks, setTasks] = useState(initialTasks);
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [statusFilter, setStatusFilter] = useState("Todas");
+  const [search, setSearch] = useState("");
+  const [newTitle, setNewTitle] = useState("");
+  const [newResponsible, setNewResponsible] = useState("");
+  const [newWorkflow, setNewWorkflow] = useState("Triagem");
+  const [monthDate, setMonthDate] = useState(new Date());
+  const [users, setUsers] = useState(initialUsers);
+  const [message, setMessage] = useState("");
+  const [demandScreenStatus, setDemandScreenStatus] = useState(null);
+
+  const counts = useMemo(() => getStatusCounts(tasks), [tasks]);
+
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      const byDate = task.date === selectedDate;
+      const byStatus = statusFilter === "Todas" || task.status === statusFilter;
+      const bySearch = `${task.title} ${task.type} ${task.responsible} ${task.notes}`.toLowerCase().includes(search.toLowerCase());
+      return byDate && byStatus && bySearch;
+    });
+  }, [tasks, selectedDate, statusFilter, search]);
+
+  const notify = (text) => {
+    setMessage(text);
+    window.setTimeout(() => setMessage(""), 2500);
+  };
+
+  const addTask = () => {
+    if (!newTitle.trim()) {
+      notify("Informe o nome da tarefa antes de cadastrar.");
+      return;
+    }
+
+    setTasks((currentTasks) => [
+      {
+        id: Date.now(),
+        title: newTitle,
+        type: "Inteligência",
+        status: "A fazer",
+        priority: "Média",
+        responsible: newResponsible || "Sem responsável",
+        manager: "Gestor",
+        date: selectedDate,
+        officialDeadline: selectedDate,
+        internalDeadline: selectedDate,
+        workflow: newWorkflow,
+        checklist: ["Triar demanda", "Executar atividade", "Registrar conclusão"],
+        done: [false, false, false],
+        notes: "Nova demanda cadastrada no painel.",
+      },
+      ...currentTasks,
+    ]);
+    setNewTitle("");
+    setNewResponsible("");
+    notify("Tarefa cadastrada com sucesso.");
+  };
+
+  const addQuickTask = ({ title, responsible, date }) => {
+    setTasks((currentTasks) => [
+      {
+        id: Date.now(),
+        title,
+        type: "Inteligência",
+        status: "A fazer",
+        priority: "Média",
+        responsible,
+        manager: "Gestor",
+        date,
+        officialDeadline: date,
+        internalDeadline: date,
+        workflow: "Triagem",
+        checklist: ["Triar demanda", "Executar atividade", "Registrar conclusão"],
+        done: [false, false, false],
+        notes: "Atividade criada diretamente pelo calendário visual.",
+      },
+      ...currentTasks,
+    ]);
+    notify("Atividade adicionada ao calendário.");
+  };
+
+  const addUser = (user) => {
+    setUsers((currentUsers) => [{ id: Date.now(), ...user }, ...currentUsers]);
+    notify("Usuário cadastrado com sucesso.");
+  };
+
+  const deleteUser = (id) => {
+    setUsers((currentUsers) => currentUsers.filter((user) => user.id !== id));
+    notify("Usuário removido.");
+  };
+
+  const toggleUserStatus = (id) => {
+    setUsers((currentUsers) => currentUsers.map((user) => (user.id === id ? { ...user, status: user.status === "Ativo" ? "Inativo" : "Ativo" } : user)));
+    notify("Situação do usuário alterada.");
+  };
+
+  const deleteTask = (id) => {
+    setTasks((currentTasks) => currentTasks.filter((task) => task.id !== id));
+    notify("Tarefa excluída.");
+  };
+
+  const updateTaskStatus = (id, status) => {
+    setTasks((currentTasks) => currentTasks.map((task) => (task.id === id ? { ...task, status, done: status === "Concluída" ? task.checklist.map(() => true) : task.done } : task)));
+    notify("Status da tarefa atualizado.");
+  };
+
+  const toggleChecklistItem = (taskId, itemIndex) => {
+    setTasks((currentTasks) => currentTasks.map((task) => {
+      if (task.id !== taskId) return task;
+      const nextDone = task.done.map((done, index) => (index === itemIndex ? !done : done));
+      const allDone = nextDone.every(Boolean);
+      return { ...task, done: nextDone, status: allDone ? "Concluída" : task.status === "Concluída" ? "A fazer" : task.status };
+    }));
+  };
+
+  const openDemandScreen = (status) => {
+    setDemandScreenStatus(status);
+    setStatusFilter(status);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const duplicateTask = (id) => {
+    const task = tasks.find((item) => item.id === id);
+    if (!task) return;
+    setTasks((currentTasks) => [{ ...task, id: Date.now(), title: `${task.title} - cópia`, status: "A fazer" }, ...currentTasks]);
+    notify("Demanda duplicada.");
+  };
+
+  if (!logged) return <Login onLogin={() => setLogged(true)} />;
+
+  return (
+    <div className="min-h-screen bg-slate-100 text-slate-900">
+      <header className="bg-emerald-950 px-6 py-5 shadow-xl">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <OwlLogo />
+          <div className="flex flex-wrap items-center gap-3 text-sm text-emerald-100">
+            <Badge tone="dark"><UserRound className="mr-1 inline h-3 w-3" /> Gestor operacional</Badge>
+            <Badge tone="dark"><Users className="mr-1 inline h-3 w-3" /> {users.filter((user) => user.status === "Ativo").length} usuários ativos</Badge>
+            <Button variant="secondary" className="bg-white/10 text-white hover:bg-white/20" onClick={() => { setLogged(false); setStatusFilter("Todas"); setDemandScreenStatus(null); }}>Sair</Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-7xl space-y-6 p-6">
+        {message && (
+          <div className="fixed right-6 top-6 z-50 flex items-center gap-2 rounded-2xl bg-emerald-950 px-5 py-3 text-sm font-bold text-white shadow-2xl">
+            <CheckCircle2 className="h-4 w-4 text-orange-300" /> {message}
+          </div>
+        )}
+
+        <section className="grid gap-4 md:grid-cols-5">
+          <button type="button" onClick={() => openDemandScreen("A fazer")}><StatCard label="A fazer" value={counts["A fazer"] || 0} icon={ListChecks} className="bg-blue-500" /></button>
+          <button type="button" onClick={() => openDemandScreen("Atrasada")}><StatCard label="Atrasadas" value={counts["Atrasada"] || 0} icon={AlertTriangle} className="bg-red-500" /></button>
+          <button type="button" onClick={() => openDemandScreen("Paralisada")}><StatCard label="Paralisadas" value={counts["Paralisada"] || 0} icon={PauseCircle} className="bg-zinc-600" /></button>
+          <button type="button" onClick={() => openDemandScreen("Risco de prazo")}><StatCard label="Risco de prazo" value={counts["Risco de prazo"] || 0} icon={Clock} className="bg-yellow-500" /></button>
+          <button type="button" onClick={() => openDemandScreen("Concluída")}><StatCard label="Concluídas" value={counts["Concluída"] || 0} icon={CheckCircle2} className="bg-green-600" /></button>
+        </section>
+
+        {demandScreenStatus ? (
+          <DemandCenter
+            status={demandScreenStatus}
+            tasks={tasks.filter((task) => task.status === demandScreenStatus)}
+            onBack={() => setDemandScreenStatus(null)}
+            updateTaskStatus={updateTaskStatus}
+            deleteTask={deleteTask}
+            duplicateTask={duplicateTask}
+            toggleChecklistItem={toggleChecklistItem}
+          />
+        ) : (
+          <CalendarBoard
+            tasks={tasks}
+            selectedDate={selectedDate}
+            setSelectedDate={setSelectedDate}
+            monthDate={monthDate}
+            setMonthDate={setMonthDate}
+            addQuickTask={addQuickTask}
+            updateTaskStatus={updateTaskStatus}
+            deleteTask={deleteTask}
+          />
+        )}
+
+        <UserManagement users={users} addUser={addUser} deleteUser={deleteUser} toggleUserStatus={toggleUserStatus} />
+
+        <section className="grid gap-6 lg:grid-cols-[360px_1fr]">
+          <Card className="rounded-3xl border-0 shadow-sm">
+            <CardContent className="space-y-5 p-6">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="h-5 w-5 text-orange-600" />
+                <h2 className="text-xl font-black">Calendário e nova demanda</h2>
+              </div>
+              <Input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
+              <Input placeholder="Tarefa do dia / demanda" value={newTitle} onChange={(event) => setNewTitle(event.target.value)} />
+              <Input placeholder="Responsável" value={newResponsible} onChange={(event) => setNewResponsible(event.target.value)} />
+              <select value={newWorkflow} onChange={(event) => setNewWorkflow(event.target.value)} className="h-11 w-full rounded-md border bg-white px-3 text-sm">
+                {workflows.map((item) => <option key={item}>{item}</option>)}
+              </select>
+              <Button onClick={addTask} className="w-full bg-orange-600 hover:bg-orange-700"><Plus className="mr-2 h-4 w-4" /> Cadastrar tarefa</Button>
+
+              <div className="rounded-2xl bg-emerald-950 p-4 text-white">
+                <p className="flex items-center gap-2 text-sm font-bold"><Repeat className="h-4 w-4" /> Tarefas recorrentes</p>
+                <p className="mt-2 text-xs text-emerald-100">Modelo para criar rotinas diárias, semanais ou mensais, com responsáveis e prazos internos.</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-3xl border-0 shadow-sm">
+            <CardContent className="p-6">
+              <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="flex items-center gap-2 text-xl font-black"><LayoutDashboard className="h-5 w-5 text-orange-600" /> Tela de tarefas</h2>
+                  <p className="text-sm text-slate-500">Demandas feitas, pendentes, workflow, checklist e responsáveis.</p>
+                </div>
+                <div className="flex gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input className="pl-9" placeholder="Pesquisar" value={search} onChange={(event) => setSearch(event.target.value)} />
+                  </div>
+                  <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm">
+                    <option>Todas</option>
+                    {statuses.map((status) => <option key={status}>{status}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {filteredTasks.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">Nenhuma tarefa encontrada para o filtro atual.</div>}
+                {filteredTasks.map((task) => {
+                  const completed = task.done.filter(Boolean).length;
+                  const percent = Math.round((completed / task.checklist.length) * 100);
+
+                  return (
+                    <motion.div key={task.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border bg-white p-4 shadow-sm">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-lg font-black">{task.title}</h3>
+                            <Badge tone={task.priority === "Crítica" || task.priority === "Alta" ? "high" : task.priority === "Média" ? "medium" : "low"}>{task.priority}</Badge>
+                            <Badge>{task.status}</Badge>
+                          </div>
+                          <p className="mt-2 text-sm text-slate-600">{task.notes}</p>
+                        </div>
+                        <div className="text-right text-sm text-slate-500">
+                          <p><Users className="mr-1 inline h-4 w-4" /> {task.responsible}</p>
+                          <p>Gestor: {task.manager}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 md:grid-cols-3">
+                        <div className="rounded-xl bg-slate-50 p-3 text-sm"><b>Workflow:</b> {task.workflow}</div>
+                        <div className="rounded-xl bg-slate-50 p-3 text-sm"><b>Prazo interno:</b> {task.internalDeadline}</div>
+                        <div className="rounded-xl bg-slate-50 p-3 text-sm"><b>Prazo oficial:</b> {task.officialDeadline}</div>
+                      </div>
+
+                      <div className="mt-4">
+                        <div className="mb-2 flex items-center justify-between text-sm">
+                          <span className="font-bold"><ClipboardCheck className="mr-1 inline h-4 w-4" /> Checklist</span>
+                          <span>{percent}%</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-orange-600" style={{ width: `${percent}%` }} /></div>
+                        <div className="mt-3 grid gap-2 md:grid-cols-3">
+                          {task.checklist.map((item, index) => (
+                            <label key={item} className="flex items-center gap-2 rounded-xl border p-2 text-sm">
+                              <input type="checkbox" checked={task.done[index]} onChange={() => toggleChecklistItem(task.id, index)} /> {item}
+                            </label>
+                          ))}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "Concluída")}><Check className="mr-1 h-3 w-3" /> Marcar feita</Button>
+                          <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "A fazer")}><RotateCcw className="mr-1 h-3 w-3" /> Reabrir</Button>
+                          <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "Paralisada")}><PauseCircle className="mr-1 h-3 w-3" /> Paralisar</Button>
+                          <Button size="sm" variant="outline" onClick={() => deleteTask(task.id)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="grid gap-6 lg:grid-cols-2">
+          <Card className="rounded-3xl border-0 shadow-sm">
+            <CardContent className="p-6">
+              <h2 className="mb-4 flex items-center gap-2 text-xl font-black"><Filter className="h-5 w-5 text-orange-600" /> Workflow das tarefas</h2>
+              <div className="grid gap-3 md:grid-cols-5">
+                {workflows.map((flow, index) => (
+                  <div key={flow} className="rounded-2xl bg-white p-4 text-center shadow-sm ring-1 ring-slate-100">
+                    <p className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-emerald-950 text-sm font-black text-white">{index + 1}</p>
+                    <p className="text-sm font-bold">{flow}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-3xl border-0 bg-emerald-950 text-white shadow-sm">
+            <CardContent className="p-6">
+              <h2 className="text-xl font-black">Dashboard para tela</h2>
+              <p className="mt-2 text-sm text-emerald-100">Visão rápida para monitoramento integrado: volume de demandas, gargalos, responsáveis e risco de prazo.</p>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-white/10 p-4"><p className="text-3xl font-black">{tasks.length}</p><p className="text-sm">Demandas totais</p></div>
+                <div className="rounded-2xl bg-white/10 p-4"><p className="text-3xl font-black">{tasks.filter((task) => task.status !== "Concluída").length}</p><p className="text-sm">Pendências</p></div>
+                <div className="rounded-2xl bg-white/10 p-4"><p className="text-3xl font-black">{users.filter((user) => user.status === "Ativo").length}</p><p className="text-sm">Usuários ativos</p></div>
+                <div className="rounded-2xl bg-white/10 p-4"><p className="text-3xl font-black">{counts["Concluída"] || 0}</p><p className="text-sm">Concluídas</p></div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      </main>
+    </div>
+  );
+}
