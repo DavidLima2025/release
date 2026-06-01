@@ -46,7 +46,7 @@ import { Input } from "./components/ui/input";
 
 const today = new Date().toISOString().slice(0, 10);
 
-const workflows = ["Triagem", "Produção", "Validação", "Encaminhamento", "Conclusão"];
+const defaultWorkflows = ["Triagem", "Produção", "Validação", "Encaminhamento", "Conclusão"];
 const statuses = ["A fazer", "Atrasada", "Paralisada", "Risco de prazo", "Concluída"];
 const userRoles = ["Administrador", "Gestor", "Analista", "Colaborador"];
 
@@ -804,6 +804,85 @@ function DemandCenter({ status, tasks, onBack, updateTaskStatus, deleteTask, dup
   );
 }
 
+
+function ProcessTracker({ tasks, workflows, setTaskWorkflow, setTaskStatus }) {
+  const [selectedTaskId, setSelectedTaskId] = useState(tasks[0]?.id || "");
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId) || tasks[0];
+  const currentStep = selectedTask ? Math.max(0, workflows.indexOf(selectedTask.workflow)) : 0;
+  const progress = selectedTask && workflows.length > 0 ? Math.round(((currentStep + 1) / workflows.length) * 100) : 0;
+
+  const advanceToStep = (workflow) => {
+    if (!selectedTask) return;
+    setTaskWorkflow(selectedTask.id, workflow);
+    if (workflow === workflows[workflows.length - 1]) {
+      setTaskStatus(selectedTask.id, "Concluída");
+    } else if (selectedTask.status === "Concluída") {
+      setTaskStatus(selectedTask.id, "A fazer");
+    }
+  };
+
+  return (
+    <Card className="rounded-3xl border-0 bg-emerald-950 text-white shadow-sm">
+      <CardContent className="p-6">
+        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-xl font-black">Acompanhamento do processo</h2>
+            <p className="mt-2 text-sm text-emerald-100">Selecione uma demanda e clique nas etapas até chegar a 100%.</p>
+          </div>
+          <div className="rounded-2xl bg-white/10 px-5 py-3 text-center">
+            <p className="text-3xl font-black">{selectedTask ? progress : 0}%</p>
+            <p className="text-xs text-emerald-100">Andamento</p>
+          </div>
+        </div>
+
+        <select
+          value={selectedTask?.id || ""}
+          onChange={(event) => setSelectedTaskId(Number(event.target.value))}
+          className="mb-5 h-11 w-full rounded-xl border border-white/10 bg-white/10 px-3 text-sm text-white"
+        >
+          {tasks.map((task) => (
+            <option key={task.id} value={task.id} className="text-slate-900">{task.title}</option>
+          ))}
+        </select>
+
+        {selectedTask && (
+          <div>
+            <div className="mb-4 rounded-2xl bg-white/10 p-4">
+              <p className="text-sm text-emerald-100">Demanda selecionada</p>
+              <h3 className="text-lg font-black">{selectedTask.title}</h3>
+              <p className="mt-1 text-xs text-emerald-100">Responsável: {selectedTask.responsible} • Status: {selectedTask.status}</p>
+            </div>
+
+            <div className="mb-5 h-3 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full bg-orange-500 transition-all" style={{ width: `${progress}%` }} />
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-5">
+              {workflows.map((workflow, index) => {
+                const reached = index <= currentStep;
+                const current = workflow === selectedTask.workflow;
+                return (
+                  <button
+                    key={workflow}
+                    type="button"
+                    onClick={() => advanceToStep(workflow)}
+                    className={`rounded-2xl border p-4 text-left transition hover:scale-[1.02] ${reached ? "border-orange-400 bg-orange-500 text-white" : "border-white/10 bg-white/10 text-emerald-50"} ${current ? "ring-2 ring-white" : ""}`}
+                  >
+                    <p className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/20 text-sm font-black">{index + 1}</p>
+                    <p className="text-sm font-black">{workflow}</p>
+                    <p className="mt-1 text-xs opacity-80">{current ? "Etapa atual" : reached ? "Já alcançada" : "Clique para avançar"}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+
 export default function App() {
   const [logged, setLogged] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -814,6 +893,8 @@ export default function App() {
   const [newTitle, setNewTitle] = useState("");
   const [newResponsible, setNewResponsible] = useState("");
   const [newWorkflow, setNewWorkflow] = useState("Triagem");
+  const [workflows, setWorkflows] = useState(defaultWorkflows);
+  const [workflowName, setWorkflowName] = useState("");
   const [monthDate, setMonthDate] = useState(new Date());
   const [users, setUsers] = useState(initialUsers);
   const [message, setMessage] = useState("");
@@ -974,6 +1055,38 @@ export default function App() {
     notify("Demanda duplicada.");
   };
 
+
+  const addWorkflow = () => {
+    const name = workflowName.trim();
+    if (!name) {
+      notify("Informe o nome do workflow.");
+      return;
+    }
+    if (workflows.some((workflow) => workflow.toLowerCase() === name.toLowerCase())) {
+      notify("Esse workflow já existe.");
+      return;
+    }
+    setWorkflows((currentWorkflows) => [...currentWorkflows, name]);
+    setWorkflowName("");
+    notify("Workflow criado com sucesso.");
+  };
+
+  const deleteWorkflow = (name) => {
+    const workflowInUse = tasks.some((task) => task.workflow === name);
+    if (workflowInUse) {
+      notify("Não é possível excluir workflow em uso.");
+      return;
+    }
+    setWorkflows((currentWorkflows) => currentWorkflows.filter((workflow) => workflow !== name));
+    notify("Workflow excluído.");
+  };
+
+  const setTaskWorkflow = (taskId, workflow) => {
+    setTasks((currentTasks) => currentTasks.map((task) => task.id === taskId ? { ...task, workflow } : task));
+    notify("Etapa do processo atualizada.");
+  };
+
+
   if (!logged) return <Login users={users} onLogin={(user) => { setCurrentUser(user); setLogged(true); }} />;
 
   return (
@@ -1014,6 +1127,7 @@ export default function App() {
             duplicateTask={duplicateTask}
             toggleChecklistItem={toggleChecklistItem}
             postponeTask={postponeTask}
+            users={users}
           />
         ) : (
           <CalendarBoard
@@ -1139,30 +1253,45 @@ export default function App() {
         <section className="grid gap-6 lg:grid-cols-2">
           <Card className="rounded-3xl border-0 shadow-sm">
             <CardContent className="p-6">
-              <h2 className="mb-4 flex items-center gap-2 text-xl font-black"><Filter className="h-5 w-5 text-orange-600" /> Workflow das tarefas</h2>
+              <h2 className="mb-2 flex items-center gap-2 text-xl font-black"><Filter className="h-5 w-5 text-orange-600" /> Workflow das tarefas</h2>
+              <p className="mb-4 text-sm text-slate-500">Crie novas etapas de workflow para organizar as demandas.</p>
+
+              <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto]">
+                <Input
+                  placeholder="Nome do novo workflow. Exemplo: Monitoramento"
+                  value={workflowName}
+                  onChange={(event) => setWorkflowName(event.target.value)}
+                  onKeyDown={(event) => event.key === "Enter" && addWorkflow()}
+                />
+                <Button onClick={addWorkflow} className="bg-orange-600 hover:bg-orange-700"><Plus className="mr-2 h-4 w-4" /> Criar workflow</Button>
+              </div>
+
               <div className="grid gap-3 md:grid-cols-5">
-                {workflows.map((flow, index) => (
-                  <div key={flow} className="rounded-2xl bg-white p-4 text-center shadow-sm ring-1 ring-slate-100">
-                    <p className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-emerald-950 text-sm font-black text-white">{index + 1}</p>
-                    <p className="text-sm font-bold">{flow}</p>
-                  </div>
-                ))}
+                {workflows.map((flow, index) => {
+                  const inUse = tasks.some((task) => task.workflow === flow);
+                  return (
+                    <div key={flow} className="rounded-2xl bg-white p-4 text-center shadow-sm ring-1 ring-slate-100">
+                      <p className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-emerald-950 text-sm font-black text-white">{index + 1}</p>
+                      <p className="text-sm font-bold">{flow}</p>
+                      <p className="mt-1 text-xs text-slate-500">{inUse ? "Em uso" : "Livre"}</p>
+                      {!inUse && (
+                        <Button size="sm" variant="outline" onClick={() => deleteWorkflow(flow)} className="mt-3 text-red-600">
+                          <Trash2 className="mr-1 h-3 w-3" /> Excluir
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="rounded-3xl border-0 bg-emerald-950 text-white shadow-sm">
-            <CardContent className="p-6">
-              <h2 className="text-xl font-black">Dashboard para tela</h2>
-              <p className="mt-2 text-sm text-emerald-100">Visão rápida para monitoramento integrado: volume de demandas, gargalos, responsáveis e risco de prazo.</p>
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl bg-white/10 p-4"><p className="text-3xl font-black">{tasks.length}</p><p className="text-sm">Demandas totais</p></div>
-                <div className="rounded-2xl bg-white/10 p-4"><p className="text-3xl font-black">{tasks.filter((task) => task.status !== "Concluída").length}</p><p className="text-sm">Pendências</p></div>
-                <div className="rounded-2xl bg-white/10 p-4"><p className="text-3xl font-black">{users.filter((user) => user.status === "Ativo").length}</p><p className="text-sm">Usuários ativos</p></div>
-                <div className="rounded-2xl bg-white/10 p-4"><p className="text-3xl font-black">{counts["Concluída"] || 0}</p><p className="text-sm">Concluídas</p></div>
-              </div>
-            </CardContent>
-          </Card>
+          <ProcessTracker
+            tasks={tasks}
+            workflows={workflows}
+            setTaskWorkflow={setTaskWorkflow}
+            setTaskStatus={updateTaskStatus}
+          />
         </section>
       </main>
     </div>
