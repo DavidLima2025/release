@@ -1,809 +1,1522 @@
-import React, { useMemo, useState } from "react";
-import { motion } from "framer-motion";
-import {
-  CalendarDays,
-  CheckCircle2,
-  ClipboardCheck,
-  Clock,
-  Eye,
-  Filter,
-  Lock,
-  Plus,
-  Search,
-  Shield,
-  Users,
-  AlertTriangle,
-  PauseCircle,
-  LayoutDashboard,
-  ListChecks,
-  Repeat,
-  UserRound,
-  ChevronLeft,
-  ChevronRight,
-  FileText,
-  Mail,
-  Phone,
-  Building2,
-  UserPlus,
-  Settings,
-  Activity,
-  Trash2,
-  Check,
-  RotateCcw,
-  ArrowLeft,
-  Edit3,
-  Copy,
-} from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SI 6ª CIA - Centro de Inteligência</title>
+  <style>
+    :root {
+      --bg: #0b1110;
+      --panel: #111827;
+      --panel-2: #f8fafc;
+      --green: #064e3b;
+      --green-2: #065f46;
+      --orange: #ea580c;
+      --orange-2: #f97316;
+      --red: #dc2626;
+      --yellow: #ca8a04;
+      --blue: #2563eb;
+      --gray: #4b5563;
+      --white: #ffffff;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+      --radius: 22px;
+    }
 
-const today = new Date().toISOString().slice(0, 10);
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, Helvetica, sans-serif;
+    }
 
-const workflows = ["Triagem", "Produção", "Validação", "Encaminhamento", "Conclusão"];
-const statuses = ["A fazer", "Atrasada", "Paralisada", "Risco de prazo", "Concluída"];
-const userRoles = ["Administrador", "Gestor", "Analista", "Colaborador"];
+    body {
+      background: #f1f5f9;
+      color: #0f172a;
+    }
 
-const initialTasks = [
-  {
-    id: 1,
-    title: "Analisar denúncias recebidas",
-    type: "Inteligência",
-    status: "A fazer",
-    priority: "Alta",
-    responsible: "Sd Lima",
-    manager: "Sgt Operacional",
-    date: today,
-    officialDeadline: "2026-06-05",
-    internalDeadline: "2026-06-03",
-    workflow: "Triagem",
-    checklist: ["Conferir origem", "Validar vínculo", "Registrar providência"],
-    done: [true, false, false],
-    notes: "Demanda recebida para levantamento preliminar e organização das informações.",
-  },
-  {
-    id: 2,
-    title: "Consolidar alvos e vínculos",
-    type: "Dossiê",
-    status: "Atrasada",
-    priority: "Crítica",
-    responsible: "Equipe Intel",
-    manager: "Gestor",
-    date: today,
-    officialDeadline: "2026-05-31",
-    internalDeadline: "2026-05-29",
-    workflow: "Produção",
-    checklist: ["Separar imagens", "Criar linha do tempo", "Gerar relatório"],
-    done: [true, true, false],
-    notes: "Pendência de fechamento de relatório operacional.",
-  },
-  {
-    id: 3,
-    title: "Revisar checklist de campana",
-    type: "Operacional",
-    status: "Paralisada",
-    priority: "Média",
-    responsible: "Colaborador 01",
-    manager: "Sd Lima",
-    date: today,
-    officialDeadline: "2026-06-08",
-    internalDeadline: "2026-06-06",
-    workflow: "Validação",
-    checklist: ["Pontos de observação", "Canais de comunicação", "Plano de acionamento"],
-    done: [true, false, false],
-    notes: "Aguardando conferência do gestor.",
-  },
-  {
-    id: 4,
-    title: "Atualizar painel de demandas",
-    type: "Gestão",
-    status: "Concluída",
-    priority: "Baixa",
-    responsible: "Analista",
-    manager: "Gestor",
-    date: today,
-    officialDeadline: "2026-06-01",
-    internalDeadline: "2026-06-01",
-    workflow: "Conclusão",
-    checklist: ["Atualizar números", "Revisar pendências", "Publicar dashboard"],
-    done: [true, true, true],
-    notes: "Painel pronto para exibição em tela.",
-  },
-  {
-    id: 5,
-    title: "Conferir prazo de relatório sigiloso",
-    type: "Relatório",
-    status: "Risco de prazo",
-    priority: "Alta",
-    responsible: "Analista",
-    manager: "Gestor",
-    date: today,
-    officialDeadline: "2026-06-02",
-    internalDeadline: "2026-06-01",
-    workflow: "Validação",
-    checklist: ["Revisar minuta", "Conferir anexos", "Encaminhar gestor"],
-    done: [true, false, false],
-    notes: "Demanda com prazo crítico para fechamento e encaminhamento.",
-  },
-];
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
 
-const initialUsers = [
-  {
-    id: 1,
-    name: "David Lima",
-    warName: "Sd Lima",
-    register: "PM-0001",
-    unit: "1º BPM / GT6",
-    role: "Gestor",
-    email: "david@corujaintel.local",
-    phone: "(31) 99999-0000",
-    login: "sd.lima",
-    status: "Ativo",
-  },
-  {
-    id: 2,
-    name: "Equipe Intel",
-    warName: "Equipe Intel",
-    register: "PM-0002",
-    unit: "Núcleo de Inteligência",
-    role: "Analista",
-    email: "intel@corujaintel.local",
-    phone: "(31) 98888-0000",
-    login: "intel",
-    status: "Ativo",
-  },
-  {
-    id: 3,
-    name: "Colaborador 01",
-    warName: "Colaborador 01",
-    register: "PM-0003",
-    unit: "Apoio Operacional",
-    role: "Colaborador",
-    email: "apoio@corujaintel.local",
-    phone: "(31) 97777-0000",
-    login: "apoio01",
-    status: "Inativo",
-  },
-];
+    button {
+      cursor: pointer;
+    }
 
-function getStatusCounts(tasks) {
-  return statuses.reduce((acc, status) => {
-    acc[status] = tasks.filter((task) => task.status === status).length;
-    return acc;
-  }, {});
-}
+    .hidden {
+      display: none !important;
+    }
 
-function buildCalendarDays(monthDate) {
-  const year = monthDate.getFullYear();
-  const month = monthDate.getMonth();
-  const firstDay = new Date(year, month, 1);
-  const lastDay = new Date(year, month + 1, 0);
-  const days = [];
+    .login-page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      color: white;
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 38%, rgba(234, 88, 12, .35), transparent 28%),
+        radial-gradient(circle at center, rgba(0,0,0,.15), rgba(0,0,0,.92) 72%),
+        linear-gradient(135deg, #050505, #101010 45%, #000);
+    }
 
-  for (let i = 0; i < firstDay.getDay(); i += 1) days.push(null);
+    .login-page::before {
+      content: "🦉";
+      position: absolute;
+      font-size: min(54vw, 620px);
+      line-height: 1;
+      opacity: .18;
+      filter: drop-shadow(0 0 45px rgba(249, 115, 22, .55));
+      transform: translateY(-2%);
+    }
 
-  for (let day = 1; day <= lastDay.getDate(); day += 1) {
-    const date = new Date(year, month, day);
-    days.push(date.toISOString().slice(0, 10));
-  }
+    .login-card {
+      width: 100%;
+      max-width: 440px;
+      position: relative;
+      z-index: 1;
+      padding: 34px;
+      border-radius: 30px;
+      border: 1px solid rgba(249,115,22,.35);
+      background: rgba(0,0,0,.74);
+      box-shadow: 0 30px 90px rgba(0,0,0,.6);
+      backdrop-filter: blur(10px);
+    }
 
-  while (days.length % 7 !== 0) days.push(null);
-  return days;
-}
+    .login-chip {
+      width: fit-content;
+      margin: 0 auto 18px;
+      padding: 9px 16px;
+      border-radius: 999px;
+      border: 1px solid rgba(249,115,22,.35);
+      background: rgba(0,0,0,.45);
+      color: #fed7aa;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+    }
 
-function runSelfTests() {
-  const feb2026 = buildCalendarDays(new Date(2026, 1, 1));
-  console.assert(feb2026.includes("2026-02-01"), "Teste calendário: fevereiro/2026 deve conter 01/02/2026.");
-  console.assert(feb2026.filter(Boolean).length === 28, "Teste calendário: fevereiro/2026 deve ter 28 dias.");
+    .login-title {
+      text-align: center;
+      font-size: 42px;
+      font-weight: 900;
+      letter-spacing: -.04em;
+    }
 
-  const testCounts = getStatusCounts([
-    { status: "A fazer" },
-    { status: "A fazer" },
-    { status: "Concluída" },
-  ]);
-  console.assert(testCounts["A fazer"] === 2, "Teste contadores: A fazer deve ser 2.");
-  console.assert(testCounts["Concluída"] === 1, "Teste contadores: Concluída deve ser 1.");
-}
+    .login-subtitle {
+      text-align: center;
+      margin: 10px 0 26px;
+      color: #fed7aa;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
 
-if (typeof window !== "undefined" && !window.__CORUJA_INTEL_TESTS__) {
-  window.__CORUJA_INTEL_TESTS__ = true;
-  runSelfTests();
-}
+    .owl-mark {
+      width: 80px;
+      height: 80px;
+      border-radius: 24px;
+      display: grid;
+      place-items: center;
+      background: var(--orange);
+      margin: 0 auto 18px;
+      font-size: 42px;
+      box-shadow: 0 20px 45px rgba(234,88,12,.35);
+    }
 
-function Badge({ children, tone = "default" }) {
-  const tones = {
-    default: "bg-slate-100 text-slate-700",
-    high: "bg-red-100 text-red-700",
-    medium: "bg-yellow-100 text-yellow-700",
-    low: "bg-emerald-100 text-emerald-700",
-    dark: "bg-emerald-950 text-emerald-50",
-  };
+    .form-group {
+      display: grid;
+      gap: 12px;
+    }
 
-  return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${tones[tone] || tones.default}`}>{children}</span>;
-}
+    .field {
+      width: 100%;
+      height: 46px;
+      padding: 0 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.1);
+      color: white;
+      outline: none;
+    }
 
-function OwlLogo() {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-600 shadow-lg shadow-orange-950/30">
-        <Eye className="absolute left-2 h-5 w-5 text-white" />
-        <Eye className="absolute right-2 h-5 w-5 text-white" />
-        <Shield className="mt-5 h-5 w-5 text-emerald-950" />
+    .field::placeholder {
+      color: #a1a1aa;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-weight: 900;
+      transition: .18s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.03);
+    }
+
+    .btn-primary {
+      background: var(--orange);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--orange-2);
+    }
+
+    .btn-dark {
+      background: var(--green);
+      color: white;
+    }
+
+    .btn-light {
+      background: white;
+      color: var(--green);
+      border: 1px solid var(--border);
+    }
+
+    .btn-danger {
+      background: #fee2e2;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+    }
+
+    .btn-warning {
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fde68a;
+    }
+
+    .login-footer {
+      margin-top: 14px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: #a1a1aa;
+      font-size: 12px;
+    }
+
+    .login-footer button {
+      color: #fdba74;
+      background: none;
+      border: 0;
+      font-size: 12px;
+    }
+
+    .app {
+      min-height: 100vh;
+    }
+
+    .topbar {
+      background: var(--green);
+      color: white;
+      padding: 18px 24px;
+      box-shadow: var(--shadow);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .topbar-inner {
+      max-width: 1440px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 50px;
+      height: 50px;
+      border-radius: 18px;
+      background: var(--orange);
+      display: grid;
+      place-items: center;
+      font-size: 28px;
+    }
+
+    .brand h1 {
+      font-size: 22px;
+      line-height: 1.05;
+    }
+
+    .brand p {
+      color: #a7f3d0;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 800;
+      background: rgba(255,255,255,.1);
+      color: white;
+    }
+
+    .container {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      gap: 22px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(150px, 1fr));
+      gap: 14px;
+    }
+
+    .stat {
+      border: 0;
+      border-radius: var(--radius);
+      color: white;
+      padding: 20px;
+      min-height: 108px;
+      text-align: left;
+      box-shadow: 0 12px 32px rgba(0,0,0,.16);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .stat span {
+      display: block;
+      font-size: 13px;
+      font-weight: 800;
+      opacity: .9;
+    }
+
+    .stat strong {
+      display: block;
+      margin-top: 6px;
+      font-size: 34px;
+      font-weight: 900;
+    }
+
+    .stat .icon {
+      font-size: 34px;
+      opacity: .9;
+    }
+
+    .blue { background: var(--blue); }
+    .red { background: var(--red); }
+    .gray { background: var(--gray); }
+    .yellow { background: var(--yellow); }
+    .green { background: #16a34a; }
+
+    .card {
+      border-radius: var(--radius);
+      background: white;
+      border: 1px solid var(--border);
+      box-shadow: 0 8px 28px rgba(15,23,42,.06);
+      padding: 22px;
+    }
+
+    .card-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 20px;
+      font-weight: 900;
+      margin-bottom: 4px;
+    }
+
+    .card-subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 18px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 20px;
+    }
+
+    .grid-half {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .calendar-layout {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 20px;
+    }
+
+    .calendar-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+
+    .month-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .month-label {
+      min-width: 180px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: var(--green);
+      color: white;
+      text-align: center;
+      font-weight: 900;
+      text-transform: capitalize;
+    }
+
+    .weekdays,
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+    }
+
+    .weekdays {
+      margin-bottom: 8px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .day {
+      min-height: 118px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: white;
+      padding: 8px;
+      text-align: left;
+      transition: .18s;
+    }
+
+    .day:hover {
+      box-shadow: 0 10px 24px rgba(15,23,42,.12);
+      border-color: var(--orange);
+    }
+
+    .day.empty {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .day.selected {
+      border-color: var(--orange);
+      background: #fff7ed;
+      box-shadow: 0 0 0 3px #fed7aa;
+    }
+
+    .day-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .day-number {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      background: #f1f5f9;
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+      font-size: 13px;
+    }
+
+    .day.selected .day-number {
+      background: var(--orange);
+      color: white;
+    }
+
+    .day-count {
+      border-radius: 999px;
+      background: var(--green);
+      color: white;
+      padding: 3px 7px;
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .mini-task {
+      margin-top: 6px;
+      padding: 5px 7px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 800;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      background: #f1f5f9;
+      color: #334155;
+    }
+
+    .mini-task.done {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .mini-task.late {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .day-footer {
+      margin-top: 7px;
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      font-size: 10px;
+      font-weight: 900;
+    }
+
+    .tag {
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 900;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .tag.default { background: #f1f5f9; color: #334155; }
+    .tag.low { background: #dcfce7; color: #166534; }
+    .tag.medium { background: #fef3c7; color: #92400e; }
+    .tag.high { background: #fee2e2; color: #991b1b; }
+    .tag.dark { background: var(--green); color: white; }
+
+    .form {
+      display: grid;
+      gap: 12px;
+    }
+
+    .input,
+    .select,
+    .textarea {
+      width: 100%;
+      min-height: 42px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      outline: none;
+      background: white;
+      color: #0f172a;
+    }
+
+    .textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+
+    .panel-dark {
+      border-radius: 18px;
+      padding: 18px;
+      background: var(--green);
+      color: white;
+    }
+
+    .panel-dark p {
+      color: #a7f3d0;
+      font-size: 13px;
+      margin-top: 6px;
+    }
+
+    .task-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .task-card {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: white;
+      padding: 16px;
+    }
+
+    .task-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .task-title {
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .task-notes {
+      color: #475569;
+      font-size: 14px;
+      margin-top: 8px;
+      line-height: 1.45;
+    }
+
+    .task-meta {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .meta {
+      border-radius: 12px;
+      background: #f8fafc;
+      padding: 10px;
+      font-size: 13px;
+      color: #334155;
+    }
+
+    .checklist {
+      margin-top: 14px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .progress {
+      height: 8px;
+      background: #e2e8f0;
+      border-radius: 999px;
+      overflow: hidden;
+      margin: 8px 0;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: var(--orange);
+      width: 0%;
+    }
+
+    .check-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .check-item {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .workflow-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+    }
+
+    .workflow-step {
+      border-radius: 18px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      padding: 18px;
+      text-align: center;
+      font-weight: 900;
+    }
+
+    .workflow-step span {
+      margin: 0 auto 8px;
+      width: 36px;
+      height: 36px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: var(--green);
+      color: white;
+    }
+
+    .dash-tv {
+      background: var(--green);
+      color: white;
+    }
+
+    .dash-tv p {
+      color: #a7f3d0;
+      font-size: 14px;
+      margin-top: 8px;
+    }
+
+    .dash-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .dash-cell {
+      background: rgba(255,255,255,.1);
+      border-radius: 16px;
+      padding: 16px;
+    }
+
+    .dash-cell strong {
+      display: block;
+      font-size: 30px;
+      margin-bottom: 3px;
+    }
+
+    .users-layout,
+    .demand-layout {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 20px;
+    }
+
+    .user-list,
+    .demand-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .user-card,
+    .demand-item {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+      background: white;
+    }
+
+    .demand-item {
+      text-align: left;
+      width: 100%;
+    }
+
+    .demand-item.active {
+      border-color: var(--orange);
+      box-shadow: 0 0 0 3px #fed7aa;
+    }
+
+    .user-info-grid {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .modal-bg {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.62);
+      backdrop-filter: blur(4px);
+      z-index: 50;
+      padding: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal {
+      width: 100%;
+      max-width: 940px;
+      max-height: 92vh;
+      overflow: auto;
+      background: white;
+      border-radius: 26px;
+      box-shadow: 0 35px 100px rgba(0,0,0,.45);
+    }
+
+    .modal-header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--green);
+      color: white;
+      padding: 18px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .modal-header small {
+      color: #fdba74;
+      font-weight: 900;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+
+    .modal-body {
+      padding: 18px;
+    }
+
+    .toast {
+      position: fixed;
+      top: 86px;
+      right: 24px;
+      z-index: 80;
+      background: var(--green);
+      color: white;
+      border-radius: 16px;
+      padding: 14px 18px;
+      font-weight: 900;
+      box-shadow: var(--shadow);
+      display: none;
+    }
+
+    .toast.show {
+      display: block;
+      animation: fadeIn .2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 1100px) {
+      .stats,
+      .workflow-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .grid-2,
+      .grid-half,
+      .calendar-layout,
+      .users-layout,
+      .demand-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .container {
+        padding: 14px;
+      }
+
+      .stats,
+      .task-meta,
+      .check-grid,
+      .user-info-grid,
+      .dash-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .calendar-grid,
+      .weekdays {
+        gap: 4px;
+      }
+
+      .day {
+        min-height: 92px;
+        padding: 5px;
+      }
+
+      .mini-task,
+      .day-footer {
+        display: none;
+      }
+
+      .login-title {
+        font-size: 34px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section id="loginPage" class="login-page">
+    <div class="login-card">
+      <div class="login-chip">Inteligência Operacional</div>
+      <h1 class="login-title">SI 6ª CIA</h1>
+      <p class="login-subtitle">Observar • Analisar • Antecipar</p>
+      <div class="owl-mark">🦉</div>
+      <div class="form-group">
+        <input id="loginUser" class="field" placeholder="Usuário" />
+        <input id="loginPass" class="field" type="password" placeholder="Senha" />
+        <button class="btn btn-primary" onclick="login()">🔒 Entrar</button>
       </div>
-      <div>
-        <p className="text-xl font-black tracking-tight text-white">SI 6ª CIA</p>
-        <p className="text-xs uppercase tracking-[0.25em] text-emerald-200">Centro de inteligência</p>
+      <div class="login-footer">
+        <span>Ambiente operacional</span>
+        <button onclick="forgotPassword()">Esqueci minha senha</button>
       </div>
     </div>
-  );
-}
+  </section>
 
-function Login({ onLogin }) {
-  const [login, setLogin] = useState("");
-  const [password, setPassword] = useState("");
-
-  const submitLogin = () => {
-    if (!login.trim() || !password.trim()) {
-      alert("Informe usuário e senha para acessar.");
-      return;
-    }
-    onLogin();
-  };
-
-  return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-black p-6 text-white">
-      <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/mnt/data/image(2).png')" }} />
-      <div className="absolute inset-0 bg-black/75 backdrop-blur-[2px]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(234,88,12,0.34),transparent_34%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,transparent_0%,rgba(0,0,0,0.25)_42%,rgba(0,0,0,0.92)_100%)]" />
-
-      <motion.section initial={{ opacity: 0, scale: 0.96, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="relative z-10 w-full max-w-md">
-        <div className="mb-5 text-center">
-          <div className="mx-auto mb-4 inline-flex rounded-full border border-orange-500/40 bg-black/55 px-5 py-2 text-xs font-black uppercase tracking-[0.28em] text-orange-300 shadow-lg shadow-orange-950/40 backdrop-blur">
-            Inteligência Operacional
-          </div>
-          <h1 className="text-5xl font-black tracking-tight text-white drop-shadow-2xl">SI 6ª CIA</h1>
-          <p className="mt-3 text-sm font-semibold uppercase tracking-[0.22em] text-orange-200">Observar • Analisar • Antecipar</p>
-        </div>
-
-        <div className="rounded-3xl border border-orange-500/30 bg-black/72 p-8 shadow-2xl shadow-orange-950/50 backdrop-blur-xl">
-          <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-orange-600 shadow-lg shadow-orange-700/40 ring-1 ring-orange-300/40">
-              <Eye className="h-9 w-9 text-white" />
-            </div>
-            <h2 className="text-2xl font-black tracking-tight text-white">Acesso Restrito</h2>
-            <p className="mt-2 text-sm text-zinc-400">Sistema Integrado de Inteligência</p>
-          </div>
-
-          <div className="space-y-4">
-            <Input value={login} onChange={(event) => setLogin(event.target.value)} placeholder="Usuário" className="h-12 border-white/10 bg-white/10 text-white placeholder:text-zinc-400" />
-            <Input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Senha" type="password" className="h-12 border-white/10 bg-white/10 text-white placeholder:text-zinc-400" onKeyDown={(event) => event.key === "Enter" && submitLogin()} />
-            <Button onClick={submitLogin} className="h-12 w-full bg-orange-600 text-base font-black uppercase tracking-wide hover:bg-orange-700">
-              <Lock className="mr-2 h-4 w-4" /> Entrar
-            </Button>
-            <div className="flex items-center justify-between text-xs text-zinc-400">
-              <span>Ambiente operacional</span>
-              <button type="button" onClick={() => alert("Solicitação registrada. Procure o administrador do SI 6ª CIA para redefinir a senha.")} className="text-orange-300 hover:text-orange-200">
-                Esqueci minha senha
-              </button>
-            </div>
-          </div>
-        </div>
-      </motion.section>
-    </main>
-  );
-}
-
-function StatCard({ label, value, icon: Icon, className }) {
-  return (
-    <Card className={`${className} border-0 text-white shadow-lg transition hover:scale-[1.02]`}>
-      <CardContent className="flex items-center justify-between p-5">
-        <div>
-          <p className="text-sm font-bold opacity-90">{label}</p>
-          <p className="mt-1 text-3xl font-black">{value}</p>
-        </div>
-        <Icon className="h-10 w-10 opacity-90" />
-      </CardContent>
-    </Card>
-  );
-}
-
-function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMonthDate, addQuickTask, updateTaskStatus, deleteTask }) {
-  const [quickTitle, setQuickTitle] = useState("");
-  const [quickResponsible, setQuickResponsible] = useState("");
-  const [quickType, setQuickType] = useState("Inteligência");
-  const [quickPriority, setQuickPriority] = useState("Média");
-  const [quickNotes, setQuickNotes] = useState("");
-  const [dayPanelOpen, setDayPanelOpen] = useState(false);
-  const [dayPanelMode, setDayPanelMode] = useState("view");
-  const selectedTasks = tasks.filter((task) => task.date === selectedDate);
-  const monthDays = buildCalendarDays(monthDate);
-  const monthLabel = monthDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-
-  const moveMonth = (amount) => setMonthDate(new Date(monthDate.getFullYear(), monthDate.getMonth() + amount, 1));
-
-  const saveQuickTask = () => {
-    if (!quickTitle.trim()) return;
-    addQuickTask({
-      title: quickTitle,
-      responsible: quickResponsible || "Sem responsável",
-      date: selectedDate,
-      type: quickType,
-      priority: quickPriority,
-      notes: quickNotes || "Demanda criada diretamente pelo calendário visual.",
-    });
-    setQuickTitle("");
-    setQuickResponsible("");
-    setQuickType("Inteligência");
-    setQuickPriority("Média");
-    setQuickNotes("");
-    setDayPanelMode("view");
-  };
-
-  const openDayPanel = (date, mode = "view") => {
-    setSelectedDate(date);
-    setDayPanelMode(mode);
-    setDayPanelOpen(true);
-  };
-
-  return (
-    <Card className="rounded-3xl border-0 shadow-sm">
-      <CardContent className="p-6">
-        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+  <section id="appPage" class="app hidden">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="brand-icon">🦉</div>
           <div>
-            <h2 className="flex items-center gap-2 text-xl font-black">
-              <CalendarDays className="h-5 w-5 text-orange-600" /> Calendário visual de atividades
-            </h2>
-            <p className="text-sm text-slate-500">Clique em um dia para ver atividades feitas e cadastrar nova demanda direto no calendário.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={() => moveMonth(-1)}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="min-w-44 rounded-xl bg-emerald-950 px-4 py-2 text-center text-sm font-bold capitalize text-white">{monthLabel}</div>
-            <Button variant="outline" size="icon" onClick={() => moveMonth(1)}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            <h1>SI 6ª CIA</h1>
+            <p>Centro de inteligência</p>
           </div>
         </div>
+        <div class="top-actions">
+          <span class="pill">👤 Gestor operacional</span>
+          <span class="pill" id="activeUsersPill">👥 0 usuários ativos</span>
+          <button class="btn btn-light" onclick="logout()">Sair</button>
+        </div>
+      </div>
+    </header>
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+    <div id="toast" class="toast"></div>
+
+    <main class="container">
+      <section class="stats">
+        <button class="stat blue" onclick="openDemandCenter('A fazer')">
+          <div><span>A fazer</span><strong id="countTodo">0</strong></div><div class="icon">📋</div>
+        </button>
+        <button class="stat red" onclick="openDemandCenter('Atrasada')">
+          <div><span>Atrasadas</span><strong id="countLate">0</strong></div><div class="icon">⚠️</div>
+        </button>
+        <button class="stat gray" onclick="openDemandCenter('Paralisada')">
+          <div><span>Paralisadas</span><strong id="countPaused">0</strong></div><div class="icon">⏸️</div>
+        </button>
+        <button class="stat yellow" onclick="openDemandCenter('Risco de prazo')">
+          <div><span>Risco de prazo</span><strong id="countRisk">0</strong></div><div class="icon">⏰</div>
+        </button>
+        <button class="stat green" onclick="openDemandCenter('Concluída')">
+          <div><span>Concluídas</span><strong id="countDone">0</strong></div><div class="icon">✅</div>
+        </button>
+      </section>
+
+      <section id="demandCenter" class="card hidden"></section>
+
+      <section id="calendarSection" class="card">
+        <div class="calendar-head">
           <div>
-            <div className="grid grid-cols-7 gap-2 text-center text-xs font-black uppercase text-slate-500">
-              {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((day) => (
-                <div key={day}>{day}</div>
-              ))}
-            </div>
-            <div className="mt-2 grid grid-cols-7 gap-2">
-              {monthDays.map((date, index) => {
-                const dayTasks = date ? tasks.filter((task) => task.date === date) : [];
-                const doneCount = dayTasks.filter((task) => task.status === "Concluída").length;
-                const pendingCount = dayTasks.length - doneCount;
-                const isSelected = date === selectedDate;
-                const dayNumber = date ? Number(date.slice(8, 10)) : "";
-
-                return (
-                  <button
-                    type="button"
-                    key={`${date || "blank"}-${index}`}
-                    disabled={!date}
-                    onClick={() => date && openDayPanel(date, "view")}
-                    className={`min-h-28 rounded-2xl border p-2 text-left transition hover:shadow-md ${isSelected ? "border-orange-600 bg-orange-50 ring-2 ring-orange-200" : "bg-white"} ${!date ? "cursor-default opacity-0" : ""}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-black ${isSelected ? "bg-orange-600 text-white" : "bg-slate-100"}`}>{dayNumber}</span>
-                      {dayTasks.length > 0 && <span className="rounded-full bg-emerald-950 px-2 py-0.5 text-xs font-bold text-white">{dayTasks.length}</span>}
-                    </div>
-                    <div className="mt-2 space-y-1">
-                      {dayTasks.slice(0, 3).map((task) => (
-                        <div key={task.id} className={`truncate rounded-lg px-2 py-1 text-[11px] font-semibold ${task.status === "Concluída" ? "bg-green-100 text-green-700" : task.status === "Atrasada" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-700"}`}>
-                          {task.title}
-                        </div>
-                      ))}
-                    </div>
-                    {dayTasks.length > 0 && (
-                      <div className="mt-2 flex gap-1 text-[10px] font-bold">
-                        <span className="rounded bg-green-100 px-1.5 py-0.5 text-green-700">{doneCount} feitas</span>
-                        <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-yellow-700">{pendingCount} pend.</span>
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            <h2 class="card-title">📅 Calendário visual de atividades</h2>
+            <p class="card-subtitle">Clique em um dia para cadastrar demanda ou visualizar demandas daquele dia.</p>
           </div>
-
-          <div className="space-y-4">
-            <div className="rounded-2xl bg-emerald-950 p-4 text-white">
-              <p className="text-sm text-emerald-100">Dia selecionado</p>
-              <p className="text-2xl font-black">{selectedDate.split("-").reverse().join("/")}</p>
-            </div>
-
-            <div className="rounded-2xl border bg-white p-4">
-              <h3 className="mb-3 flex items-center gap-2 font-black">
-                <Plus className="h-4 w-4 text-orange-600" /> Ações do dia
-              </h3>
-              <div className="grid gap-2">
-                <Button onClick={() => setDayPanelOpen(true) || setDayPanelMode("create")} className="w-full bg-orange-600 hover:bg-orange-700">
-                  <Plus className="mr-2 h-4 w-4" /> Cadastrar demanda
-                </Button>
-                <Button variant="outline" onClick={() => setDayPanelOpen(true) || setDayPanelMode("view")} className="w-full">
-                  <FileText className="mr-2 h-4 w-4" /> Visualizar demandas do dia
-                </Button>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border bg-white p-4">
-              <h3 className="mb-3 flex items-center gap-2 font-black">
-                <FileText className="h-4 w-4 text-orange-600" /> Atividades do dia
-              </h3>
-              <div className="max-h-80 space-y-2 overflow-auto pr-1">
-                {selectedTasks.length === 0 && <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Nenhuma atividade cadastrada neste dia.</p>}
-                {selectedTasks.map((task) => (
-                  <div key={task.id} className="rounded-xl border p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-black">{task.title}</p>
-                      <Badge tone={task.status === "Concluída" ? "low" : task.status === "Atrasada" ? "high" : "medium"}>{task.status}</Badge>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500">{task.responsible} • {task.workflow}</p>
-                    <p className="mt-2 text-xs text-slate-600">{task.notes}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "Concluída")}><Check className="mr-1 h-3 w-3" /> Feita</Button>
-                      <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "A fazer")}><RotateCcw className="mr-1 h-3 w-3" /> Reabrir</Button>
-                      <Button size="sm" variant="outline" onClick={() => deleteTask(task.id)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+          <div class="month-controls">
+            <button class="btn btn-light" onclick="changeMonth(-1)">◀</button>
+            <div id="monthLabel" class="month-label"></div>
+            <button class="btn btn-light" onclick="changeMonth(1)">▶</button>
           </div>
         </div>
 
-        {dayPanelOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-            <div className="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-3xl bg-white shadow-2xl">
-              <div className="sticky top-0 z-10 flex flex-col gap-3 border-b bg-emerald-950 p-5 text-white md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.25em] text-orange-300">Calendário visual</p>
-                  <h3 className="text-2xl font-black">{selectedDate.split("-").reverse().join("/")}</h3>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="secondary" onClick={() => setDayPanelMode("create")} className="bg-orange-600 text-white hover:bg-orange-700">
-                    <Plus className="mr-2 h-4 w-4" /> Cadastrar demanda
-                  </Button>
-                  <Button variant="secondary" onClick={() => setDayPanelMode("view")} className="bg-white/10 text-white hover:bg-white/20">
-                    <FileText className="mr-2 h-4 w-4" /> Ver demandas
-                  </Button>
-                  <Button variant="secondary" onClick={() => setDayPanelOpen(false)} className="bg-white text-emerald-950 hover:bg-slate-100">
-                    Fechar
-                  </Button>
-                </div>
-              </div>
-
-              <div className="p-5">
-                {dayPanelMode === "create" && (
-                  <div className="rounded-2xl border bg-slate-50 p-5">
-                    <h4 className="mb-4 flex items-center gap-2 text-xl font-black"><Plus className="h-5 w-5 text-orange-600" /> Nova demanda para este dia</h4>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <Input placeholder="Título da demanda" value={quickTitle} onChange={(event) => setQuickTitle(event.target.value)} />
-                      <Input placeholder="Responsável" value={quickResponsible} onChange={(event) => setQuickResponsible(event.target.value)} />
-                      <select value={quickType} onChange={(event) => setQuickType(event.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm">
-                        <option>Inteligência</option>
-                        <option>Dossiê</option>
-                        <option>Operacional</option>
-                        <option>Relatório</option>
-                        <option>Gestão</option>
-                      </select>
-                      <select value={quickPriority} onChange={(event) => setQuickPriority(event.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm">
-                        <option>Baixa</option>
-                        <option>Média</option>
-                        <option>Alta</option>
-                        <option>Crítica</option>
-                      </select>
-                      <textarea
-                        className="min-h-28 rounded-md border bg-white p-3 text-sm md:col-span-2"
-                        placeholder="Informações da demanda, observações, providências ou contexto operacional"
-                        value={quickNotes}
-                        onChange={(event) => setQuickNotes(event.target.value)}
-                      />
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button onClick={saveQuickTask} className="bg-orange-600 hover:bg-orange-700"><Plus className="mr-2 h-4 w-4" /> Salvar demanda</Button>
-                      <Button variant="outline" onClick={() => setDayPanelMode("view")}>Cancelar</Button>
-                    </div>
-                  </div>
-                )}
-
-                {dayPanelMode === "view" && (
-                  <div>
-                    <div className="mb-4 flex items-center justify-between">
-                      <h4 className="text-xl font-black">Demandas cadastradas neste dia</h4>
-                      <Badge tone="dark">{selectedTasks.length} demandas</Badge>
-                    </div>
-                    <div className="grid gap-3">
-                      {selectedTasks.length === 0 && <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">Nenhuma demanda cadastrada neste dia. Clique em “Cadastrar demanda”.</p>}
-                      {selectedTasks.map((task) => (
-                        <div key={task.id} className="rounded-2xl border bg-white p-4 shadow-sm">
-                          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <h5 className="text-lg font-black">{task.title}</h5>
-                                <Badge tone={task.status === "Concluída" ? "low" : task.status === "Atrasada" ? "high" : "medium"}>{task.status}</Badge>
-                                <Badge tone={task.priority === "Crítica" || task.priority === "Alta" ? "high" : task.priority === "Média" ? "medium" : "low"}>{task.priority}</Badge>
-                              </div>
-                              <p className="mt-2 text-sm text-slate-600">{task.notes}</p>
-                              <p className="mt-2 text-xs text-slate-500">Responsável: {task.responsible} • Workflow: {task.workflow}</p>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "Concluída")}><Check className="mr-1 h-3 w-3" /> Feita</Button>
-                              <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "A fazer")}><RotateCcw className="mr-1 h-3 w-3" /> Reabrir</Button>
-                              <Button size="sm" variant="outline" onClick={() => deleteTask(task.id)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function UserManagement({ users, addUser, deleteUser, toggleUserStatus }) {
-  const emptyForm = {
-    name: "",
-    warName: "",
-    register: "",
-    unit: "",
-    role: "Analista",
-    email: "",
-    phone: "",
-    login: "",
-    password: "",
-    status: "Ativo",
-  };
-
-  const [form, setForm] = useState(emptyForm);
-  const activeUsers = users.filter((user) => user.status === "Ativo").length;
-  const inactiveUsers = users.length - activeUsers;
-
-  const updateForm = (field, value) => setForm({ ...form, [field]: value });
-
-  const saveUser = () => {
-    if (!form.name.trim() || !form.login.trim()) return;
-    addUser(form);
-    setForm(emptyForm);
-  };
-
-  return (
-    <Card className="rounded-3xl border-0 shadow-sm">
-      <CardContent className="p-6">
-        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div class="calendar-layout">
           <div>
-            <h2 className="flex items-center gap-2 text-xl font-black"><UserPlus className="h-5 w-5 text-orange-600" /> Cadastro e gestão de usuários</h2>
-            <p className="text-sm text-slate-500">Controle de acesso, responsáveis, gestores, analistas e colaboradores.</p>
+            <div class="weekdays">
+              <div>Dom</div><div>Seg</div><div>Ter</div><div>Qua</div><div>Qui</div><div>Sex</div><div>Sáb</div>
+            </div>
+            <div id="calendarGrid" class="calendar-grid"></div>
           </div>
-          <div className="grid grid-cols-3 gap-2 text-center text-sm">
-            <div className="rounded-2xl bg-emerald-950 px-4 py-3 text-white"><p className="text-2xl font-black">{users.length}</p><p>Total</p></div>
-            <div className="rounded-2xl bg-green-600 px-4 py-3 text-white"><p className="text-2xl font-black">{activeUsers}</p><p>Ativos</p></div>
-            <div className="rounded-2xl bg-zinc-600 px-4 py-3 text-white"><p className="text-2xl font-black">{inactiveUsers}</p><p>Inativos</p></div>
-          </div>
-        </div>
 
-        <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-          <div className="rounded-2xl border bg-white p-4">
-            <h3 className="mb-4 flex items-center gap-2 font-black"><Settings className="h-4 w-4 text-orange-600" /> Novo usuário</h3>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
-              <Input placeholder="Nome completo" value={form.name} onChange={(event) => updateForm("name", event.target.value)} />
-              <Input placeholder="Nome de guerra" value={form.warName} onChange={(event) => updateForm("warName", event.target.value)} />
-              <Input placeholder="Matrícula" value={form.register} onChange={(event) => updateForm("register", event.target.value)} />
-              <Input placeholder="Unidade" value={form.unit} onChange={(event) => updateForm("unit", event.target.value)} />
-              <select value={form.role} onChange={(event) => updateForm("role", event.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm">
-                {userRoles.map((role) => <option key={role}>{role}</option>)}
+          <aside>
+            <div class="panel-dark">
+              <strong>Dia selecionado</strong>
+              <h2 id="selectedDateText"></h2>
+              <p>Use as ações abaixo para trabalhar no dia selecionado.</p>
+            </div>
+
+            <div style="height: 14px"></div>
+
+            <div class="card" style="box-shadow:none; padding:16px;">
+              <h3 class="card-title" style="font-size:17px;">➕ Ações do dia</h3>
+              <div class="form">
+                <button class="btn btn-primary" onclick="openDayModal('create')">➕ Cadastrar demanda</button>
+                <button class="btn btn-light" onclick="openDayModal('view')">📄 Visualizar demandas do dia</button>
+              </div>
+            </div>
+
+            <div style="height: 14px"></div>
+
+            <div class="card" style="box-shadow:none; padding:16px;">
+              <h3 class="card-title" style="font-size:17px;">📄 Resumo do dia</h3>
+              <div id="daySummary" class="task-list"></div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">👥 Cadastro e gestão de usuários</h2>
+        <p class="card-subtitle">Controle de acesso, responsáveis, gestores, analistas e colaboradores.</p>
+        <div class="users-layout">
+          <div class="card" style="box-shadow:none;">
+            <h3 class="card-title" style="font-size:17px;">⚙️ Novo usuário</h3>
+            <div class="form">
+              <input id="userName" class="input" placeholder="Nome completo" />
+              <input id="userWarName" class="input" placeholder="Nome de guerra" />
+              <input id="userRegister" class="input" placeholder="Matrícula" />
+              <input id="userUnit" class="input" placeholder="Unidade" />
+              <select id="userRole" class="select">
+                <option>Administrador</option>
+                <option>Gestor</option>
+                <option selected>Analista</option>
+                <option>Colaborador</option>
               </select>
-              <Input placeholder="E-mail" value={form.email} onChange={(event) => updateForm("email", event.target.value)} />
-              <Input placeholder="Telefone" value={form.phone} onChange={(event) => updateForm("phone", event.target.value)} />
-              <Input placeholder="Login" value={form.login} onChange={(event) => updateForm("login", event.target.value)} />
-              <Input placeholder="Senha provisória" type="password" value={form.password} onChange={(event) => updateForm("password", event.target.value)} />
-              <select value={form.status} onChange={(event) => updateForm("status", event.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm">
-                <option>Ativo</option>
+              <input id="userEmail" class="input" placeholder="E-mail" />
+              <input id="userPhone" class="input" placeholder="Telefone" />
+              <input id="userLogin" class="input" placeholder="Login" />
+              <input id="userPassword" class="input" type="password" placeholder="Senha provisória" />
+              <select id="userStatus" class="select">
+                <option selected>Ativo</option>
                 <option>Inativo</option>
               </select>
-              <Button onClick={saveUser} className="bg-orange-600 hover:bg-orange-700"><UserPlus className="mr-2 h-4 w-4" /> Cadastrar usuário</Button>
+              <button class="btn btn-primary" onclick="addUser()">👤 Cadastrar usuário</button>
             </div>
           </div>
+          <div id="usersList" class="user-list"></div>
+        </div>
+      </section>
 
-          <div className="space-y-3">
-            {users.map((user) => (
-              <div key={user.id} className="rounded-2xl border bg-white p-4 shadow-sm">
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-lg font-black">{user.warName || user.name}</h3>
-                      <Badge tone={user.status === "Ativo" ? "low" : "default"}>{user.status}</Badge>
-                      <Badge tone={user.role === "Administrador" ? "high" : user.role === "Gestor" ? "medium" : "default"}>{user.role}</Badge>
-                    </div>
-                    <p className="mt-1 text-sm text-slate-600">{user.name} • Matrícula: {user.register || "não informada"}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <div className="rounded-2xl bg-emerald-950 px-4 py-2 text-sm font-bold text-white"><Activity className="mr-1 inline h-4 w-4" /> {user.login}</div>
-                    <Button size="sm" variant="outline" onClick={() => toggleUserStatus(user.id)}>{user.status === "Ativo" ? "Inativar" : "Ativar"}</Button>
-                    <Button size="sm" variant="outline" onClick={() => deleteUser(user.id)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-2 text-sm md:grid-cols-3">
-                  <div className="rounded-xl bg-slate-50 p-3"><Building2 className="mr-1 inline h-4 w-4 text-orange-600" /> {user.unit || "Unidade não informada"}</div>
-                  <div className="rounded-xl bg-slate-50 p-3"><Mail className="mr-1 inline h-4 w-4 text-orange-600" /> {user.email || "E-mail não informado"}</div>
-                  <div className="rounded-xl bg-slate-50 p-3"><Phone className="mr-1 inline h-4 w-4 text-orange-600" /> {user.phone || "Telefone não informado"}</div>
-                </div>
-              </div>
-            ))}
+      <section class="grid-2">
+        <div class="card">
+          <h2 class="card-title">➕ Calendário e nova demanda</h2>
+          <p class="card-subtitle">Cadastro rápido para o dia selecionado.</p>
+          <div class="form">
+            <input id="quickDate" class="input" type="date" />
+            <input id="quickTitle" class="input" placeholder="Tarefa do dia / demanda" />
+            <input id="quickResponsible" class="input" placeholder="Responsável" />
+            <select id="quickWorkflow" class="select">
+              <option>Triagem</option>
+              <option>Produção</option>
+              <option>Validação</option>
+              <option>Encaminhamento</option>
+              <option>Conclusão</option>
+            </select>
+            <button class="btn btn-primary" onclick="addQuickTask()">➕ Cadastrar tarefa</button>
+          </div>
+          <div style="height: 14px"></div>
+          <div class="panel-dark">
+            <strong>🔁 Tarefas recorrentes</strong>
+            <p>Modelo para criar rotinas diárias, semanais ou mensais, com responsáveis e prazos internos.</p>
           </div>
         </div>
-      </CardContent>
-    </Card>
-  );
-}
 
-function DemandCenter({ status, tasks, onBack, updateTaskStatus, deleteTask, duplicateTask, toggleChecklistItem }) {
-  const [selectedId, setSelectedId] = useState(tasks[0]?.id || null);
-  const [query, setQuery] = useState("");
-  const visibleTasks = tasks.filter((task) => `${task.title} ${task.responsible} ${task.workflow} ${task.notes}`.toLowerCase().includes(query.toLowerCase()));
-  const selectedTask = visibleTasks.find((task) => task.id === selectedId) || visibleTasks[0];
-  const title = status === "Todas" ? "CENTRAL DE DEMANDAS" : `DEMANDAS ${status.toUpperCase()}`;
-
-  return (
-    <Card className="rounded-3xl border-0 shadow-sm">
-      <CardContent className="p-6">
-        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="flex items-center gap-2 text-2xl font-black"><ClipboardCheck className="h-6 w-6 text-orange-600" /> {title}</h2>
-            <p className="text-sm text-slate-500">Tela aberta pelo card do dashboard, com demandas filtradas por status.</p>
-          </div>
-          <Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao painel</Button>
-        </div>
-
-        <div className="mb-4 grid gap-3 md:grid-cols-4">
-          <Input className="md:col-span-2" placeholder="Pesquisar demanda, responsável ou workflow" value={query} onChange={(event) => setQuery(event.target.value)} />
-          <div className="rounded-2xl bg-emerald-950 px-4 py-3 text-center font-bold text-white">{visibleTasks.length} demandas</div>
-          <Button className="bg-orange-600 hover:bg-orange-700" onClick={() => alert("Use o calendário ou a tela de tarefas para criar uma nova demanda.")}><Plus className="mr-2 h-4 w-4" /> Nova demanda</Button>
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-          <div className="space-y-3">
-            {visibleTasks.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">Nenhuma demanda encontrada neste status.</div>}
-            {visibleTasks.map((task) => (
-              <button key={task.id} type="button" onClick={() => setSelectedId(task.id)} className={`w-full rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:shadow-md ${selectedTask?.id === task.id ? "border-orange-600 ring-2 ring-orange-100" : ""}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-black">{task.title}</h3>
-                    <p className="mt-1 text-xs text-slate-500">Responsável: {task.responsible}</p>
-                  </div>
-                  <Badge tone={task.status === "Concluída" ? "low" : task.status === "Atrasada" ? "high" : "medium"}>{task.status}</Badge>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-lg bg-slate-50 p-2"><b>Interno:</b> {task.internalDeadline}</div>
-                  <div className="rounded-lg bg-slate-50 p-2"><b>Oficial:</b> {task.officialDeadline}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-
-          {selectedTask && (
-            <div className="rounded-3xl border bg-white p-5 shadow-sm">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.25em] text-orange-600">Demanda #{selectedTask.id}</p>
-                  <h3 className="mt-2 text-2xl font-black">{selectedTask.title}</h3>
-                  <p className="mt-2 text-sm text-slate-600">{selectedTask.notes}</p>
-                </div>
-                <Badge tone={selectedTask.status === "Concluída" ? "low" : selectedTask.status === "Atrasada" ? "high" : "medium"}>{selectedTask.status}</Badge>
-              </div>
-
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                <div className="rounded-2xl bg-slate-50 p-4"><b>Tipo:</b> {selectedTask.type}</div>
-                <div className="rounded-2xl bg-slate-50 p-4"><b>Workflow:</b> {selectedTask.workflow}</div>
-                <div className="rounded-2xl bg-slate-50 p-4"><b>Responsável:</b> {selectedTask.responsible}</div>
-                <div className="rounded-2xl bg-slate-50 p-4"><b>Gestor:</b> {selectedTask.manager}</div>
-                <div className="rounded-2xl bg-slate-50 p-4"><b>Prazo interno:</b> {selectedTask.internalDeadline}</div>
-                <div className="rounded-2xl bg-slate-50 p-4"><b>Prazo oficial:</b> {selectedTask.officialDeadline}</div>
-              </div>
-
-              <div className="mt-5">
-                <h4 className="mb-3 font-black"><ClipboardCheck className="mr-1 inline h-4 w-4 text-orange-600" /> Checklist da demanda</h4>
-                <div className="grid gap-2 md:grid-cols-2">
-                  {selectedTask.checklist.map((item, index) => (
-                    <label key={item} className="flex cursor-pointer items-center gap-2 rounded-xl border p-3 text-sm">
-                      <input type="checkbox" checked={selectedTask.done[index]} onChange={() => toggleChecklistItem(selectedTask.id, index)} /> {item}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-2">
-                <Button variant="outline" onClick={() => alert(`Visualizando demanda: ${selectedTask.title}`)}><Eye className="mr-1 h-4 w-4" /> Visualizar</Button>
-                <Button variant="outline" onClick={() => alert("Edição completa será ligada ao banco de dados na versão final.")}><Edit3 className="mr-1 h-4 w-4" /> Editar</Button>
-                <Button variant="outline" onClick={() => duplicateTask(selectedTask.id)}><Copy className="mr-1 h-4 w-4" /> Duplicar</Button>
-                <Button variant="outline" onClick={() => updateTaskStatus(selectedTask.id, "Concluída")}><Check className="mr-1 h-4 w-4" /> Encerrar</Button>
-                <Button variant="outline" onClick={() => updateTaskStatus(selectedTask.id, "A fazer")}><RotateCcw className="mr-1 h-4 w-4" /> Reabrir</Button>
-                <Button variant="outline" className="text-red-600" onClick={() => deleteTask(selectedTask.id)}><Trash2 className="mr-1 h-4 w-4" /> Excluir</Button>
-              </div>
+        <div class="card">
+          <div class="calendar-head">
+            <div>
+              <h2 class="card-title">📊 Tela de tarefas</h2>
+              <p class="card-subtitle">Demandas feitas, pendentes, workflow, checklist e responsáveis.</p>
             </div>
-          )}
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <input id="taskSearch" class="input" style="width:220px;" placeholder="Pesquisar" oninput="renderTasks()" />
+              <select id="taskStatusFilter" class="select" style="width:180px;" onchange="renderTasks()">
+                <option>Todas</option>
+                <option>A fazer</option>
+                <option>Atrasada</option>
+                <option>Paralisada</option>
+                <option>Risco de prazo</option>
+                <option>Concluída</option>
+              </select>
+            </div>
+          </div>
+          <div id="tasksList" class="task-list"></div>
         </div>
-      </CardContent>
-    </Card>
-  );
-}
+      </section>
 
-export default function App() {
-  const [logged, setLogged] = useState(false);
-  const [tasks, setTasks] = useState(initialTasks);
-  const [selectedDate, setSelectedDate] = useState(today);
-  const [statusFilter, setStatusFilter] = useState("Todas");
-  const [search, setSearch] = useState("");
-  const [newTitle, setNewTitle] = useState("");
-  const [newResponsible, setNewResponsible] = useState("");
-  const [newWorkflow, setNewWorkflow] = useState("Triagem");
-  const [monthDate, setMonthDate] = useState(new Date());
-  const [users, setUsers] = useState(initialUsers);
-  const [message, setMessage] = useState("");
-  const [demandScreenStatus, setDemandScreenStatus] = useState(null);
+      <section class="grid-half">
+        <div class="card">
+          <h2 class="card-title">🔄 Workflow das tarefas</h2>
+          <div class="workflow-grid" id="workflowGrid"></div>
+        </div>
 
-  const counts = useMemo(() => getStatusCounts(tasks), [tasks]);
+        <div class="card dash-tv">
+          <h2 class="card-title">📺 Dashboard para tela</h2>
+          <p>Visão rápida para monitoramento integrado: volume de demandas, gargalos, responsáveis e risco de prazo.</p>
+          <div class="dash-grid">
+            <div class="dash-cell"><strong id="tvTotal">0</strong><span>Demandas totais</span></div>
+            <div class="dash-cell"><strong id="tvPending">0</strong><span>Pendências</span></div>
+            <div class="dash-cell"><strong id="tvUsers">0</strong><span>Usuários ativos</span></div>
+            <div class="dash-cell"><strong id="tvDone">0</strong><span>Concluídas</span></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </section>
 
-  const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
-      const byDate = task.date === selectedDate;
-      const byStatus = statusFilter === "Todas" || task.status === statusFilter;
-      const bySearch = `${task.title} ${task.type} ${task.responsible} ${task.notes}`.toLowerCase().includes(search.toLowerCase());
-      return byDate && byStatus && bySearch;
-    });
-  }, [tasks, selectedDate, statusFilter, search]);
+  <section id="dayModal" class="modal-bg hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <small>Calendário visual</small>
+          <h2 id="dayModalTitle"></h2>
+        </div>
+        <div class="btn-row" style="margin:0;">
+          <button class="btn btn-primary" onclick="setDayModalMode('create')">➕ Cadastrar demanda</button>
+          <button class="btn btn-light" onclick="setDayModalMode('view')">📄 Ver demandas</button>
+          <button class="btn btn-light" onclick="closeDayModal()">Fechar</button>
+        </div>
+      </div>
 
-  const notify = (text) => {
-    setMessage(text);
-    window.setTimeout(() => setMessage(""), 2500);
-  };
+      <div class="modal-body">
+        <div id="dayCreatePanel">
+          <h3 class="card-title">➕ Nova demanda para este dia</h3>
+          <div class="form">
+            <input id="modalTaskTitle" class="input" placeholder="Título da demanda" />
+            <input id="modalTaskResponsible" class="input" placeholder="Responsável" />
+            <select id="modalTaskType" class="select">
+              <option>Inteligência</option>
+              <option>Dossiê</option>
+              <option>Operacional</option>
+              <option>Relatório</option>
+              <option>Gestão</option>
+            </select>
+            <select id="modalTaskPriority" class="select">
+              <option>Baixa</option>
+              <option selected>Média</option>
+              <option>Alta</option>
+              <option>Crítica</option>
+            </select>
+            <textarea id="modalTaskNotes" class="textarea" placeholder="Informações da demanda, observações, providências ou contexto operacional"></textarea>
+            <button class="btn btn-primary" onclick="addModalTask()">➕ Salvar demanda</button>
+          </div>
+        </div>
 
-  const addTask = () => {
-    if (!newTitle.trim()) {
-      notify("Informe o nome da tarefa antes de cadastrar.");
-      return;
-    }
+        <div id="dayViewPanel" class="hidden">
+          <div class="calendar-head">
+            <h3 class="card-title">📄 Demandas cadastradas neste dia</h3>
+            <span id="dayModalCount" class="tag dark"></span>
+          </div>
+          <div id="dayModalList" class="task-list"></div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-    setTasks((currentTasks) => [
+  <script>
+    const today = new Date().toISOString().slice(0, 10);
+    let selectedDate = today;
+    let currentMonth = new Date();
+    let selectedDemandStatus = null;
+
+    let tasks = JSON.parse(localStorage.getItem("si6_tasks") || "null") || [
       {
-        id: Date.now(),
-        title: newTitle,
+        id: 1,
+        title: "Analisar denúncias recebidas",
         type: "Inteligência",
         status: "A fazer",
+        priority: "Alta",
+        responsible: "Sd Lima",
+        manager: "Sgt Operacional",
+        date: today,
+        officialDeadline: "2026-06-05",
+        internalDeadline: "2026-06-03",
+        workflow: "Triagem",
+        checklist: ["Conferir origem", "Validar vínculo", "Registrar providência"],
+        done: [true, false, false],
+        notes: "Demanda recebida para levantamento preliminar e organização das informações."
+      },
+      {
+        id: 2,
+        title: "Consolidar alvos e vínculos",
+        type: "Dossiê",
+        status: "Atrasada",
+        priority: "Crítica",
+        responsible: "Equipe Intel",
+        manager: "Gestor",
+        date: today,
+        officialDeadline: "2026-05-31",
+        internalDeadline: "2026-05-29",
+        workflow: "Produção",
+        checklist: ["Separar imagens", "Criar linha do tempo", "Gerar relatório"],
+        done: [true, true, false],
+        notes: "Pendência de fechamento de relatório operacional."
+      },
+      {
+        id: 3,
+        title: "Revisar checklist de campana",
+        type: "Operacional",
+        status: "Paralisada",
         priority: "Média",
-        responsible: newResponsible || "Sem responsável",
+        responsible: "Colaborador 01",
+        manager: "Sd Lima",
+        date: today,
+        officialDeadline: "2026-06-08",
+        internalDeadline: "2026-06-06",
+        workflow: "Validação",
+        checklist: ["Pontos de observação", "Canais de comunicação", "Plano de acionamento"],
+        done: [true, false, false],
+        notes: "Aguardando conferência do gestor."
+      },
+      {
+        id: 4,
+        title: "Atualizar painel de demandas",
+        type: "Gestão",
+        status: "Concluída",
+        priority: "Baixa",
+        responsible: "Analista",
+        manager: "Gestor",
+        date: today,
+        officialDeadline: "2026-06-01",
+        internalDeadline: "2026-06-01",
+        workflow: "Conclusão",
+        checklist: ["Atualizar números", "Revisar pendências", "Publicar dashboard"],
+        done: [true, true, true],
+        notes: "Painel pronto para exibição em tela."
+      },
+      {
+        id: 5,
+        title: "Conferir prazo de relatório sigiloso",
+        type: "Relatório",
+        status: "Risco de prazo",
+        priority: "Alta",
+        responsible: "Analista",
+        manager: "Gestor",
+        date: today,
+        officialDeadline: "2026-06-02",
+        internalDeadline: "2026-06-01",
+        workflow: "Validação",
+        checklist: ["Revisar minuta", "Conferir anexos", "Encaminhar gestor"],
+        done: [true, false, false],
+        notes: "Demanda com prazo crítico para fechamento e encaminhamento."
+      }
+    ];
+
+    let users = JSON.parse(localStorage.getItem("si6_users") || "null") || [
+      {
+        id: 1,
+        name: "David Lima",
+        warName: "Sd Lima",
+        register: "PM-0001",
+        unit: "1º BPM / GT6",
+        role: "Gestor",
+        email: "david@corujaintel.local",
+        phone: "(31) 99999-0000",
+        login: "sd.lima",
+        status: "Ativo"
+      },
+      {
+        id: 2,
+        name: "Equipe Intel",
+        warName: "Equipe Intel",
+        register: "PM-0002",
+        unit: "Núcleo de Inteligência",
+        role: "Analista",
+        email: "intel@corujaintel.local",
+        phone: "(31) 98888-0000",
+        login: "intel",
+        status: "Ativo"
+      }
+    ];
+
+    const workflows = ["Triagem", "Produção", "Validação", "Encaminhamento", "Conclusão"];
+    const statuses = ["A fazer", "Atrasada", "Paralisada", "Risco de prazo", "Concluída"];
+
+    function save() {
+      localStorage.setItem("si6_tasks", JSON.stringify(tasks));
+      localStorage.setItem("si6_users", JSON.stringify(users));
+    }
+
+    function toast(message) {
+      const el = document.getElementById("toast");
+      el.textContent = message;
+      el.classList.add("show");
+      setTimeout(() => el.classList.remove("show"), 2500);
+    }
+
+    function login() {
+      const user = document.getElementById("loginUser").value.trim();
+      const pass = document.getElementById("loginPass").value.trim();
+      if (!user || !pass) {
+        alert("Informe usuário e senha para acessar.");
+        return;
+      }
+      document.getElementById("loginPage").classList.add("hidden");
+      document.getElementById("appPage").classList.remove("hidden");
+      renderAll();
+    }
+
+    function logout() {
+      document.getElementById("appPage").classList.add("hidden");
+      document.getElementById("loginPage").classList.remove("hidden");
+      selectedDemandStatus = null;
+      document.getElementById("demandCenter").classList.add("hidden");
+      document.getElementById("calendarSection").classList.remove("hidden");
+    }
+
+    function forgotPassword() {
+      alert("Solicitação registrada. Procure o administrador do SI 6ª CIA para redefinir a senha.");
+    }
+
+    function formatDate(date) {
+      return date.split("-").reverse().join("/");
+    }
+
+    function statusTone(status) {
+      if (status === "Concluída") return "low";
+      if (status === "Atrasada") return "high";
+      if (status === "Risco de prazo") return "medium";
+      return "default";
+    }
+
+    function priorityTone(priority) {
+      if (priority === "Crítica" || priority === "Alta") return "high";
+      if (priority === "Média") return "medium";
+      return "low";
+    }
+
+    function tag(text, tone = "default") {
+      return `<span class="tag ${tone}">${text}</span>`;
+    }
+
+    function getCounts() {
+      return statuses.reduce((acc, status) => {
+        acc[status] = tasks.filter(t => t.status === status).length;
+        return acc;
+      }, {});
+    }
+
+    function renderAll() {
+      renderCounts();
+      renderCalendar();
+      renderDaySummary();
+      renderUsers();
+      renderTasks();
+      renderWorkflow();
+      renderDashboardTV();
+      if (selectedDemandStatus) renderDemandCenter(selectedDemandStatus);
+      document.getElementById("quickDate").value = selectedDate;
+    }
+
+    function renderCounts() {
+      const counts = getCounts();
+      document.getElementById("countTodo").textContent = counts["A fazer"] || 0;
+      document.getElementById("countLate").textContent = counts["Atrasada"] || 0;
+      document.getElementById("countPaused").textContent = counts["Paralisada"] || 0;
+      document.getElementById("countRisk").textContent = counts["Risco de prazo"] || 0;
+      document.getElementById("countDone").textContent = counts["Concluída"] || 0;
+      document.getElementById("activeUsersPill").textContent = `👥 ${users.filter(u => u.status === "Ativo").length} usuários ativos`;
+    }
+
+    function changeMonth(amount) {
+      currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + amount, 1);
+      renderCalendar();
+    }
+
+    function renderCalendar() {
+      const grid = document.getElementById("calendarGrid");
+      const label = document.getElementById("monthLabel");
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const days = [];
+
+      for (let i = 0; i < firstDay.getDay(); i++) days.push(null);
+      for (let d = 1; d <= lastDay.getDate(); d++) {
+        const date = new Date(year, month, d).toISOString().slice(0, 10);
+        days.push(date);
+      }
+      while (days.length % 7 !== 0) days.push(null);
+
+      label.textContent = currentMonth.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+      document.getElementById("selectedDateText").textContent = formatDate(selectedDate);
+
+      grid.innerHTML = days.map(date => {
+        if (!date) return `<button class="day empty"></button>`;
+
+        const dayTasks = tasks.filter(t => t.date === date);
+        const done = dayTasks.filter(t => t.status === "Concluída").length;
+        const pending = dayTasks.length - done;
+        const dayNumber = Number(date.slice(8, 10));
+        const mini = dayTasks.slice(0, 3).map(t => {
+          const cls = t.status === "Concluída" ? "done" : t.status === "Atrasada" ? "late" : "";
+          return `<div class="mini-task ${cls}">${escapeHtml(t.title)}</div>`;
+        }).join("");
+
+        return `
+          <button class="day ${date === selectedDate ? "selected" : ""}" onclick="selectDay('${date}', true)">
+            <div class="day-top">
+              <span class="day-number">${dayNumber}</span>
+              ${dayTasks.length ? `<span class="day-count">${dayTasks.length}</span>` : ""}
+            </div>
+            ${mini}
+            ${dayTasks.length ? `
+              <div class="day-footer">
+                <span class="tag low">${done} feitas</span>
+                <span class="tag medium">${pending} pend.</span>
+              </div>
+            ` : ""}
+          </button>
+        `;
+      }).join("");
+    }
+
+    function selectDay(date, openModal = false) {
+      selectedDate = date;
+      document.getElementById("quickDate").value = date;
+      renderCalendar();
+      renderDaySummary();
+      if (openModal) openDayModal("view");
+    }
+
+    function renderDaySummary() {
+      const box = document.getElementById("daySummary");
+      const list = tasks.filter(t => t.date === selectedDate);
+
+      if (!list.length) {
+        box.innerHTML = `<p style="color:#64748b;font-size:14px;">Nenhuma demanda cadastrada neste dia.</p>`;
+        return;
+      }
+
+      box.innerHTML = list.map(t => `
+        <div class="task-card" style="padding:12px;">
+          <div class="task-head">
+            <strong>${escapeHtml(t.title)}</strong>
+            ${tag(t.status, statusTone(t.status))}
+          </div>
+          <p class="task-notes">${escapeHtml(t.responsible)} • ${escapeHtml(t.workflow)}</p>
+        </div>
+      `).join("");
+    }
+
+    function openDayModal(mode) {
+      document.getElementById("dayModal").classList.remove("hidden");
+      document.getElementById("dayModalTitle").textContent = formatDate(selectedDate);
+      setDayModalMode(mode);
+    }
+
+    function closeDayModal() {
+      document.getElementById("dayModal").classList.add("hidden");
+    }
+
+    function setDayModalMode(mode) {
+      const createPanel = document.getElementById("dayCreatePanel");
+      const viewPanel = document.getElementById("dayViewPanel");
+
+      if (mode === "create") {
+        createPanel.classList.remove("hidden");
+        viewPanel.classList.add("hidden");
+      } else {
+        createPanel.classList.add("hidden");
+        viewPanel.classList.remove("hidden");
+        renderDayModalList();
+      }
+    }
+
+    function renderDayModalList() {
+      const list = tasks.filter(t => t.date === selectedDate);
+      document.getElementById("dayModalCount").textContent = `${list.length} demandas`;
+      const box = document.getElementById("dayModalList");
+
+      if (!list.length) {
+        box.innerHTML = `<p class="task-card" style="color:#64748b;">Nenhuma demanda cadastrada neste dia. Clique em “Cadastrar demanda”.</p>`;
+        return;
+      }
+
+      box.innerHTML = list.map(t => `
+        <div class="task-card">
+          <div class="task-head">
+            <div>
+              <div class="task-title">${escapeHtml(t.title)}</div>
+              <div class="btn-row">
+                ${tag(t.status, statusTone(t.status))}
+                ${tag(t.priority, priorityTone(t.priority))}
+              </div>
+            </div>
+            <div class="btn-row" style="margin:0;">
+              <button class="btn btn-light" onclick="updateTaskStatus(${t.id}, 'Concluída')">✅ Feita</button>
+              <button class="btn btn-light" onclick="updateTaskStatus(${t.id}, 'A fazer')">↩️ Reabrir</button>
+              <button class="btn btn-danger" onclick="deleteTask(${t.id})">🗑️ Excluir</button>
+            </div>
+          </div>
+          <p class="task-notes">${escapeHtml(t.notes)}</p>
+          <p class="task-notes"><b>Responsável:</b> ${escapeHtml(t.responsible)} • <b>Workflow:</b> ${escapeHtml(t.workflow)}</p>
+        </div>
+      `).join("");
+    }
+
+    function addModalTask() {
+      const title = document.getElementById("modalTaskTitle").value.trim();
+      const responsible = document.getElementById("modalTaskResponsible").value.trim() || "Sem responsável";
+      const type = document.getElementById("modalTaskType").value;
+      const priority = document.getElementById("modalTaskPriority").value;
+      const notes = document.getElementById("modalTaskNotes").value.trim() || "Demanda criada diretamente pelo calendário visual.";
+
+      if (!title) {
+        toast("Informe o título da demanda.");
+        return;
+      }
+
+      tasks.unshift({
+        id: Date.now(),
+        title,
+        type,
+        status: "A fazer",
+        priority,
+        responsible,
         manager: "Gestor",
         date: selectedDate,
         officialDeadline: selectedDate,
         internalDeadline: selectedDate,
-        workflow: newWorkflow,
+        workflow: "Triagem",
         checklist: ["Triar demanda", "Executar atividade", "Registrar conclusão"],
         done: [false, false, false],
-        notes: "Nova demanda cadastrada no painel.",
-      },
-      ...currentTasks,
-    ]);
-    setNewTitle("");
-    setNewResponsible("");
-    notify("Tarefa cadastrada com sucesso.");
-  };
+        notes
+      });
 
-  const addQuickTask = ({ title, responsible, date }) => {
-    setTasks((currentTasks) => [
-      {
+      document.getElementById("modalTaskTitle").value = "";
+      document.getElementById("modalTaskResponsible").value = "";
+      document.getElementById("modalTaskNotes").value = "";
+
+      save();
+      renderAll();
+      setDayModalMode("view");
+      toast("Demanda cadastrada no calendário.");
+    }
+
+    function addQuickTask() {
+      const title = document.getElementById("quickTitle").value.trim();
+      const date = document.getElementById("quickDate").value || selectedDate;
+      const responsible = document.getElementById("quickResponsible").value.trim() || "Sem responsável";
+      const workflow = document.getElementById("quickWorkflow").value;
+
+      if (!title) {
+        toast("Informe o nome da tarefa.");
+        return;
+      }
+
+      tasks.unshift({
         id: Date.now(),
         title,
         type: "Inteligência",
@@ -814,245 +1527,371 @@ export default function App() {
         date,
         officialDeadline: date,
         internalDeadline: date,
-        workflow: "Triagem",
+        workflow,
         checklist: ["Triar demanda", "Executar atividade", "Registrar conclusão"],
         done: [false, false, false],
-        notes: "Atividade criada diretamente pelo calendário visual.",
-      },
-      ...currentTasks,
-    ]);
-    notify("Atividade adicionada ao calendário.");
-  };
+        notes: "Nova demanda cadastrada no painel."
+      });
 
-  const addUser = (user) => {
-    setUsers((currentUsers) => [{ id: Date.now(), ...user }, ...currentUsers]);
-    notify("Usuário cadastrado com sucesso.");
-  };
+      selectedDate = date;
+      document.getElementById("quickTitle").value = "";
+      document.getElementById("quickResponsible").value = "";
 
-  const deleteUser = (id) => {
-    setUsers((currentUsers) => currentUsers.filter((user) => user.id !== id));
-    notify("Usuário removido.");
-  };
+      save();
+      renderAll();
+      toast("Tarefa cadastrada com sucesso.");
+    }
 
-  const toggleUserStatus = (id) => {
-    setUsers((currentUsers) => currentUsers.map((user) => (user.id === id ? { ...user, status: user.status === "Ativo" ? "Inativo" : "Ativo" } : user)));
-    notify("Situação do usuário alterada.");
-  };
+    function renderTasks() {
+      const box = document.getElementById("tasksList");
+      const search = document.getElementById("taskSearch")?.value.toLowerCase() || "";
+      const status = document.getElementById("taskStatusFilter")?.value || "Todas";
 
-  const deleteTask = (id) => {
-    setTasks((currentTasks) => currentTasks.filter((task) => task.id !== id));
-    notify("Tarefa excluída.");
-  };
+      const list = tasks.filter(t => {
+        const byDate = t.date === selectedDate;
+        const byStatus = status === "Todas" || t.status === status;
+        const bySearch = `${t.title} ${t.type} ${t.responsible} ${t.notes}`.toLowerCase().includes(search);
+        return byDate && byStatus && bySearch;
+      });
 
-  const updateTaskStatus = (id, status) => {
-    setTasks((currentTasks) => currentTasks.map((task) => (task.id === id ? { ...task, status, done: status === "Concluída" ? task.checklist.map(() => true) : task.done } : task)));
-    notify("Status da tarefa atualizado.");
-  };
+      if (!list.length) {
+        box.innerHTML = `<div class="task-card" style="color:#64748b;">Nenhuma tarefa encontrada para o filtro atual.</div>`;
+        return;
+      }
 
-  const toggleChecklistItem = (taskId, itemIndex) => {
-    setTasks((currentTasks) => currentTasks.map((task) => {
-      if (task.id !== taskId) return task;
-      const nextDone = task.done.map((done, index) => (index === itemIndex ? !done : done));
-      const allDone = nextDone.every(Boolean);
-      return { ...task, done: nextDone, status: allDone ? "Concluída" : task.status === "Concluída" ? "A fazer" : task.status };
-    }));
-  };
+      box.innerHTML = list.map(t => {
+        const completed = t.done.filter(Boolean).length;
+        const percent = Math.round((completed / t.checklist.length) * 100);
+        return `
+          <div class="task-card">
+            <div class="task-head">
+              <div>
+                <div class="task-title">${escapeHtml(t.title)}</div>
+                <div class="btn-row">
+                  ${tag(t.priority, priorityTone(t.priority))}
+                  ${tag(t.status, statusTone(t.status))}
+                </div>
+                <p class="task-notes">${escapeHtml(t.notes)}</p>
+              </div>
+              <div style="text-align:right;color:#64748b;font-size:13px;">
+                <p>👥 ${escapeHtml(t.responsible)}</p>
+                <p>Gestor: ${escapeHtml(t.manager)}</p>
+              </div>
+            </div>
 
-  const openDemandScreen = (status) => {
-    setDemandScreenStatus(status);
-    setStatusFilter(status);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+            <div class="task-meta">
+              <div class="meta"><b>Workflow:</b> ${escapeHtml(t.workflow)}</div>
+              <div class="meta"><b>Prazo interno:</b> ${escapeHtml(t.internalDeadline)}</div>
+              <div class="meta"><b>Prazo oficial:</b> ${escapeHtml(t.officialDeadline)}</div>
+            </div>
 
-  const duplicateTask = (id) => {
-    const task = tasks.find((item) => item.id === id);
-    if (!task) return;
-    setTasks((currentTasks) => [{ ...task, id: Date.now(), title: `${task.title} - cópia`, status: "A fazer" }, ...currentTasks]);
-    notify("Demanda duplicada.");
-  };
+            <div class="checklist">
+              <b>✅ Checklist — ${percent}%</b>
+              <div class="progress"><div class="progress-bar" style="width:${percent}%"></div></div>
+              <div class="check-grid">
+                ${t.checklist.map((item, index) => `
+                  <label class="check-item">
+                    <input type="checkbox" ${t.done[index] ? "checked" : ""} onchange="toggleChecklist(${t.id}, ${index})" />
+                    ${escapeHtml(item)}
+                  </label>
+                `).join("")}
+              </div>
+            </div>
 
-  if (!logged) return <Login onLogin={() => setLogged(true)} />;
+            <div class="btn-row">
+              <button class="btn btn-light" onclick="updateTaskStatus(${t.id}, 'Concluída')">✅ Marcar feita</button>
+              <button class="btn btn-light" onclick="updateTaskStatus(${t.id}, 'A fazer')">↩️ Reabrir</button>
+              <button class="btn btn-warning" onclick="updateTaskStatus(${t.id}, 'Paralisada')">⏸️ Paralisar</button>
+              <button class="btn btn-danger" onclick="deleteTask(${t.id})">🗑️ Excluir</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
 
-  return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
-      <header className="bg-emerald-950 px-6 py-5 shadow-xl">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <OwlLogo />
-          <div className="flex flex-wrap items-center gap-3 text-sm text-emerald-100">
-            <Badge tone="dark"><UserRound className="mr-1 inline h-3 w-3" /> Gestor operacional</Badge>
-            <Badge tone="dark"><Users className="mr-1 inline h-3 w-3" /> {users.filter((user) => user.status === "Ativo").length} usuários ativos</Badge>
-            <Button variant="secondary" className="bg-white/10 text-white hover:bg-white/20" onClick={() => { setLogged(false); setStatusFilter("Todas"); setDemandScreenStatus(null); }}>Sair</Button>
+    function updateTaskStatus(id, status) {
+      tasks = tasks.map(t => {
+        if (t.id !== id) return t;
+        return {
+          ...t,
+          status,
+          done: status === "Concluída" ? t.checklist.map(() => true) : t.done
+        };
+      });
+
+      save();
+      renderAll();
+      if (!document.getElementById("dayModal").classList.contains("hidden")) renderDayModalList();
+      toast("Status da tarefa atualizado.");
+    }
+
+    function deleteTask(id) {
+      tasks = tasks.filter(t => t.id !== id);
+      save();
+      renderAll();
+      if (!document.getElementById("dayModal").classList.contains("hidden")) renderDayModalList();
+      toast("Tarefa excluída.");
+    }
+
+    function toggleChecklist(taskId, index) {
+      tasks = tasks.map(t => {
+        if (t.id !== taskId) return t;
+        const nextDone = [...t.done];
+        nextDone[index] = !nextDone[index];
+        return {
+          ...t,
+          done: nextDone,
+          status: nextDone.every(Boolean) ? "Concluída" : t.status === "Concluída" ? "A fazer" : t.status
+        };
+      });
+      save();
+      renderAll();
+    }
+
+    function duplicateTask(id) {
+      const task = tasks.find(t => t.id === id);
+      if (!task) return;
+
+      tasks.unshift({
+        ...task,
+        id: Date.now(),
+        title: `${task.title} - cópia`,
+        status: "A fazer",
+        done: task.checklist.map(() => false)
+      });
+
+      save();
+      renderAll();
+      toast("Demanda duplicada.");
+    }
+
+    function openDemandCenter(status) {
+      selectedDemandStatus = status;
+      document.getElementById("demandCenter").classList.remove("hidden");
+      document.getElementById("calendarSection").classList.add("hidden");
+      renderDemandCenter(status);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function closeDemandCenter() {
+      selectedDemandStatus = null;
+      document.getElementById("demandCenter").classList.add("hidden");
+      document.getElementById("calendarSection").classList.remove("hidden");
+    }
+
+    function renderDemandCenter(status) {
+      const box = document.getElementById("demandCenter");
+      const list = tasks.filter(t => t.status === status);
+      const selected = list[0];
+
+      box.innerHTML = `
+        <div class="calendar-head">
+          <div>
+            <h2 class="card-title">📋 DEMANDAS ${status.toUpperCase()}</h2>
+            <p class="card-subtitle">Tela aberta pelo card do dashboard, com demandas filtradas por status.</p>
+          </div>
+          <button class="btn btn-light" onclick="closeDemandCenter()">⬅ Voltar ao painel</button>
+        </div>
+
+        <div class="demand-layout">
+          <div class="demand-list">
+            ${list.length ? list.map((t, i) => `
+              <button class="demand-item ${i === 0 ? "active" : ""}" onclick="selectDemandInCenter(${t.id})">
+                <div class="task-head">
+                  <div>
+                    <strong>${escapeHtml(t.title)}</strong>
+                    <p class="task-notes">Responsável: ${escapeHtml(t.responsible)}</p>
+                  </div>
+                  ${tag(t.status, statusTone(t.status))}
+                </div>
+                <div class="task-meta" style="grid-template-columns:1fr 1fr;">
+                  <div class="meta"><b>Interno:</b> ${escapeHtml(t.internalDeadline)}</div>
+                  <div class="meta"><b>Oficial:</b> ${escapeHtml(t.officialDeadline)}</div>
+                </div>
+              </button>
+            `).join("") : `<div class="task-card" style="color:#64748b;">Nenhuma demanda encontrada neste status.</div>`}
+          </div>
+          <div id="demandDetail">${selected ? renderDemandDetail(selected) : ""}</div>
+        </div>
+      `;
+    }
+
+    function selectDemandInCenter(id) {
+      const task = tasks.find(t => t.id === id);
+      if (!task) return;
+      document.querySelectorAll(".demand-item").forEach(el => el.classList.remove("active"));
+      event.currentTarget.classList.add("active");
+      document.getElementById("demandDetail").innerHTML = renderDemandDetail(task);
+    }
+
+    function renderDemandDetail(t) {
+      const completed = t.done.filter(Boolean).length;
+      const percent = Math.round((completed / t.checklist.length) * 100);
+
+      return `
+        <div class="task-card">
+          <small style="color:#ea580c;font-weight:900;letter-spacing:.18em;">DEMANDA #${t.id}</small>
+          <h2 style="margin-top:8px;">${escapeHtml(t.title)}</h2>
+          <div class="btn-row">
+            ${tag(t.status, statusTone(t.status))}
+            ${tag(t.priority, priorityTone(t.priority))}
+          </div>
+          <p class="task-notes">${escapeHtml(t.notes)}</p>
+
+          <div class="task-meta" style="grid-template-columns:repeat(2,1fr);">
+            <div class="meta"><b>Tipo:</b> ${escapeHtml(t.type)}</div>
+            <div class="meta"><b>Workflow:</b> ${escapeHtml(t.workflow)}</div>
+            <div class="meta"><b>Responsável:</b> ${escapeHtml(t.responsible)}</div>
+            <div class="meta"><b>Gestor:</b> ${escapeHtml(t.manager)}</div>
+            <div class="meta"><b>Prazo interno:</b> ${escapeHtml(t.internalDeadline)}</div>
+            <div class="meta"><b>Prazo oficial:</b> ${escapeHtml(t.officialDeadline)}</div>
+          </div>
+
+          <div class="checklist">
+            <b>✅ Checklist — ${percent}%</b>
+            <div class="progress"><div class="progress-bar" style="width:${percent}%"></div></div>
+            <div class="check-grid">
+              ${t.checklist.map((item, index) => `
+                <label class="check-item">
+                  <input type="checkbox" ${t.done[index] ? "checked" : ""} onchange="toggleChecklist(${t.id}, ${index})" />
+                  ${escapeHtml(item)}
+                </label>
+              `).join("")}
+            </div>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn btn-light" onclick="alert('Visualizando demanda: ${escapeAttr(t.title)}')">👁️ Visualizar</button>
+            <button class="btn btn-light" onclick="alert('Edição completa será ligada ao banco de dados na versão final.')">✏️ Editar</button>
+            <button class="btn btn-light" onclick="duplicateTask(${t.id})">📋 Duplicar</button>
+            <button class="btn btn-light" onclick="updateTaskStatus(${t.id}, 'Concluída')">✅ Encerrar</button>
+            <button class="btn btn-light" onclick="updateTaskStatus(${t.id}, 'A fazer')">↩️ Reabrir</button>
+            <button class="btn btn-danger" onclick="deleteTask(${t.id})">🗑️ Excluir</button>
           </div>
         </div>
-      </header>
+      `;
+    }
 
-      <main className="mx-auto max-w-7xl space-y-6 p-6">
-        {message && (
-          <div className="fixed right-6 top-6 z-50 flex items-center gap-2 rounded-2xl bg-emerald-950 px-5 py-3 text-sm font-bold text-white shadow-2xl">
-            <CheckCircle2 className="h-4 w-4 text-orange-300" /> {message}
+    function addUser() {
+      const name = document.getElementById("userName").value.trim();
+      const login = document.getElementById("userLogin").value.trim();
+
+      if (!name || !login) {
+        toast("Informe nome completo e login.");
+        return;
+      }
+
+      users.unshift({
+        id: Date.now(),
+        name,
+        warName: document.getElementById("userWarName").value.trim(),
+        register: document.getElementById("userRegister").value.trim(),
+        unit: document.getElementById("userUnit").value.trim(),
+        role: document.getElementById("userRole").value,
+        email: document.getElementById("userEmail").value.trim(),
+        phone: document.getElementById("userPhone").value.trim(),
+        login,
+        status: document.getElementById("userStatus").value
+      });
+
+      ["userName", "userWarName", "userRegister", "userUnit", "userEmail", "userPhone", "userLogin", "userPassword"].forEach(id => {
+        document.getElementById(id).value = "";
+      });
+
+      save();
+      renderAll();
+      toast("Usuário cadastrado com sucesso.");
+    }
+
+    function renderUsers() {
+      const box = document.getElementById("usersList");
+
+      box.innerHTML = users.map(u => `
+        <div class="user-card">
+          <div class="task-head">
+            <div>
+              <div class="task-title">${escapeHtml(u.warName || u.name)}</div>
+              <div class="btn-row">
+                ${tag(u.status, u.status === "Ativo" ? "low" : "default")}
+                ${tag(u.role, u.role === "Administrador" ? "high" : u.role === "Gestor" ? "medium" : "default")}
+              </div>
+              <p class="task-notes">${escapeHtml(u.name)} • Matrícula: ${escapeHtml(u.register || "não informada")}</p>
+            </div>
+            <div class="btn-row" style="margin:0;">
+              <button class="btn btn-light" onclick="toggleUserStatus(${u.id})">${u.status === "Ativo" ? "Inativar" : "Ativar"}</button>
+              <button class="btn btn-danger" onclick="deleteUser(${u.id})">🗑️ Excluir</button>
+            </div>
           </div>
-        )}
+          <div class="user-info-grid">
+            <div class="meta">🏢 ${escapeHtml(u.unit || "Unidade não informada")}</div>
+            <div class="meta">✉️ ${escapeHtml(u.email || "E-mail não informado")}</div>
+            <div class="meta">☎️ ${escapeHtml(u.phone || "Telefone não informado")}</div>
+          </div>
+        </div>
+      `).join("");
+    }
 
-        <section className="grid gap-4 md:grid-cols-5">
-          <button type="button" onClick={() => openDemandScreen("A fazer")}><StatCard label="A fazer" value={counts["A fazer"] || 0} icon={ListChecks} className="bg-blue-500" /></button>
-          <button type="button" onClick={() => openDemandScreen("Atrasada")}><StatCard label="Atrasadas" value={counts["Atrasada"] || 0} icon={AlertTriangle} className="bg-red-500" /></button>
-          <button type="button" onClick={() => openDemandScreen("Paralisada")}><StatCard label="Paralisadas" value={counts["Paralisada"] || 0} icon={PauseCircle} className="bg-zinc-600" /></button>
-          <button type="button" onClick={() => openDemandScreen("Risco de prazo")}><StatCard label="Risco de prazo" value={counts["Risco de prazo"] || 0} icon={Clock} className="bg-yellow-500" /></button>
-          <button type="button" onClick={() => openDemandScreen("Concluída")}><StatCard label="Concluídas" value={counts["Concluída"] || 0} icon={CheckCircle2} className="bg-green-600" /></button>
-        </section>
+    function toggleUserStatus(id) {
+      users = users.map(u => u.id === id ? { ...u, status: u.status === "Ativo" ? "Inativo" : "Ativo" } : u);
+      save();
+      renderAll();
+      toast("Situação do usuário alterada.");
+    }
 
-        {demandScreenStatus ? (
-          <DemandCenter
-            status={demandScreenStatus}
-            tasks={tasks.filter((task) => task.status === demandScreenStatus)}
-            onBack={() => setDemandScreenStatus(null)}
-            updateTaskStatus={updateTaskStatus}
-            deleteTask={deleteTask}
-            duplicateTask={duplicateTask}
-            toggleChecklistItem={toggleChecklistItem}
-          />
-        ) : (
-          <CalendarBoard
-            tasks={tasks}
-            selectedDate={selectedDate}
-            setSelectedDate={setSelectedDate}
-            monthDate={monthDate}
-            setMonthDate={setMonthDate}
-            addQuickTask={addQuickTask}
-            updateTaskStatus={updateTaskStatus}
-            deleteTask={deleteTask}
-          />
-        )}
+    function deleteUser(id) {
+      users = users.filter(u => u.id !== id);
+      save();
+      renderAll();
+      toast("Usuário removido.");
+    }
 
-        <UserManagement users={users} addUser={addUser} deleteUser={deleteUser} toggleUserStatus={toggleUserStatus} />
+    function renderWorkflow() {
+      const box = document.getElementById("workflowGrid");
+      box.innerHTML = workflows.map((w, i) => `
+        <div class="workflow-step">
+          <span>${i + 1}</span>
+          ${w}
+        </div>
+      `).join("");
+    }
 
-        <section className="grid gap-6 lg:grid-cols-[360px_1fr]">
-          <Card className="rounded-3xl border-0 shadow-sm">
-            <CardContent className="space-y-5 p-6">
-              <div className="flex items-center gap-2">
-                <CalendarDays className="h-5 w-5 text-orange-600" />
-                <h2 className="text-xl font-black">Calendário e nova demanda</h2>
-              </div>
-              <Input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
-              <Input placeholder="Tarefa do dia / demanda" value={newTitle} onChange={(event) => setNewTitle(event.target.value)} />
-              <Input placeholder="Responsável" value={newResponsible} onChange={(event) => setNewResponsible(event.target.value)} />
-              <select value={newWorkflow} onChange={(event) => setNewWorkflow(event.target.value)} className="h-11 w-full rounded-md border bg-white px-3 text-sm">
-                {workflows.map((item) => <option key={item}>{item}</option>)}
-              </select>
-              <Button onClick={addTask} className="w-full bg-orange-600 hover:bg-orange-700"><Plus className="mr-2 h-4 w-4" /> Cadastrar tarefa</Button>
+    function renderDashboardTV() {
+      document.getElementById("tvTotal").textContent = tasks.length;
+      document.getElementById("tvPending").textContent = tasks.filter(t => t.status !== "Concluída").length;
+      document.getElementById("tvUsers").textContent = users.filter(u => u.status === "Ativo").length;
+      document.getElementById("tvDone").textContent = tasks.filter(t => t.status === "Concluída").length;
+    }
 
-              <div className="rounded-2xl bg-emerald-950 p-4 text-white">
-                <p className="flex items-center gap-2 text-sm font-bold"><Repeat className="h-4 w-4" /> Tarefas recorrentes</p>
-                <p className="mt-2 text-xs text-emerald-100">Modelo para criar rotinas diárias, semanais ou mensais, com responsáveis e prazos internos.</p>
-              </div>
-            </CardContent>
-          </Card>
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
 
-          <Card className="rounded-3xl border-0 shadow-sm">
-            <CardContent className="p-6">
-              <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h2 className="flex items-center gap-2 text-xl font-black"><LayoutDashboard className="h-5 w-5 text-orange-600" /> Tela de tarefas</h2>
-                  <p className="text-sm text-slate-500">Demandas feitas, pendentes, workflow, checklist e responsáveis.</p>
-                </div>
-                <div className="flex gap-2">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                    <Input className="pl-9" placeholder="Pesquisar" value={search} onChange={(event) => setSearch(event.target.value)} />
-                  </div>
-                  <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm">
-                    <option>Todas</option>
-                    {statuses.map((status) => <option key={status}>{status}</option>)}
-                  </select>
-                </div>
-              </div>
+    function escapeAttr(value) {
+      return String(value ?? "")
+        .replaceAll("\\", "\\\\")
+        .replaceAll("'", "\\'")
+        .replaceAll('"', "&quot;");
+    }
 
-              <div className="space-y-4">
-                {filteredTasks.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">Nenhuma tarefa encontrada para o filtro atual.</div>}
-                {filteredTasks.map((task) => {
-                  const completed = task.done.filter(Boolean).length;
-                  const percent = Math.round((completed / task.checklist.length) * 100);
+    function runTests() {
+      console.assert(Array.isArray(tasks), "Teste: tasks deve ser array.");
+      console.assert(Array.isArray(users), "Teste: users deve ser array.");
+      const counts = getCounts();
+      console.assert(typeof counts["A fazer"] === "number", "Teste: contador A fazer deve ser número.");
+      console.assert(statuses.includes("Concluída"), "Teste: status Concluída deve existir.");
+      console.log("SI 6ª CIA: testes internos executados.");
+    }
 
-                  return (
-                    <motion.div key={task.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border bg-white p-4 shadow-sm">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-lg font-black">{task.title}</h3>
-                            <Badge tone={task.priority === "Crítica" || task.priority === "Alta" ? "high" : task.priority === "Média" ? "medium" : "low"}>{task.priority}</Badge>
-                            <Badge>{task.status}</Badge>
-                          </div>
-                          <p className="mt-2 text-sm text-slate-600">{task.notes}</p>
-                        </div>
-                        <div className="text-right text-sm text-slate-500">
-                          <p><Users className="mr-1 inline h-4 w-4" /> {task.responsible}</p>
-                          <p>Gestor: {task.manager}</p>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 grid gap-3 md:grid-cols-3">
-                        <div className="rounded-xl bg-slate-50 p-3 text-sm"><b>Workflow:</b> {task.workflow}</div>
-                        <div className="rounded-xl bg-slate-50 p-3 text-sm"><b>Prazo interno:</b> {task.internalDeadline}</div>
-                        <div className="rounded-xl bg-slate-50 p-3 text-sm"><b>Prazo oficial:</b> {task.officialDeadline}</div>
-                      </div>
-
-                      <div className="mt-4">
-                        <div className="mb-2 flex items-center justify-between text-sm">
-                          <span className="font-bold"><ClipboardCheck className="mr-1 inline h-4 w-4" /> Checklist</span>
-                          <span>{percent}%</span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-orange-600" style={{ width: `${percent}%` }} /></div>
-                        <div className="mt-3 grid gap-2 md:grid-cols-3">
-                          {task.checklist.map((item, index) => (
-                            <label key={item} className="flex items-center gap-2 rounded-xl border p-2 text-sm">
-                              <input type="checkbox" checked={task.done[index]} onChange={() => toggleChecklistItem(task.id, index)} /> {item}
-                            </label>
-                          ))}
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "Concluída")}><Check className="mr-1 h-3 w-3" /> Marcar feita</Button>
-                          <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "A fazer")}><RotateCcw className="mr-1 h-3 w-3" /> Reabrir</Button>
-                          <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "Paralisada")}><PauseCircle className="mr-1 h-3 w-3" /> Paralisar</Button>
-                          <Button size="sm" variant="outline" onClick={() => deleteTask(task.id)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button>
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section className="grid gap-6 lg:grid-cols-2">
-          <Card className="rounded-3xl border-0 shadow-sm">
-            <CardContent className="p-6">
-              <h2 className="mb-4 flex items-center gap-2 text-xl font-black"><Filter className="h-5 w-5 text-orange-600" /> Workflow das tarefas</h2>
-              <div className="grid gap-3 md:grid-cols-5">
-                {workflows.map((flow, index) => (
-                  <div key={flow} className="rounded-2xl bg-white p-4 text-center shadow-sm ring-1 ring-slate-100">
-                    <p className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-emerald-950 text-sm font-black text-white">{index + 1}</p>
-                    <p className="text-sm font-bold">{flow}</p>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-3xl border-0 bg-emerald-950 text-white shadow-sm">
-            <CardContent className="p-6">
-              <h2 className="text-xl font-black">Dashboard para tela</h2>
-              <p className="mt-2 text-sm text-emerald-100">Visão rápida para monitoramento integrado: volume de demandas, gargalos, responsáveis e risco de prazo.</p>
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl bg-white/10 p-4"><p className="text-3xl font-black">{tasks.length}</p><p className="text-sm">Demandas totais</p></div>
-                <div className="rounded-2xl bg-white/10 p-4"><p className="text-3xl font-black">{tasks.filter((task) => task.status !== "Concluída").length}</p><p className="text-sm">Pendências</p></div>
-                <div className="rounded-2xl bg-white/10 p-4"><p className="text-3xl font-black">{users.filter((user) => user.status === "Ativo").length}</p><p className="text-sm">Usuários ativos</p></div>
-                <div className="rounded-2xl bg-white/10 p-4"><p className="text-3xl font-black">{counts["Concluída"] || 0}</p><p className="text-sm">Concluídas</p></div>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-      </main>
-    </div>
-  );
-}
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("quickDate").value = selectedDate;
+      runTests();
+      renderAll();
+    });
+  </script>
+</body>
+</html>
