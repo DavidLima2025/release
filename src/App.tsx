@@ -28,16 +28,16 @@ function Badge({ children, tone = "default" }) {
 
 function normalizeUser(row) {
   return {
-    id: row.id,
-    name: row.name,
-    warName: row.war_name,
-    register: row.register,
-    unit: row.unit,
-    role: row.role,
-    email: row.email,
-    phone: row.phone,
-    login: row.login,
-    status: row.status,
+    id: row?.id || "",
+    name: row?.name || "Usuário sem nome",
+    warName: row?.war_name || row?.name || "Usuário",
+    register: row?.register || "",
+    unit: row?.unit || "",
+    role: row?.role || "Colaborador",
+    email: row?.email || "",
+    phone: row?.phone || "",
+    login: row?.login || "",
+    status: row?.status || "Ativo",
   };
 }
 
@@ -292,124 +292,150 @@ function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMon
   );
 }
 
-function UserManagement({ users, addUser, deleteUser, toggleUserStatus }) {
+function UserManagement({ users = [], addUser, deleteUser, toggleUserStatus }) {
+  const safeUsers = Array.isArray(users) ? users.filter(Boolean) : [];
   const emptyForm = { name: "", warName: "", register: "", unit: "", role: "Analista", email: "", phone: "", login: "", password: "", status: "Ativo" };
   const [form, setForm] = useState(emptyForm);
   const [query, setQuery] = useState("");
-  const activeUsers = users.filter((user) => user.status === "Ativo").length;
-  const inactiveUsers = users.length - activeUsers;
-  const admins = users.filter((user) => (user.role || "").toLowerCase().includes("administrador")).length;
-  const filteredUsers = users.filter((user) => `${user.name} ${user.warName} ${user.login} ${user.role} ${user.unit}`.toLowerCase().includes(query.toLowerCase()));
+
+  const activeUsers = safeUsers.filter((user) => (user?.status || "") === "Ativo").length;
+  const inactiveUsers = safeUsers.length - activeUsers;
+  const admins = safeUsers.filter((user) => (user?.role || "").toLowerCase().includes("administrador")).length;
+
+  const filteredUsers = safeUsers.filter((user) => {
+    const haystack = [
+      user?.name,
+      user?.warName,
+      user?.login,
+      user?.role,
+      user?.unit,
+      user?.email,
+      user?.phone,
+      user?.register,
+    ].filter(Boolean).join(" ").toLowerCase();
+
+    return haystack.includes((query || "").toLowerCase());
+  });
 
   const updateForm = (field, value) => setForm({ ...form, [field]: value });
+
   const saveUser = () => {
-    if (!form.name.trim() || !form.login.trim() || !form.password.trim()) return alert("Informe nome completo, login e senha provisória.");
-    addUser(form); setForm(emptyForm);
+    if (!form.name.trim() || !form.login.trim() || !form.password.trim()) {
+      alert("Informe nome completo, login e senha provisória.");
+      return;
+    }
+    addUser(form);
+    setForm(emptyForm);
   };
 
   return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-950 via-slate-950 to-black text-white shadow-2xl">
-        <div className="relative p-7">
-          <div className="absolute right-8 top-6 text-8xl opacity-10">🦉</div>
-          <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.35em] text-orange-300">Administração do sistema</p>
-              <h2 className="mt-2 text-3xl font-black">Cadastro e gestão de usuários</h2>
-              <p className="mt-2 max-w-2xl text-sm text-emerald-100">Gerencie perfis, responsáveis, gestores, analistas e colaboradores. Esta tela é exclusiva do administrador.</p>
-            </div>
-            <div className="grid grid-cols-3 gap-3 text-center">
-              <div className="rounded-3xl bg-white/10 px-5 py-4 ring-1 ring-white/10"><p className="text-3xl font-black">{users.length}</p><p className="text-xs text-emerald-100">Total</p></div>
-              <div className="rounded-3xl bg-green-500/20 px-5 py-4 ring-1 ring-green-300/20"><p className="text-3xl font-black">{activeUsers}</p><p className="text-xs text-green-100">Ativos</p></div>
-              <div className="rounded-3xl bg-orange-500/20 px-5 py-4 ring-1 ring-orange-300/20"><p className="text-3xl font-black">{admins}</p><p className="text-xs text-orange-100">Admins</p></div>
+    <SafeBlock title="Falha ao abrir cadastro de usuários">
+      <div className="space-y-6">
+        <section className="overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-950 via-slate-950 to-black text-white shadow-2xl">
+          <div className="relative p-7">
+            <div className="absolute right-8 top-6 text-8xl opacity-10">🦉</div>
+            <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.35em] text-orange-300">Administração do sistema</p>
+                <h2 className="mt-2 text-3xl font-black">Cadastro e gestão de usuários</h2>
+                <p className="mt-2 max-w-2xl text-sm text-emerald-100">Gerencie perfis, responsáveis, gestores, analistas e colaboradores. Esta tela é exclusiva do administrador.</p>
+              </div>
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="rounded-3xl bg-white/10 px-5 py-4 ring-1 ring-white/10"><p className="text-3xl font-black">{safeUsers.length}</p><p className="text-xs text-emerald-100">Total</p></div>
+                <div className="rounded-3xl bg-green-500/20 px-5 py-4 ring-1 ring-green-300/20"><p className="text-3xl font-black">{activeUsers}</p><p className="text-xs text-green-100">Ativos</p></div>
+                <div className="rounded-3xl bg-orange-500/20 px-5 py-4 ring-1 ring-orange-300/20"><p className="text-3xl font-black">{admins}</p><p className="text-xs text-orange-100">Admins</p></div>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="grid gap-6 xl:grid-cols-[430px_1fr]">
-        <Card className="rounded-[2rem] border-0 bg-white/95 soft-card ring-1 ring-slate-200/70">
-          <CardContent className="p-6">
-            <h3 className="mb-1 flex items-center gap-2 text-xl font-black"><Settings className="h-5 w-5 text-orange-600" /> Novo usuário</h3>
-            <p className="mb-5 text-sm text-slate-500">Crie um usuário que poderá receber demandas e acessar o sistema.</p>
-            <div className="grid gap-3">
-              <Input placeholder="Nome completo" value={form.name} onChange={(e) => updateForm("name", e.target.value)} />
-              <Input placeholder="Nome de guerra / identificação" value={form.warName} onChange={(e) => updateForm("warName", e.target.value)} />
-              <div className="grid gap-3 md:grid-cols-2">
-                <Input placeholder="Matrícula" value={form.register} onChange={(e) => updateForm("register", e.target.value)} />
-                <Input placeholder="Unidade" value={form.unit} onChange={(e) => updateForm("unit", e.target.value)} />
-              </div>
-              <select value={form.role} onChange={(e) => updateForm("role", e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm">{userRoles.map((role)=><option key={role}>{role}</option>)}</select>
-              <div className="grid gap-3 md:grid-cols-2">
-                <Input placeholder="E-mail" value={form.email} onChange={(e) => updateForm("email", e.target.value)} />
-                <Input placeholder="Telefone" value={form.phone} onChange={(e) => updateForm("phone", e.target.value)} />
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <Input placeholder="Login" value={form.login} onChange={(e) => updateForm("login", e.target.value)} />
-                <Input placeholder="Senha provisória" type="password" value={form.password} onChange={(e) => updateForm("password", e.target.value)} />
-              </div>
-              <select value={form.status} onChange={(e) => updateForm("status", e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option>Ativo</option><option>Inativo</option></select>
-              <Button onClick={saveUser} className="h-11 bg-orange-600 hover:bg-orange-700"><UserPlus className="mr-2 h-4 w-4" /> Cadastrar usuário</Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-[2rem] border-0 bg-white/95 soft-card ring-1 ring-slate-200/70">
-          <CardContent className="p-6">
-            <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h3 className="text-xl font-black">Usuários cadastrados</h3>
-                <p className="text-sm text-slate-500">{filteredUsers.length} usuários exibidos</p>
-              </div>
-              <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                <Input className="pl-9" placeholder="Pesquisar usuário" value={query} onChange={(e) => setQuery(e.target.value)} />
-              </div>
-            </div>
-
-            {users.length === 0 && (
-              <div className="rounded-3xl border border-dashed bg-slate-50 p-8 text-center">
-                <Users className="mx-auto h-10 w-10 text-slate-400" />
-                <h4 className="mt-3 text-lg font-black">Nenhum usuário carregado</h4>
-                <p className="mt-1 text-sm text-slate-500">Se o ADM existe no Supabase, verifique se a política RLS de SELECT da tabela app_users está ativa.</p>
-              </div>
-            )}
-
-            <div className="grid gap-3">
-              {filteredUsers.map((user) => (
-                <div key={user.id} className="group rounded-3xl border bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm transition hover:border-orange-200 hover:shadow-md">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="flex gap-4">
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-950 text-lg font-black text-white">
-                        {(user.warName || user.name || "U").slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-black">{user.warName || user.name}</h3>
-                          <Badge tone={user.status === "Ativo" ? "low" : "default"}>{user.status}</Badge>
-                          <Badge tone={user.role === "Administrador" ? "high" : user.role === "Gestor" ? "medium" : "default"}>{user.role}</Badge>
-                        </div>
-                        <p className="mt-1 text-sm text-slate-600">{user.name} • Matrícula: {user.register || "não informada"}</p>
-                        <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                          <span className="rounded-full bg-emerald-950 px-3 py-1 font-bold text-white"><Activity className="mr-1 inline h-3 w-3" /> {user.login}</span>
-                          <span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700"><Building2 className="mr-1 inline h-3 w-3" /> {user.unit || "Unidade não informada"}</span>
-                          <span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700"><Mail className="mr-1 inline h-3 w-3" /> {user.email || "Sem e-mail"}</span>
-                          <span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700"><Phone className="mr-1 inline h-3 w-3" /> {user.phone || "Sem telefone"}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button size="sm" variant="outline" onClick={() => toggleUserStatus(user)}>{user.status === "Ativo" ? "Inativar" : "Ativar"}</Button>
-                      <Button size="sm" variant="outline" onClick={() => deleteUser(user)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button>
-                    </div>
-                  </div>
+        <section className="grid gap-6 xl:grid-cols-[430px_1fr]">
+          <Card className="rounded-[2rem] border-0 bg-white/95 soft-card ring-1 ring-slate-200/70">
+            <CardContent className="p-6">
+              <h3 className="mb-1 flex items-center gap-2 text-xl font-black"><Settings className="h-5 w-5 text-orange-600" /> Novo usuário</h3>
+              <p className="mb-5 text-sm text-slate-500">Crie um usuário que poderá receber demandas e acessar o sistema.</p>
+              <div className="grid gap-3">
+                <Input placeholder="Nome completo" value={form.name} onChange={(e) => updateForm("name", e.target.value)} />
+                <Input placeholder="Nome de guerra / identificação" value={form.warName} onChange={(e) => updateForm("warName", e.target.value)} />
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Input placeholder="Matrícula" value={form.register} onChange={(e) => updateForm("register", e.target.value)} />
+                  <Input placeholder="Unidade" value={form.unit} onChange={(e) => updateForm("unit", e.target.value)} />
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </section>
-    </div>
+                <select value={form.role} onChange={(e) => updateForm("role", e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm">{userRoles.map((role)=><option key={role}>{role}</option>)}</select>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Input placeholder="E-mail" value={form.email} onChange={(e) => updateForm("email", e.target.value)} />
+                  <Input placeholder="Telefone" value={form.phone} onChange={(e) => updateForm("phone", e.target.value)} />
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Input placeholder="Login" value={form.login} onChange={(e) => updateForm("login", e.target.value)} />
+                  <Input placeholder="Senha provisória" type="password" value={form.password} onChange={(e) => updateForm("password", e.target.value)} />
+                </div>
+                <select value={form.status} onChange={(e) => updateForm("status", e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option>Ativo</option><option>Inativo</option></select>
+                <Button onClick={saveUser} className="h-11 bg-orange-600 text-white hover:bg-orange-700"><UserPlus className="mr-2 h-4 w-4" /> Cadastrar usuário</Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[2rem] border-0 bg-white/95 soft-card ring-1 ring-slate-200/70">
+            <CardContent className="p-6">
+              <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h3 className="text-xl font-black">Usuários cadastrados</h3>
+                  <p className="text-sm text-slate-500">{filteredUsers.length} usuários exibidos</p>
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <Input className="pl-9" placeholder="Pesquisar usuário" value={query} onChange={(e) => setQuery(e.target.value)} />
+                </div>
+              </div>
+
+              {safeUsers.length === 0 && (
+                <div className="rounded-3xl border border-dashed bg-slate-50 p-8 text-center">
+                  <Users className="mx-auto h-10 w-10 text-slate-400" />
+                  <h4 className="mt-3 text-lg font-black">Nenhum usuário carregado</h4>
+                  <p className="mt-1 text-sm text-slate-500">Verifique se a política RLS de SELECT da tabela app_users está ativa.</p>
+                </div>
+              )}
+
+              <div className="grid gap-3">
+                {filteredUsers.map((user) => {
+                  const label = user?.warName || user?.name || "Usuário";
+                  const initials = String(label).slice(0, 2).toUpperCase();
+
+                  return (
+                    <div key={user?.id || user?.login || label} className="group rounded-3xl border bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm transition hover:border-orange-200 hover:shadow-md">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="flex gap-4">
+                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-950 text-lg font-black text-white">{initials}</div>
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="text-lg font-black">{label}</h3>
+                              <Badge tone={user?.status === "Ativo" ? "low" : "default"}>{user?.status || "Ativo"}</Badge>
+                              <Badge tone={user?.role === "Administrador" ? "high" : user?.role === "Gestor" ? "medium" : "default"}>{user?.role || "Colaborador"}</Badge>
+                            </div>
+                            <p className="mt-1 text-sm text-slate-600">{user?.name || "Nome não informado"} • Matrícula: {user?.register || "não informada"}</p>
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                              <span className="rounded-full bg-emerald-950 px-3 py-1 font-bold text-white"><Activity className="mr-1 inline h-3 w-3" /> {user?.login || "sem login"}</span>
+                              <span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700"><Building2 className="mr-1 inline h-3 w-3" /> {user?.unit || "Unidade não informada"}</span>
+                              <span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700"><Mail className="mr-1 inline h-3 w-3" /> {user?.email || "Sem e-mail"}</span>
+                              <span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700"><Phone className="mr-1 inline h-3 w-3" /> {user?.phone || "Sem telefone"}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" onClick={() => toggleUserStatus(user)}>{user?.status === "Ativo" ? "Inativar" : "Ativar"}</Button>
+                          <Button size="sm" variant="outline" onClick={() => deleteUser(user)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      </div>
+    </SafeBlock>
   )
 }
 function DemandCenter({ status, tasks, onBack, updateTaskStatus, deleteTask, duplicateTask, toggleChecklistItem, postponeTask }) {
@@ -550,6 +576,39 @@ function TVPanel({ tasks, users, counts, onClose }) {
     </div>
   )
 }
+
+function SafeBlock({ children, title = "Falha ao carregar esta tela" }) {
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    const handler = (event) => {
+      console.error("Erro capturado:", event.error || event.message);
+      setHasError(true);
+    };
+    window.addEventListener("error", handler);
+    return () => window.removeEventListener("error", handler);
+  }, []);
+
+  if (hasError) {
+    return (
+      <Card className="rounded-[2rem] border-0 bg-white/95 soft-card ring-1 ring-red-200">
+        <CardContent className="p-6">
+          <h2 className="text-xl font-black text-red-600">{title}</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            A tela encontrou um dado inválido vindo do banco. Atualize a página; se persistir, verifique os campos obrigatórios dos usuários no Supabase.
+          </p>
+          <Button className="mt-4 bg-orange-600 text-white hover:bg-orange-700" onClick={() => window.location.reload()}>
+            Recarregar sistema
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+
 export default function App() {
   const [logged, setLogged] = useState(() => Boolean(localStorage.getItem("si6_session_user")));
   const [currentUser, setCurrentUser] = useState(() => {
@@ -661,16 +720,16 @@ export default function App() {
   }
 
   async function deleteUser(user) {
-    if (user.login === "ADM6CIA") return notify("O administrador principal não pode ser excluído.");
-    const { error } = await supabase.from("app_users").delete().eq("id", user.id);
+    if ((user?.login || "").toUpperCase() === "ADM6CIA") return notify("O administrador principal não pode ser excluído.");
+    const { error } = await supabase.from("app_users").delete().eq("id", user?.id);
     if (error) return notify("Erro ao excluir usuário.");
     await addAudit("Usuário removido", `Removeu o usuário: ${user.warName || user.name}.`);
     notify("Usuário removido.");
   }
 
   async function toggleUserStatus(user) {
-    const status = user.status === "Ativo" ? "Inativo" : "Ativo";
-    const { error } = await supabase.from("app_users").update({ status }).eq("id", user.id);
+    const status = user?.status === "Ativo" ? "Inativo" : "Ativo";
+    const { error } = await supabase.from("app_users").update({ status }).eq("id", user?.id);
     if (error) return notify("Erro ao alterar usuário.");
     await addAudit("Situação de usuário alterada", `Alterou ${user.warName || user.name} para ${status}.`);
     notify("Situação do usuário alterada.");
