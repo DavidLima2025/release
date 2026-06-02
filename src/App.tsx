@@ -42,6 +42,68 @@ function getPermissions(user) {
 }
 
 
+
+function getTaskVisualLevel(task) {
+  const status = task?.status || "";
+  const priority = task?.priority || "";
+  const overdueDate = task?.overdueDate || task?.internalDeadline;
+  const isOverdueByDate = overdueDate ? overdueDate < today && status !== "Concluída" : false;
+
+  if (status === "Atrasada" || priority === "Crítica" || isOverdueByDate) return "late";
+  if (status === "Risco de prazo" || priority === "Alta") return "risk";
+  if (status === "Concluída") return "done";
+  return "open";
+}
+
+function getDayVisualLevel(dayTasks) {
+  if (!dayTasks || dayTasks.length === 0) return "empty";
+
+  const levels = dayTasks.map(getTaskVisualLevel);
+
+  if (levels.includes("late")) return "late";
+  if (levels.includes("risk")) return "risk";
+  if (levels.every((level) => level === "done")) return "done";
+  return "open";
+}
+
+function getDayVisualClasses(dayTasks, isSelected) {
+  if (isSelected) return "border-orange-600 bg-orange-50 ring-2 ring-orange-200 shadow-lg";
+
+  const level = getDayVisualLevel(dayTasks);
+
+  const styles = {
+    late: "border-red-400 bg-red-50 shadow-red-100",
+    risk: "border-yellow-400 bg-yellow-50 shadow-yellow-100",
+    done: "border-green-400 bg-green-50 shadow-green-100",
+    open: "border-blue-400 bg-blue-50 shadow-blue-100",
+    empty: "border-slate-200 bg-white",
+  };
+
+  return styles[level] || styles.empty;
+}
+
+function getTaskMiniClasses(task) {
+  const level = getTaskVisualLevel(task);
+
+  const styles = {
+    late: "bg-red-100 text-red-800 ring-1 ring-red-200",
+    risk: "bg-yellow-100 text-yellow-800 ring-1 ring-yellow-200",
+    done: "bg-green-100 text-green-800 ring-1 ring-green-200",
+    open: "bg-blue-100 text-blue-800 ring-1 ring-blue-200",
+  };
+
+  return styles[level] || styles.open;
+}
+
+function getTaskBadgeTone(task) {
+  const level = getTaskVisualLevel(task);
+  if (level === "late") return "high";
+  if (level === "risk") return "medium";
+  if (level === "done") return "low";
+  return "default";
+}
+
+
 function Badge({ children, tone = "default" }) {
   const tones = {
     default: "bg-slate-100 text-slate-700",
@@ -176,7 +238,7 @@ function StatCard({ label, value, icon: Icon, className }) {
   );
 }
 
-function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMonthDate, addQuickTask, updateTaskStatus, deleteTask, postponeTask, users }) {
+function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMonthDate, addQuickTask, updateTaskStatus, deleteTask, postponeTask, editTask, users }) {
   const [quickTitle, setQuickTitle] = useState("");
   const [quickResponsible, setQuickResponsible] = useState("");
   const [quickType, setQuickType] = useState("Inteligência");
@@ -232,14 +294,15 @@ function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMon
                 const doneCount = dayTasks.filter((task) => task.status === "Concluída").length;
                 const pendingCount = dayTasks.length - doneCount;
                 const isSelected = date === selectedDate;
+                const statusClass = getDayVisualClasses(dayTasks, isSelected);
                 return (
                   <button type="button" key={`${date || "blank"}-${index}`} disabled={!date} onClick={() => date && (setSelectedDate(date), setDayPanelMode("view"), setDayPanelOpen(true))}
-                    className={`min-h-28 rounded-2xl border p-2 text-left transition hover:shadow-md ${isSelected ? "border-orange-600 bg-orange-50 ring-2 ring-orange-200" : "bg-white"} ${!date ? "cursor-default opacity-0" : ""}`}>
+                    className={`min-h-28 rounded-2xl border p-2 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl ${statusClass} ${!date ? "cursor-default opacity-0" : ""}`}>
                     <div className="flex items-center justify-between">
                       <span className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-black ${isSelected ? "bg-orange-600 text-white" : "bg-slate-100"}`}>{date ? Number(date.slice(8,10)) : ""}</span>
                       {dayTasks.length > 0 && <span className="rounded-full bg-emerald-950 px-2 py-0.5 text-xs font-bold text-white">{dayTasks.length}</span>}
                     </div>
-                    <div className="mt-2 space-y-1">{dayTasks.slice(0,3).map((task)=><div key={task.id} className={`truncate rounded-lg px-2 py-1 text-[11px] font-semibold ${task.status === "Concluída" ? "bg-green-100 text-green-700" : task.status === "Atrasada" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-700"}`}>{task.title}</div>)}</div>
+                    <div className="mt-2 space-y-1">{dayTasks.slice(0,3).map((task)=><div key={task.id} className={`truncate rounded-lg px-2 py-1 text-[11px] font-semibold ${getTaskMiniClasses(task)}`}>{task.title}</div>)}</div>
                     {dayTasks.length > 0 && <div className="mt-2 flex gap-1 text-[10px] font-bold"><span className="rounded bg-green-100 px-1.5 py-0.5 text-green-700">{doneCount} feitas</span><span className="rounded bg-yellow-100 px-1.5 py-0.5 text-yellow-700">{pendingCount} pend.</span></div>}
                   </button>
                 )
@@ -261,12 +324,13 @@ function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMon
                 {selectedTasks.length === 0 && <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Nenhuma atividade cadastrada neste dia.</p>}
                 {selectedTasks.map((task) => (
                   <div key={task.id} className="rounded-xl border p-3">
-                    <div className="flex items-start justify-between gap-2"><p className="text-sm font-black">{task.title}</p><Badge tone={task.status === "Concluída" ? "low" : task.status === "Atrasada" ? "high" : "medium"}>{task.status}</Badge></div>
+                    <div className="flex items-start justify-between gap-2"><p className="text-sm font-black">{task.title}</p><Badge tone={getTaskBadgeTone(task)}>{task.status}</Badge><Badge tone={task.priority === "Crítica" ? "high" : task.priority === "Alta" ? "medium" : task.priority === "Média" ? "default" : "low"}>{task.priority}</Badge></div>
                     <p className="mt-1 text-xs text-slate-500">{task.responsible} • {task.workflow}</p>
                     <p className="mt-2 text-xs text-slate-600">{task.notes}</p>
                     <p className="mt-2 text-xs font-bold text-red-600">Data para atraso: {task.overdueDate || task.internalDeadline}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "Concluída")}><Check className="mr-1 h-3 w-3" /> Feita</Button>
+                      <Button size="sm" variant="outline" onClick={() => markDoneAndClose(task.id)}><Check className="mr-1 h-3 w-3" /> Feita</Button>
+                      <Button size="sm" variant="outline" onClick={() => editSelectedTask(task)}><Edit3 className="mr-1 h-3 w-3" /> Editar</Button>
                       <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "A fazer")}><RotateCcw className="mr-1 h-3 w-3" /> Reabrir</Button>
                       <Button size="sm" variant="outline" onClick={() => postponeTask(task)}><Clock className="mr-1 h-3 w-3" /> Postergar</Button>
                       <Button size="sm" variant="outline" onClick={() => deleteTask(task.id)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button>
@@ -307,7 +371,7 @@ function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMon
                     <div className="mb-4 flex items-center justify-between"><h4 className="text-xl font-black">Demandas cadastradas neste dia</h4><Badge tone="dark">{selectedTasks.length} demandas</Badge></div>
                     <div className="grid gap-3">
                       {selectedTasks.length === 0 && <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">Nenhuma demanda cadastrada neste dia.</p>}
-                      {selectedTasks.map((task)=><div key={task.id} className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h5 className="text-lg font-black">{task.title}</h5><Badge tone={task.status === "Concluída" ? "low" : task.status === "Atrasada" ? "high" : "medium"}>{task.status}</Badge></div><p className="mt-2 text-sm text-slate-600">{task.notes}</p><p className="mt-2 text-xs text-slate-500">Responsável: {task.responsible} • Workflow: {task.workflow}</p></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "Concluída")}><Check className="mr-1 h-3 w-3" /> Feita</Button><Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "A fazer")}><RotateCcw className="mr-1 h-3 w-3" /> Reabrir</Button><Button size="sm" variant="outline" onClick={() => postponeTask(task)}><Clock className="mr-1 h-3 w-3" /> Postergar</Button><Button size="sm" variant="outline" onClick={() => deleteTask(task.id)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button></div></div></div>)}
+                      {selectedTasks.map((task)=><div key={task.id} className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h5 className="text-lg font-black">{task.title}</h5><Badge tone={getTaskBadgeTone(task)}>{task.status}</Badge><Badge tone={task.priority === "Crítica" ? "high" : task.priority === "Alta" ? "medium" : task.priority === "Média" ? "default" : "low"}>{task.priority}</Badge></div><p className="mt-2 text-sm text-slate-600">{task.notes}</p><p className="mt-2 text-xs text-slate-500">Responsável: {task.responsible} • Workflow: {task.workflow}</p></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => markDoneAndClose(task.id)}><Check className="mr-1 h-3 w-3" /> Feita</Button><Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "A fazer")}><RotateCcw className="mr-1 h-3 w-3" /> Reabrir</Button><Button size="sm" variant="outline" onClick={() => postponeTask(task)}><Clock className="mr-1 h-3 w-3" /> Postergar</Button><Button size="sm" variant="outline" onClick={() => deleteTask(task.id)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button></div></div></div>)}
                     </div>
                   </div>
                 )}
@@ -491,7 +555,7 @@ function UserManagement({ users = [], addUser, deleteUser, toggleUserStatus }) {
     </SafeBlock>
   )
 }
-function DemandCenter({ status, tasks, onBack, updateTaskStatus, deleteTask, duplicateTask, toggleChecklistItem, postponeTask }) {
+function DemandCenter({ status, tasks, onBack, updateTaskStatus, deleteTask, duplicateTask, toggleChecklistItem, postponeTask, editTask }) {
   const [selectedId, setSelectedId] = useState(tasks[0]?.id || null);
   const [query, setQuery] = useState("");
   const visibleTasks = tasks.filter((task) => `${task.title} ${task.responsible} ${task.workflow} ${task.notes}`.toLowerCase().includes(query.toLowerCase()));
@@ -503,8 +567,8 @@ function DemandCenter({ status, tasks, onBack, updateTaskStatus, deleteTask, dup
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><h2 className="flex items-center gap-2 text-2xl font-black"><ClipboardCheck className="h-6 w-6 text-orange-600" /> {title}</h2><p className="text-sm text-slate-500">Tela aberta pelo card do dashboard, com demandas filtradas por status.</p></div><Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao painel</Button></div>
         <div className="mb-4 grid gap-3 md:grid-cols-4"><Input className="md:col-span-2" placeholder="Pesquisar demanda, responsável ou workflow" value={query} onChange={(e) => setQuery(e.target.value)} /><div className="rounded-2xl bg-emerald-950 px-4 py-3 text-center font-bold text-white">{visibleTasks.length} demandas</div><Button className="bg-orange-600 hover:bg-orange-700" onClick={() => alert("Use o calendário para criar uma nova demanda.")}><Plus className="mr-2 h-4 w-4" /> Nova demanda</Button></div>
         <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-          <div className="space-y-3">{visibleTasks.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">Nenhuma demanda encontrada neste status.</div>}{visibleTasks.map((task)=><button key={task.id} type="button" onClick={()=>setSelectedId(task.id)} className={`w-full rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:shadow-md ${selectedTask?.id === task.id ? "border-orange-600 ring-2 ring-orange-100" : ""}`}><div className="flex items-start justify-between gap-3"><div><h3 className="font-black">{task.title}</h3><p className="mt-1 text-xs text-slate-500">Responsável: {task.responsible}</p></div><Badge tone={task.status === "Concluída" ? "low" : task.status === "Atrasada" ? "high" : "medium"}>{task.status}</Badge></div><div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg bg-slate-50 p-2"><b>Interno:</b> {task.internalDeadline}</div><div className="rounded-lg bg-slate-50 p-2"><b>Oficial:</b> {task.officialDeadline}</div></div></button>)}</div>
-          {selectedTask && <div className="rounded-3xl border bg-white p-5 shadow-sm"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-600">Demanda</p><h3 className="mt-2 text-2xl font-black">{selectedTask.title}</h3><p className="mt-2 text-sm text-slate-600">{selectedTask.notes}</p></div><Badge tone={selectedTask.status === "Concluída" ? "low" : selectedTask.status === "Atrasada" ? "high" : "medium"}>{selectedTask.status}</Badge></div><div className="mt-5 grid gap-3 md:grid-cols-2"><div className="rounded-2xl bg-slate-50 p-4"><b>Tipo:</b> {selectedTask.type}</div><div className="rounded-2xl bg-slate-50 p-4"><b>Workflow:</b> {selectedTask.workflow}</div><div className="rounded-2xl bg-slate-50 p-4"><b>Responsável:</b> {selectedTask.responsible}</div><div className="rounded-2xl bg-slate-50 p-4"><b>Gestor:</b> {selectedTask.manager}</div><div className="rounded-2xl bg-slate-50 p-4"><b>Prazo interno:</b> {selectedTask.internalDeadline}</div><div className="rounded-2xl bg-slate-50 p-4"><b>Prazo oficial:</b> {selectedTask.officialDeadline}</div></div><div className="mt-5"><h4 className="mb-3 font-black"><ClipboardCheck className="mr-1 inline h-4 w-4 text-orange-600" /> Checklist da demanda</h4><div className="grid gap-2 md:grid-cols-2">{selectedTask.checklist.map((item,index)=><label key={item} className="flex cursor-pointer items-center gap-2 rounded-xl border p-3 text-sm"><input type="checkbox" checked={selectedTask.done[index]} onChange={()=>toggleChecklistItem(selectedTask,index)} /> {item}</label>)}</div></div><div className="mt-5 flex flex-wrap gap-2"><Button variant="outline" onClick={() => alert(`Visualizando demanda: ${selectedTask.title}`)}><Eye className="mr-1 h-4 w-4" /> Visualizar</Button><Button variant="outline" onClick={() => alert("Edição completa será adicionada em etapa futura.")}><Edit3 className="mr-1 h-4 w-4" /> Editar</Button><Button variant="outline" onClick={() => duplicateTask(selectedTask)}><Copy className="mr-1 h-4 w-4" /> Duplicar</Button><Button variant="outline" onClick={() => updateTaskStatus(selectedTask.id, "Concluída")}><Check className="mr-1 h-4 w-4" /> Encerrar</Button><Button variant="outline" onClick={() => updateTaskStatus(selectedTask.id, "A fazer")}><RotateCcw className="mr-1 h-4 w-4" /> Reabrir</Button><Button variant="outline" onClick={() => postponeTask(selectedTask)}><Clock className="mr-1 h-4 w-4" /> Postergar</Button><Button variant="outline" className="text-red-600" onClick={() => deleteTask(selectedTask.id)}><Trash2 className="mr-1 h-4 w-4" /> Excluir</Button></div></div>}
+          <div className="space-y-3">{visibleTasks.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">Nenhuma demanda encontrada neste status.</div>}{visibleTasks.map((task)=><button key={task.id} type="button" onClick={()=>setSelectedId(task.id)} className={`w-full rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:shadow-md ${selectedTask?.id === task.id ? "border-orange-600 ring-2 ring-orange-100" : ""}`}><div className="flex items-start justify-between gap-3"><div><h3 className="font-black">{task.title}</h3><p className="mt-1 text-xs text-slate-500">Responsável: {task.responsible}</p></div><Badge tone={getTaskBadgeTone(task)}>{task.status}</Badge><Badge tone={task.priority === "Crítica" ? "high" : task.priority === "Alta" ? "medium" : task.priority === "Média" ? "default" : "low"}>{task.priority}</Badge></div><div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg bg-slate-50 p-2"><b>Interno:</b> {task.internalDeadline}</div><div className="rounded-lg bg-slate-50 p-2"><b>Oficial:</b> {task.officialDeadline}</div></div></button>)}</div>
+          {selectedTask && <div className="rounded-3xl border bg-white p-5 shadow-sm"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-600">Demanda</p><h3 className="mt-2 text-2xl font-black">{selectedTask.title}</h3><p className="mt-2 text-sm text-slate-600">{selectedTask.notes}</p></div><Badge tone={selectedTask.status === "Concluída" ? "low" : selectedTask.status === "Atrasada" ? "high" : "medium"}>{selectedTask.status}</Badge></div><div className="mt-5 grid gap-3 md:grid-cols-2"><div className="rounded-2xl bg-slate-50 p-4"><b>Tipo:</b> {selectedTask.type}</div><div className="rounded-2xl bg-slate-50 p-4"><b>Workflow:</b> {selectedTask.workflow}</div><div className="rounded-2xl bg-slate-50 p-4"><b>Responsável:</b> {selectedTask.responsible}</div><div className="rounded-2xl bg-slate-50 p-4"><b>Gestor:</b> {selectedTask.manager}</div><div className="rounded-2xl bg-slate-50 p-4"><b>Prazo interno:</b> {selectedTask.internalDeadline}</div><div className="rounded-2xl bg-slate-50 p-4"><b>Prazo oficial:</b> {selectedTask.officialDeadline}</div></div><div className="mt-5"><h4 className="mb-3 font-black"><ClipboardCheck className="mr-1 inline h-4 w-4 text-orange-600" /> Checklist da demanda</h4><div className="grid gap-2 md:grid-cols-2">{selectedTask.checklist.map((item,index)=><label key={item} className="flex cursor-pointer items-center gap-2 rounded-xl border p-3 text-sm"><input type="checkbox" checked={selectedTask.done[index]} onChange={()=>toggleChecklistItem(selectedTask,index)} /> {item}</label>)}</div></div><div className="mt-5 flex flex-wrap gap-2"><Button variant="outline" onClick={() => alert(`Visualizando demanda: ${selectedTask.title}`)}><Eye className="mr-1 h-4 w-4" /> Visualizar</Button><Button variant="outline" onClick={() => editTask(selectedTask)}><Edit3 className="mr-1 h-4 w-4" /> Editar</Button><Button variant="outline" onClick={() => duplicateTask(selectedTask)}><Copy className="mr-1 h-4 w-4" /> Duplicar</Button><Button variant="outline" onClick={() => updateTaskStatus(selectedTask.id, "Concluída")}><Check className="mr-1 h-4 w-4" /> Encerrar</Button><Button variant="outline" onClick={() => updateTaskStatus(selectedTask.id, "A fazer")}><RotateCcw className="mr-1 h-4 w-4" /> Reabrir</Button><Button variant="outline" onClick={() => postponeTask(selectedTask)}><Clock className="mr-1 h-4 w-4" /> Postergar</Button><Button variant="outline" className="text-red-600" onClick={() => deleteTask(selectedTask.id)}><Trash2 className="mr-1 h-4 w-4" /> Excluir</Button></div></div>}
         </div>
       </CardContent>
     </Card>
@@ -712,7 +776,23 @@ export default function App() {
       console.error("Erro ao carregar usuários:", usersRes.error);
       notify("Erro ao carregar usuários do Supabase. Verifique permissões RLS.");
     }
-    if (usersRes.data) setUsers(usersRes.data.map(normalizeUser));
+    if (usersRes.data) {
+      const normalizedUsers = usersRes.data.map(normalizeUser);
+      setUsers(normalizedUsers);
+
+      const storedSession = (() => {
+        try { return JSON.parse(localStorage.getItem("si6_session_user") || "null"); } catch { return null; }
+      })();
+
+      const sessionId = storedSession?.id || currentUser?.id;
+      if (sessionId) {
+        const sameUser = normalizedUsers.find((u) => u.id === sessionId);
+        if (sameUser) {
+          setCurrentUser(sameUser);
+          localStorage.setItem("si6_session_user", JSON.stringify(sameUser));
+        }
+      }
+    }
     if (workflowsRes.data) setWorkflows(workflowsRes.data.map(normalizeWorkflow));
     if (tasksRes.data) setTasks(tasksRes.data.map(normalizeTask));
     if (logsRes.data) setAuditLogs(logsRes.data);
@@ -821,6 +901,7 @@ export default function App() {
     await addAudit("Demanda criada", `Criou a demanda: ${newTitle}.`);
     setNewTitle(""); setNewResponsible("");
     notify("Tarefa cadastrada com sucesso.");
+    await loadData();
   }
 
   async function addQuickTask({ title, responsibleId, date, type = "Inteligência", priority = "Média", notes, overdueDate }) {
@@ -837,7 +918,46 @@ export default function App() {
     if (error) return notify("Erro ao adicionar atividade.");
     await addAudit("Demanda criada pelo calendário", `Criou a demanda: ${title}.`);
     notify("Atividade adicionada ao calendário.");
+    await loadData();
   }
+
+
+  async function editTask(task) {
+    const newTitle = window.prompt("Editar título da demanda:", task.title);
+    if (newTitle === null) return;
+
+    const newNotes = window.prompt("Editar informações/observações da demanda:", task.notes || "");
+    if (newNotes === null) return;
+
+    const newOverdueDate = window.prompt("Editar data para atraso da demanda (AAAA-MM-DD):", task.overdueDate || task.internalDeadline || task.date);
+    if (newOverdueDate === null) return;
+
+    if (newOverdueDate && !/^\d{4}-\d{2}-\d{2}$/.test(newOverdueDate)) {
+      notify("Data inválida. Use o formato AAAA-MM-DD.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("demands")
+      .update({
+        title: newTitle.trim() || task.title,
+        notes: newNotes,
+        overdue_date: newOverdueDate || task.overdueDate,
+        internal_deadline: newOverdueDate || task.internalDeadline,
+      })
+      .eq("id", task.id);
+
+    if (error) {
+      console.error(error);
+      notify("Erro ao editar demanda.");
+      return;
+    }
+
+    await addAudit("Demanda editada", `Editou a demanda: ${newTitle.trim() || task.title}.`);
+    notify("Demanda editada com sucesso.");
+    await loadData();
+  }
+
 
   async function deleteTask(id) {
     if (!permissions.deleteDemand) return notify("Seu perfil não possui permissão para excluir demandas.");
@@ -855,6 +975,7 @@ export default function App() {
     if (error) return notify("Erro ao atualizar status.");
     await addAudit("Status atualizado", `Alterou o status da demanda para: ${status}.`);
     notify("Status da tarefa atualizado.");
+    await loadData();
   }
 
   async function toggleChecklistItem(task, itemIndex) {
@@ -874,6 +995,7 @@ export default function App() {
     if (error) return notify("Erro ao postergar demanda.");
     await addAudit("Demanda postergada", `Postergou a demanda ${task.title} para ${newDate}.`);
     notify("Demanda postergada com sucesso.");
+    await loadData();
   }
 
   async function duplicateTask(task) {
@@ -897,6 +1019,7 @@ export default function App() {
     if (error) return notify("Erro ao duplicar demanda.");
     await addAudit("Demanda duplicada", `Duplicou a demanda: ${task.title}.`);
     notify("Demanda duplicada.");
+    await loadData();
   }
 
   async function addWorkflow() {
