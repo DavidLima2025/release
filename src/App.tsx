@@ -145,10 +145,13 @@ function buildCalendarDays(monthDate) {
 function OwlLogo() {
   return (
     <div className="flex items-center gap-3">
-      <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-600 shadow-lg shadow-orange-950/30">
-        <Eye className="absolute left-2 h-5 w-5 text-white" />
-        <Eye className="absolute right-2 h-5 w-5 text-white" />
-        <Shield className="mt-5 h-5 w-5 text-emerald-950" />
+      <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 via-orange-600 to-emerald-950 shadow-lg shadow-orange-950/30 ring-1 ring-orange-200/30">
+        <div className="absolute top-3 flex gap-1">
+          <span className="grid h-4 w-4 place-items-center rounded-full bg-white text-[10px] font-black text-emerald-950">●</span>
+          <span className="grid h-4 w-4 place-items-center rounded-full bg-white text-[10px] font-black text-emerald-950">●</span>
+        </div>
+        <div className="absolute top-[18px] h-3 w-3 rotate-45 bg-orange-200" />
+        <Shield className="mt-7 h-5 w-5 text-emerald-100" />
       </div>
       <div>
         <p className="text-xl font-black tracking-tight text-white">SI 6ª CIA</p>
@@ -175,7 +178,7 @@ function Login({ onLogin }) {
           <h1 className="text-5xl font-black tracking-tight text-white drop-shadow-2xl">SI 6ª CIA</h1>
           <p className="mt-3 text-sm font-semibold uppercase tracking-[0.22em] text-orange-200">Observar • Analisar • Antecipar</p>
         </div>
-        <div className="rounded-[2rem] border border-orange-500/30 bg-black/70 p-8 shadow-2xl shadow-orange-950/50 backdrop-blur-2xl ring-1 ring-white/10">
+        <div className="rounded-3xl border border-orange-500/30 bg-black/72 p-8 shadow-2xl shadow-orange-950/50 backdrop-blur-xl">
           <div className="mb-8 text-center">
             <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-orange-600 shadow-lg shadow-orange-700/40 ring-1 ring-orange-300/40"><Eye className="h-9 w-9 text-white" /></div>
             <h2 className="text-2xl font-black tracking-tight text-white">Acesso Restrito</h2>
@@ -194,16 +197,10 @@ function Login({ onLogin }) {
 
 function StatCard({ label, value, icon: Icon, className }) {
   return (
-    <Card className={`${className} border-0 text-white shadow-xl si-hover overflow-hidden`}>
-      <CardContent className="relative flex min-h-[112px] items-center justify-between p-5">
-        <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-white/10" />
-        <div className="relative z-10">
-          <p className="text-sm font-black uppercase tracking-wide opacity-90">{label}</p>
-          <p className="mt-1 text-4xl font-black">{value}</p>
-        </div>
-        <div className="relative z-10 rounded-2xl bg-white/15 p-3 ring-1 ring-white/20">
-          <Icon className="h-9 w-9 opacity-95" />
-        </div>
+    <Card className={`${className} border-0 text-white shadow-lg transition hover:scale-[1.02]`}>
+      <CardContent className="flex items-center justify-between p-5">
+        <div><p className="text-sm font-bold opacity-90">{label}</p><p className="mt-1 text-3xl font-black">{value}</p></div>
+        <Icon className="h-10 w-10 opacity-90" />
       </CardContent>
     </Card>
   );
@@ -243,7 +240,7 @@ function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMon
   };
 
   return (
-    <Card className="rounded-[2rem] border-0 operational-card si-hover">
+    <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
       <CardContent className="p-6">
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -277,7 +274,7 @@ function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMon
                 const statusClass = hasLate ? "border-red-300 bg-red-50" : hasRisk ? "border-yellow-300 bg-yellow-50" : allDone ? "border-green-300 bg-green-50" : dayTasks.length > 0 ? "border-blue-300 bg-blue-50" : "bg-white";
                 return (
                   <button type="button" key={`${date || "blank"}-${index}`} disabled={!date} onClick={() => date && (setSelectedDate(date), setDayPanelMode("view"), setDayPanelOpen(true))}
-                    className={`min-h-28 rounded-2xl border p-2 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl ${isSelected ? "border-orange-600 bg-orange-50 ring-2 ring-orange-200" : statusClass} ${!date ? "cursor-default opacity-0" : ""}`}>
+                    className={`min-h-28 rounded-2xl border p-2 text-left transition hover:-translate-y-0.5 hover:shadow-lg ${isSelected ? "border-orange-600 bg-orange-50 ring-2 ring-orange-200" : statusClass} ${!date ? "cursor-default opacity-0" : ""}`}>
                     <div className="flex items-center justify-between">
                       <span className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-black ${isSelected ? "bg-orange-600 text-white" : "bg-slate-100"}`}>{date ? Number(date.slice(8,10)) : ""}</span>
                       {dayTasks.length > 0 && <span className="rounded-full bg-emerald-950 px-2 py-0.5 text-xs font-bold text-white">{dayTasks.length}</span>}
@@ -402,7 +399,7 @@ function UserManagement({ users = [], addUser, deleteUser, toggleUserStatus }) {
   return (
     <SafeBlock title="Falha ao abrir cadastro de usuários">
       <div className="space-y-6">
-        <section className="overflow-hidden rounded-[2rem] si-gradient-dark text-white shadow-2xl">
+        <section className="overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-950 via-slate-950 to-black text-white shadow-2xl">
           <div className="relative p-7">
             <div className="absolute right-8 top-6 text-8xl opacity-10">🦉</div>
             <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
@@ -412,7 +409,7 @@ function UserManagement({ users = [], addUser, deleteUser, toggleUserStatus }) {
                 <p className="mt-2 max-w-2xl text-sm text-emerald-100">Gerencie perfis, responsáveis, gestores, analistas e colaboradores. Esta tela é exclusiva do administrador.</p>
               </div>
               <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="rounded-3xl tv-card px-5 py-4 ring-1 ring-white/10"><p className="text-3xl font-black">{safeUsers.length}</p><p className="text-xs text-emerald-100">Total</p></div>
+                <div className="rounded-3xl bg-white/10 px-5 py-4 ring-1 ring-white/10"><p className="text-3xl font-black">{safeUsers.length}</p><p className="text-xs text-emerald-100">Total</p></div>
                 <div className="rounded-3xl bg-green-500/20 px-5 py-4 ring-1 ring-green-300/20"><p className="text-3xl font-black">{activeUsers}</p><p className="text-xs text-green-100">Ativos</p></div>
                 <div className="rounded-3xl bg-orange-500/20 px-5 py-4 ring-1 ring-orange-300/20"><p className="text-3xl font-black">{admins}</p><p className="text-xs text-orange-100">Admins</p></div>
               </div>
@@ -421,7 +418,7 @@ function UserManagement({ users = [], addUser, deleteUser, toggleUserStatus }) {
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[430px_1fr]">
-          <Card className="rounded-[2rem] border-0 operational-card si-hover">
+          <Card className="rounded-[2rem] border-0 bg-white/95 soft-card ring-1 ring-slate-200/70">
             <CardContent className="p-6">
               <h3 className="mb-1 flex items-center gap-2 text-xl font-black"><Settings className="h-5 w-5 text-orange-600" /> Novo usuário</h3>
               <p className="mb-5 text-sm text-slate-500">Crie um usuário que poderá receber demandas e acessar o sistema.</p>
@@ -447,7 +444,7 @@ function UserManagement({ users = [], addUser, deleteUser, toggleUserStatus }) {
             </CardContent>
           </Card>
 
-          <Card className="rounded-[2rem] border-0 operational-card si-hover">
+          <Card className="rounded-[2rem] border-0 bg-white/95 soft-card ring-1 ring-slate-200/70">
             <CardContent className="p-6">
               <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
@@ -516,7 +513,7 @@ function DemandCenter({ status, tasks, onBack, updateTaskStatus, deleteTask, dup
   const selectedTask = visibleTasks.find((task) => task.id === selectedId) || visibleTasks[0];
   const title = status === "Todas" ? "CENTRAL DE DEMANDAS" : `DEMANDAS ${status.toUpperCase()}`;
   return (
-    <Card className="rounded-[2rem] border-0 operational-card si-hover">
+    <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
       <CardContent className="p-6">
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><h2 className="flex items-center gap-2 text-2xl font-black"><ClipboardCheck className="h-6 w-6 text-orange-600" /> {title}</h2><p className="text-sm text-slate-500">Tela aberta pelo card do dashboard, com demandas filtradas por status.</p></div><Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao painel</Button></div>
         <div className="mb-4 grid gap-3 md:grid-cols-4"><Input className="md:col-span-2" placeholder="Pesquisar demanda, responsável ou workflow" value={query} onChange={(e) => setQuery(e.target.value)} /><div className="rounded-2xl bg-emerald-950 px-4 py-3 text-center font-bold text-white">{visibleTasks.length} demandas</div><Button className="bg-orange-600 hover:bg-orange-700" onClick={() => alert("Use o calendário para criar uma nova demanda.")}><Plus className="mr-2 h-4 w-4" /> Nova demanda</Button></div>
@@ -546,7 +543,7 @@ function ProcessTracker({ tasks, workflows, setTaskWorkflow, setTaskStatus }) {
 }
 
 function AuditPanel({ logs }) {
-  return <Card className="rounded-[2rem] border-0 operational-card si-hover"><CardContent className="p-6"><div className="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div><h2 className="flex items-center gap-2 text-xl font-black"><Activity className="h-5 w-5 text-orange-600" /> Auditoria do sistema</h2><p className="text-sm text-slate-500">Histórico de ações registradas no Supabase.</p></div><Badge tone="dark">{logs.length} registros</Badge></div><div className="max-h-[520px] space-y-3 overflow-auto pr-1">{logs.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">Nenhuma ação registrada ainda.</div>}{logs.map((log)=><div key={log.id} className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between"><div><p className="text-sm font-black text-slate-900">{log.action}</p><p className="mt-1 text-sm text-slate-600">{log.details}</p><p className="mt-2 text-xs text-slate-500">Usuário: <b>{log.user_name}</b> • Perfil: <b>{log.user_role}</b></p></div><Badge tone="medium">{new Date(log.created_at).toLocaleString("pt-BR")}</Badge></div></div>)}</div></CardContent></Card>
+  return <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70"><CardContent className="p-6"><div className="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div><h2 className="flex items-center gap-2 text-xl font-black"><Activity className="h-5 w-5 text-orange-600" /> Auditoria do sistema</h2><p className="text-sm text-slate-500">Histórico de ações registradas no Supabase.</p></div><Badge tone="dark">{logs.length} registros</Badge></div><div className="max-h-[520px] space-y-3 overflow-auto pr-1">{logs.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">Nenhuma ação registrada ainda.</div>}{logs.map((log)=><div key={log.id} className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between"><div><p className="text-sm font-black text-slate-900">{log.action}</p><p className="mt-1 text-sm text-slate-600">{log.details}</p><p className="mt-2 text-xs text-slate-500">Usuário: <b>{log.user_name}</b> • Perfil: <b>{log.user_role}</b></p></div><Badge tone="medium">{new Date(log.created_at).toLocaleString("pt-BR")}</Badge></div></div>)}</div></CardContent></Card>
 }
 
 function TVPanel({ tasks, users, counts, onClose }) {
@@ -573,10 +570,10 @@ function TVPanel({ tasks, users, counts, onClose }) {
     .slice(0, 5);
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-auto tv-bg p-6 text-white tv-scale">
+    <div className="fixed inset-0 z-[100] overflow-auto bg-[#020617] p-6 text-white">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(234,88,12,0.22),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(16,185,129,0.18),transparent_30%)]" />
       <div className="relative mx-auto max-w-7xl space-y-6">
-        <section className="overflow-hidden rounded-[2rem] tv-card p-6 shadow-2xl backdrop-blur">
+        <section className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur">
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-4">
               <div className="flex h-20 w-20 items-center justify-center rounded-[1.7rem] bg-orange-600 text-4xl shadow-xl shadow-orange-950/40">🦉</div>
@@ -587,7 +584,7 @@ function TVPanel({ tasks, users, counts, onClose }) {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <div className="rounded-3xl tv-card px-5 py-3 text-right ring-1 ring-white/10">
+              <div className="rounded-3xl bg-white/10 px-5 py-3 text-right ring-1 ring-white/10">
                 <p className="text-xs uppercase tracking-[0.25em] text-slate-300">Atualizado</p>
                 <p className="text-lg font-black">{now.toLocaleString("pt-BR")}</p>
               </div>
@@ -605,7 +602,7 @@ function TVPanel({ tasks, users, counts, onClose }) {
         </section>
 
         <section className="grid gap-6 lg:grid-cols-[1fr_1fr_1fr]">
-          <div className="rounded-[2rem] tv-card p-6 backdrop-blur">
+          <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
             <p className="text-sm font-black uppercase tracking-[0.25em] text-orange-300">Resumo operacional</p>
             <div className="mt-5 grid gap-3">
               <div className="flex justify-between rounded-2xl bg-white/10 p-4"><span>Total de demandas</span><b>{tasks.length}</b></div>
@@ -636,10 +633,10 @@ function TVPanel({ tasks, users, counts, onClose }) {
           </div>
         </section>
 
-        <section className="rounded-[2rem] tv-card p-6 backdrop-blur">
+        <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
           <p className="mb-5 text-sm font-black uppercase tracking-[0.25em] text-emerald-300">Pendências por responsável</p>
           <div className="grid gap-3 md:grid-cols-5">
-            {topResponsible.map((item)=><div key={item.label} className="rounded-3xl tv-card p-5 text-center ring-1 ring-white/10"><p className="text-4xl font-black">{item.total}</p><p className="mt-1 text-sm text-slate-300">{item.label}</p></div>)}
+            {topResponsible.map((item)=><div key={item.label} className="rounded-3xl bg-white/10 p-5 text-center ring-1 ring-white/10"><p className="text-4xl font-black">{item.total}</p><p className="mt-1 text-sm text-slate-300">{item.label}</p></div>)}
             {topResponsible.length===0 && <p className="text-sm text-slate-300">Nenhum responsável ativo encontrado.</p>}
           </div>
         </section>
@@ -732,7 +729,7 @@ function ExecutiveDashboard({ tasks, users, counts }) {
 
   return (
     <section className="space-y-6">
-      <div className="overflow-hidden rounded-[2rem] si-gradient-dark text-white shadow-2xl">
+      <div className="overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-950 via-slate-950 to-black text-white shadow-2xl">
         <div className="relative p-7">
           <div className="absolute right-8 top-6 text-8xl opacity-10">📊</div>
           <p className="text-xs font-black uppercase tracking-[0.35em] text-orange-300">Dashboard executivo</p>
@@ -765,7 +762,7 @@ function ExecutiveDashboard({ tasks, users, counts }) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-        <Card className="rounded-[2rem] border-0 operational-card si-hover">
+        <Card className="rounded-[2rem] border-0 bg-white/95 soft-card ring-1 ring-slate-200/70">
           <CardContent className="p-6">
             <h3 className="mb-5 text-xl font-black">Produtividade por responsável</h3>
             <div className="space-y-3">
@@ -791,7 +788,7 @@ function ExecutiveDashboard({ tasks, users, counts }) {
           </CardContent>
         </Card>
 
-        <Card className="rounded-[2rem] border-0 operational-card si-hover">
+        <Card className="rounded-[2rem] border-0 bg-white/95 soft-card ring-1 ring-slate-200/70">
           <CardContent className="p-6">
             <h3 className="mb-5 text-xl font-black">Distribuição por tipo</h3>
             <div className="space-y-3">
@@ -1128,27 +1125,6 @@ export default function App() {
 
         {currentView === "painel" && (
           <>
-
-        {currentView === "painel" && !demandScreenStatus && (
-          <section className="overflow-hidden rounded-[2rem] si-gradient-dark p-6 text-white shadow-2xl">
-            <div className="relative">
-              <div className="absolute -right-4 -top-6 text-8xl opacity-10">🦉</div>
-              <div className="relative z-10 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.35em] text-orange-300">Centro de inteligência</p>
-                  <h1 className="mt-2 text-3xl font-black md:text-4xl">Painel operacional SI 6ª CIA</h1>
-                  <p className="mt-2 max-w-2xl text-sm text-emerald-100">Gestão visual de demandas, prazos, responsáveis, workflow e auditoria operacional.</p>
-                </div>
-                <div className="grid grid-cols-3 gap-3 text-center">
-                  <div className="rounded-3xl bg-white/10 px-5 py-4 ring-1 ring-white/10"><p className="text-3xl font-black">{tasks.length}</p><p className="text-xs text-emerald-100">Demandas</p></div>
-                  <div className="rounded-3xl bg-red-500/20 px-5 py-4 ring-1 ring-red-300/20"><p className="text-3xl font-black">{counts["Atrasada"] || 0}</p><p className="text-xs text-red-100">Atrasadas</p></div>
-                  <div className="rounded-3xl bg-yellow-500/20 px-5 py-4 ring-1 ring-yellow-300/20"><p className="text-3xl font-black">{counts["Risco de prazo"] || 0}</p><p className="text-xs text-yellow-100">Risco</p></div>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
             <section className="grid gap-4 md:grid-cols-5">
               <button type="button" onClick={() => openDemandScreen("A fazer")}><StatCard label="A fazer" value={counts["A fazer"] || 0} icon={ListChecks} className="bg-blue-500" /></button>
               <button type="button" onClick={() => openDemandScreen("Atrasada")}><StatCard label="Atrasadas" value={counts["Atrasada"] || 0} icon={AlertTriangle} className="bg-red-500" /></button>
@@ -1164,7 +1140,7 @@ export default function App() {
             )}
 
             <section className="grid gap-6 lg:grid-cols-[360px_1fr]">
-              <Card className="rounded-[2rem] border-0 operational-card si-hover">
+              <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
                 <CardContent className="space-y-5 p-6">
                   <div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-orange-600" /><h2 className="text-xl font-black">Calendário e nova demanda</h2></div>
                   <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
@@ -1175,7 +1151,7 @@ export default function App() {
                 </CardContent>
               </Card>
 
-              <Card className="rounded-[2rem] border-0 operational-card si-hover">
+              <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
                 <CardContent className="p-6">
                   <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div><h2 className="flex items-center gap-2 text-xl font-black"><LayoutDashboard className="h-5 w-5 text-orange-600" /> Tela de tarefas</h2><p className="text-sm text-slate-500">Demandas feitas, pendentes, workflow, checklist e responsáveis.</p></div>
@@ -1194,7 +1170,7 @@ export default function App() {
             </section>
 
             <section className="grid gap-6 lg:grid-cols-2">
-              <Card className="rounded-[2rem] border-0 operational-card si-hover">
+              <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
                 <CardContent className="p-6">
                   <h2 className="mb-2 flex items-center gap-2 text-xl font-black"><Filter className="h-5 w-5 text-orange-600" /> Workflow das tarefas</h2>
                   <p className="mb-4 text-sm text-slate-500">Crie novas etapas de workflow para organizar as demandas.</p>
@@ -1210,7 +1186,7 @@ export default function App() {
         {currentView === "dashboard" && permissions.dashboard && <ExecutiveDashboard tasks={tasks} users={users} counts={counts} />}
         {currentView === "dashboard" && !permissions.dashboard && <PermissionCard title="Acesso restrito" description="Seu perfil não possui permissão para acessar o dashboard executivo." />}
         {currentView === "usuarios" && isAdmin && <UserManagement users={users} addUser={addUser} deleteUser={deleteUser} toggleUserStatus={toggleUserStatus} />}
-        {currentView === "usuarios" && !isAdmin && <Card className="rounded-[2rem] border-0 operational-card si-hover"><CardContent className="p-6"><h2 className="text-xl font-black text-red-600">Acesso restrito</h2><p className="mt-2 text-sm text-slate-500">Somente o administrador pode acessar o cadastro e gestão de usuários.</p></CardContent></Card>}
+        {currentView === "usuarios" && !isAdmin && <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70"><CardContent className="p-6"><h2 className="text-xl font-black text-red-600">Acesso restrito</h2><p className="mt-2 text-sm text-slate-500">Somente o administrador pode acessar o cadastro e gestão de usuários.</p></CardContent></Card>}
         {currentView === "auditoria" && permissions.audit && <AuditPanel logs={auditLogs} />}
         {currentView === "auditoria" && !permissions.audit && <PermissionCard title="Acesso restrito" description="Seu perfil não possui permissão para visualizar auditoria." />}
       </main>
