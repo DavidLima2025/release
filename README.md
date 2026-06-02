@@ -1,16 +1,15 @@
-# SI 6ª CIA - Visual Tailwind
+# SI 6ª CIA
 
-Este pacote deixa o projeto com o visual do arquivo enviado.
+Projeto React + Vite + Supabase.
 
-Arquivos principais:
-- src/App.tsx
-- src/styles.css
-- src/components/ui/button.tsx
-- src/components/ui/card.tsx
-- src/components/ui/input.tsx
-- tailwind.config.js
-- postcss.config.js
-- package.json
-- vite.config.ts
-- tsconfig.json
-.
+## Deploy Vercel
+
+Framework: Vite  
+Install Command: npm install  
+Build Command: npm run build  
+Output Directory: dist
+
+## Variáveis de ambiente
+
+VITE_SUPABASE_URL  
+VITE_SUPABASE_ANON_KEY
