@@ -5,6 +5,7 @@ create table if not exists audit_logs (
   user_role text,
   action text not null,
   details text,
+  user_agent text,
   created_at timestamptz not null default now()
 );
 
@@ -25,3 +26,6 @@ create policy allow_app_users_update on app_users for update to anon using (true
 
 drop policy if exists allow_app_users_delete on app_users;
 create policy allow_app_users_delete on app_users for delete to anon using (true);
+
+
+alter table audit_logs add column if not exists user_agent text;
