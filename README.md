@@ -13,3 +13,4 @@ Arquivos principais:
 - package.json
 - vite.config.ts
 - tsconfig.json
+.
