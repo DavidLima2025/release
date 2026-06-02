@@ -182,7 +182,7 @@ function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMon
   };
 
   return (
-    <Card className="rounded-3xl border-0 shadow-sm">
+    <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
       <CardContent className="p-6">
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -255,9 +255,9 @@ function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMon
               <div className="sticky top-0 z-10 flex flex-col gap-3 border-b bg-emerald-950 p-5 text-white md:flex-row md:items-center md:justify-between">
                 <div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-300">Calendário visual</p><h3 className="text-2xl font-black">{selectedDate.split("-").reverse().join("/")}</h3></div>
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="secondary" onClick={() => setDayPanelMode("create")} className="bg-orange-600 text-white hover:bg-orange-700"><Plus className="mr-2 h-4 w-4" /> Cadastrar demanda</Button>
-                  <Button variant="secondary" onClick={() => setDayPanelMode("view")} className="bg-white/10 text-white hover:bg-white/20"><FileText className="mr-2 h-4 w-4" /> Ver demandas</Button>
-                  <Button variant="secondary" onClick={() => setDayPanelOpen(false)} className="bg-white text-emerald-950 hover:bg-slate-100">Fechar</Button>
+                  <Button variant="secondary" onClick={() => setDayPanelMode("create")} className="!bg-orange-600 !text-white hover:!bg-orange-700 shadow-lg shadow-orange-900/20"><Plus className="mr-2 h-4 w-4" /> Cadastrar demanda</Button>
+                  <Button variant="secondary" onClick={() => setDayPanelMode("view")} className="!bg-white/10 !text-white hover:!bg-white/20 ring-1 ring-white/10"><FileText className="mr-2 h-4 w-4" /> Ver demandas</Button>
+                  <Button variant="secondary" onClick={() => setDayPanelOpen(false)} className="!bg-white !text-emerald-950 hover:!bg-slate-100 shadow-lg">Fechar</Button>
                 </div>
               </div>
               <div className="p-5">
@@ -328,7 +328,7 @@ function UserManagement({ users, addUser, deleteUser, toggleUserStatus }) {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[430px_1fr]">
-        <Card className="rounded-[2rem] border-0 bg-white shadow-xl">
+        <Card className="rounded-[2rem] border-0 bg-white/95 soft-card ring-1 ring-slate-200/70">
           <CardContent className="p-6">
             <h3 className="mb-1 flex items-center gap-2 text-xl font-black"><Settings className="h-5 w-5 text-orange-600" /> Novo usuário</h3>
             <p className="mb-5 text-sm text-slate-500">Crie um usuário que poderá receber demandas e acessar o sistema.</p>
@@ -354,7 +354,7 @@ function UserManagement({ users, addUser, deleteUser, toggleUserStatus }) {
           </CardContent>
         </Card>
 
-        <Card className="rounded-[2rem] border-0 bg-white shadow-xl">
+        <Card className="rounded-[2rem] border-0 bg-white/95 soft-card ring-1 ring-slate-200/70">
           <CardContent className="p-6">
             <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
@@ -419,7 +419,7 @@ function DemandCenter({ status, tasks, onBack, updateTaskStatus, deleteTask, dup
   const selectedTask = visibleTasks.find((task) => task.id === selectedId) || visibleTasks[0];
   const title = status === "Todas" ? "CENTRAL DE DEMANDAS" : `DEMANDAS ${status.toUpperCase()}`;
   return (
-    <Card className="rounded-3xl border-0 shadow-sm">
+    <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
       <CardContent className="p-6">
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><h2 className="flex items-center gap-2 text-2xl font-black"><ClipboardCheck className="h-6 w-6 text-orange-600" /> {title}</h2><p className="text-sm text-slate-500">Tela aberta pelo card do dashboard, com demandas filtradas por status.</p></div><Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao painel</Button></div>
         <div className="mb-4 grid gap-3 md:grid-cols-4"><Input className="md:col-span-2" placeholder="Pesquisar demanda, responsável ou workflow" value={query} onChange={(e) => setQuery(e.target.value)} /><div className="rounded-2xl bg-emerald-950 px-4 py-3 text-center font-bold text-white">{visibleTasks.length} demandas</div><Button className="bg-orange-600 hover:bg-orange-700" onClick={() => alert("Use o calendário para criar uma nova demanda.")}><Plus className="mr-2 h-4 w-4" /> Nova demanda</Button></div>
@@ -449,10 +449,16 @@ function ProcessTracker({ tasks, workflows, setTaskWorkflow, setTaskStatus }) {
 }
 
 function AuditPanel({ logs }) {
-  return <Card className="rounded-3xl border-0 shadow-sm"><CardContent className="p-6"><div className="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div><h2 className="flex items-center gap-2 text-xl font-black"><Activity className="h-5 w-5 text-orange-600" /> Auditoria do sistema</h2><p className="text-sm text-slate-500">Histórico de ações registradas no Supabase.</p></div><Badge tone="dark">{logs.length} registros</Badge></div><div className="max-h-[520px] space-y-3 overflow-auto pr-1">{logs.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">Nenhuma ação registrada ainda.</div>}{logs.map((log)=><div key={log.id} className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between"><div><p className="text-sm font-black text-slate-900">{log.action}</p><p className="mt-1 text-sm text-slate-600">{log.details}</p><p className="mt-2 text-xs text-slate-500">Usuário: <b>{log.user_name}</b> • Perfil: <b>{log.user_role}</b></p></div><Badge tone="medium">{new Date(log.created_at).toLocaleString("pt-BR")}</Badge></div></div>)}</div></CardContent></Card>
+  return <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70"><CardContent className="p-6"><div className="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div><h2 className="flex items-center gap-2 text-xl font-black"><Activity className="h-5 w-5 text-orange-600" /> Auditoria do sistema</h2><p className="text-sm text-slate-500">Histórico de ações registradas no Supabase.</p></div><Badge tone="dark">{logs.length} registros</Badge></div><div className="max-h-[520px] space-y-3 overflow-auto pr-1">{logs.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">Nenhuma ação registrada ainda.</div>}{logs.map((log)=><div key={log.id} className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between"><div><p className="text-sm font-black text-slate-900">{log.action}</p><p className="mt-1 text-sm text-slate-600">{log.details}</p><p className="mt-2 text-xs text-slate-500">Usuário: <b>{log.user_name}</b> • Perfil: <b>{log.user_role}</b></p></div><Badge tone="medium">{new Date(log.created_at).toLocaleString("pt-BR")}</Badge></div></div>)}</div></CardContent></Card>
 }
 
 function TVPanel({ tasks, users, counts, onClose }) {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const pending = tasks.filter((t) => t.status !== "Concluída").length;
   const activeUsers = users.filter((u) => u.status === "Ativo").length;
   const lateTasks = tasks.filter((t) => t.status === "Atrasada");
@@ -478,7 +484,7 @@ function TVPanel({ tasks, users, counts, onClose }) {
             <div className="flex items-center gap-4">
               <div className="flex h-20 w-20 items-center justify-center rounded-[1.7rem] bg-orange-600 text-4xl shadow-xl shadow-orange-950/40">🦉</div>
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.45em] text-orange-300">Monitoramento integrado</p>
+                <p className="text-xs font-black uppercase tracking-[0.45em] text-orange-300">● Ao vivo • atualização automática</p>
                 <h1 className="mt-1 text-5xl font-black tracking-tight">SI 6ª CIA</h1>
                 <p className="mt-1 text-sm text-emerald-200">Demandas • prazos • responsáveis • risco operacional</p>
               </div>
@@ -486,7 +492,7 @@ function TVPanel({ tasks, users, counts, onClose }) {
             <div className="flex flex-wrap items-center gap-3">
               <div className="rounded-3xl bg-white/10 px-5 py-3 text-right ring-1 ring-white/10">
                 <p className="text-xs uppercase tracking-[0.25em] text-slate-300">Atualizado</p>
-                <p className="text-lg font-black">{new Date().toLocaleString("pt-BR")}</p>
+                <p className="text-lg font-black">{now.toLocaleString("pt-BR")}</p>
               </div>
               <Button onClick={onClose} className="bg-white text-slate-950 hover:bg-slate-200">Fechar TV</Button>
             </div>
@@ -607,7 +613,15 @@ export default function App() {
       .on("postgres_changes", { event: "*", schema: "public", table: "demands" }, loadData)
       .on("postgres_changes", { event: "*", schema: "public", table: "audit_logs" }, loadData)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    const refreshTimer = window.setInterval(() => {
+      loadData();
+    }, 15000);
+
+    return () => {
+      window.clearInterval(refreshTimer);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const filteredTasks = useMemo(() => tasks.filter((task) => {
@@ -800,19 +814,19 @@ export default function App() {
   if (!logged) return <Login onLogin={handleLogin} />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50 text-slate-900">
+    <div className="min-h-screen operational-bg text-slate-900">
       {tvOpen && <TVPanel tasks={tasks} users={users} counts={counts} onClose={() => setTvOpen(false)} />}
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-emerald-950/95 px-6 py-5 shadow-xl backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-emerald-950/95 px-6 py-5 shadow-2xl shadow-emerald-950/20 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <OwlLogo />
           <div className="flex flex-wrap items-center gap-3 text-sm text-emerald-100">
             <Badge tone="dark"><UserRound className="mr-1 inline h-3 w-3" /> {currentUser?.warName || currentUser?.name || "Usuário"}</Badge>
             <Badge tone="dark"><Users className="mr-1 inline h-3 w-3" /> {users.filter((user) => user.status === "Ativo").length} usuários ativos</Badge>
-            <Button variant="secondary" className="bg-white/10 text-white hover:bg-white/20" onClick={() => { setCurrentView("painel"); setDemandScreenStatus(null); }}>Painel</Button>
-            {isAdmin && <Button variant="secondary" className="bg-white/10 text-white hover:bg-white/20" onClick={() => { setCurrentView("usuarios"); setDemandScreenStatus(null); }}>Usuários</Button>}
-            <Button variant="secondary" className="bg-white/10 text-white hover:bg-white/20" onClick={() => { setCurrentView("auditoria"); setDemandScreenStatus(null); }}>Auditoria</Button>
-            <Button variant="secondary" className="bg-orange-600 text-white hover:bg-orange-700" onClick={() => setTvOpen(true)}>Tela TV</Button>
-            <Button variant="secondary" className="bg-white/10 text-white hover:bg-white/20" onClick={() => { setLogged(false); setCurrentUser(null); localStorage.removeItem("si6_session_user"); }}>Sair</Button>
+            <Button variant="secondary" className="!bg-white/10 !text-white hover:!bg-white/20 ring-1 ring-white/10" onClick={() => { setCurrentView("painel"); setDemandScreenStatus(null); }}>Painel</Button>
+            {isAdmin && <Button variant="secondary" className="!bg-white/10 !text-white hover:!bg-white/20 ring-1 ring-white/10" onClick={() => { setCurrentView("usuarios"); setDemandScreenStatus(null); }}>Usuários</Button>}
+            <Button variant="secondary" className="!bg-white/10 !text-white hover:!bg-white/20 ring-1 ring-white/10" onClick={() => { setCurrentView("auditoria"); setDemandScreenStatus(null); }}>Auditoria</Button>
+            <Button variant="secondary" className="!bg-orange-600 !text-white hover:!bg-orange-700 shadow-lg shadow-orange-900/20" onClick={() => setTvOpen(true)}>Tela TV</Button>
+            <Button variant="secondary" className="!bg-white/10 !text-white hover:!bg-white/20 ring-1 ring-white/10" onClick={() => { setLogged(false); setCurrentUser(null); localStorage.removeItem("si6_session_user"); }}>Sair</Button>
           </div>
         </div>
       </header>
@@ -837,7 +851,7 @@ export default function App() {
             )}
 
             <section className="grid gap-6 lg:grid-cols-[360px_1fr]">
-              <Card className="rounded-3xl border-0 shadow-sm">
+              <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
                 <CardContent className="space-y-5 p-6">
                   <div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-orange-600" /><h2 className="text-xl font-black">Calendário e nova demanda</h2></div>
                   <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
@@ -848,7 +862,7 @@ export default function App() {
                 </CardContent>
               </Card>
 
-              <Card className="rounded-3xl border-0 shadow-sm">
+              <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
                 <CardContent className="p-6">
                   <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div><h2 className="flex items-center gap-2 text-xl font-black"><LayoutDashboard className="h-5 w-5 text-orange-600" /> Tela de tarefas</h2><p className="text-sm text-slate-500">Demandas feitas, pendentes, workflow, checklist e responsáveis.</p></div>
@@ -867,7 +881,7 @@ export default function App() {
             </section>
 
             <section className="grid gap-6 lg:grid-cols-2">
-              <Card className="rounded-3xl border-0 shadow-sm">
+              <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
                 <CardContent className="p-6">
                   <h2 className="mb-2 flex items-center gap-2 text-xl font-black"><Filter className="h-5 w-5 text-orange-600" /> Workflow das tarefas</h2>
                   <p className="mb-4 text-sm text-slate-500">Crie novas etapas de workflow para organizar as demandas.</p>
@@ -881,7 +895,7 @@ export default function App() {
         )}
 
         {currentView === "usuarios" && isAdmin && <UserManagement users={users} addUser={addUser} deleteUser={deleteUser} toggleUserStatus={toggleUserStatus} />}
-        {currentView === "usuarios" && !isAdmin && <Card className="rounded-3xl border-0 shadow-sm"><CardContent className="p-6"><h2 className="text-xl font-black text-red-600">Acesso restrito</h2><p className="mt-2 text-sm text-slate-500">Somente o administrador pode acessar o cadastro e gestão de usuários.</p></CardContent></Card>}
+        {currentView === "usuarios" && !isAdmin && <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70"><CardContent className="p-6"><h2 className="text-xl font-black text-red-600">Acesso restrito</h2><p className="mt-2 text-sm text-slate-500">Somente o administrador pode acessar o cadastro e gestão de usuários.</p></CardContent></Card>}
         {currentView === "auditoria" && <AuditPanel logs={auditLogs} />}
       </main>
     </div>
