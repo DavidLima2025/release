@@ -295,46 +295,123 @@ function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMon
 function UserManagement({ users, addUser, deleteUser, toggleUserStatus }) {
   const emptyForm = { name: "", warName: "", register: "", unit: "", role: "Analista", email: "", phone: "", login: "", password: "", status: "Ativo" };
   const [form, setForm] = useState(emptyForm);
+  const [query, setQuery] = useState("");
   const activeUsers = users.filter((user) => user.status === "Ativo").length;
   const inactiveUsers = users.length - activeUsers;
+  const admins = users.filter((user) => (user.role || "").toLowerCase().includes("administrador")).length;
+  const filteredUsers = users.filter((user) => `${user.name} ${user.warName} ${user.login} ${user.role} ${user.unit}`.toLowerCase().includes(query.toLowerCase()));
+
   const updateForm = (field, value) => setForm({ ...form, [field]: value });
   const saveUser = () => {
     if (!form.name.trim() || !form.login.trim() || !form.password.trim()) return alert("Informe nome completo, login e senha provisória.");
     addUser(form); setForm(emptyForm);
   };
+
   return (
-    <Card className="rounded-3xl border-0 shadow-sm">
-      <CardContent className="p-6">
-        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div><h2 className="flex items-center gap-2 text-xl font-black"><UserPlus className="h-5 w-5 text-orange-600" /> Cadastro e gestão de usuários</h2><p className="text-sm text-slate-500">Controle de acesso, responsáveis, gestores, analistas e colaboradores.</p></div>
-          <div className="grid grid-cols-3 gap-2 text-center text-sm"><div className="rounded-2xl bg-emerald-950 px-4 py-3 text-white"><p className="text-2xl font-black">{users.length}</p><p>Total</p></div><div className="rounded-2xl bg-green-600 px-4 py-3 text-white"><p className="text-2xl font-black">{activeUsers}</p><p>Ativos</p></div><div className="rounded-2xl bg-zinc-600 px-4 py-3 text-white"><p className="text-2xl font-black">{inactiveUsers}</p><p>Inativos</p></div></div>
-        </div>
-        <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-          <div className="rounded-2xl border bg-white p-4">
-            <h3 className="mb-4 flex items-center gap-2 font-black"><Settings className="h-4 w-4 text-orange-600" /> Novo usuário</h3>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
-              <Input placeholder="Nome completo" value={form.name} onChange={(e) => updateForm("name", e.target.value)} />
-              <Input placeholder="Nome de guerra" value={form.warName} onChange={(e) => updateForm("warName", e.target.value)} />
-              <Input placeholder="Matrícula" value={form.register} onChange={(e) => updateForm("register", e.target.value)} />
-              <Input placeholder="Unidade" value={form.unit} onChange={(e) => updateForm("unit", e.target.value)} />
-              <select value={form.role} onChange={(e) => updateForm("role", e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm">{userRoles.map((role)=><option key={role}>{role}</option>)}</select>
-              <Input placeholder="E-mail" value={form.email} onChange={(e) => updateForm("email", e.target.value)} />
-              <Input placeholder="Telefone" value={form.phone} onChange={(e) => updateForm("phone", e.target.value)} />
-              <Input placeholder="Login" value={form.login} onChange={(e) => updateForm("login", e.target.value)} />
-              <Input placeholder="Senha provisória" type="password" value={form.password} onChange={(e) => updateForm("password", e.target.value)} />
-              <select value={form.status} onChange={(e) => updateForm("status", e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option>Ativo</option><option>Inativo</option></select>
-              <Button onClick={saveUser} className="bg-orange-600 hover:bg-orange-700"><UserPlus className="mr-2 h-4 w-4" /> Cadastrar usuário</Button>
+    <div className="space-y-6">
+      <section className="overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-950 via-slate-950 to-black text-white shadow-2xl">
+        <div className="relative p-7">
+          <div className="absolute right-8 top-6 text-8xl opacity-10">🦉</div>
+          <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.35em] text-orange-300">Administração do sistema</p>
+              <h2 className="mt-2 text-3xl font-black">Cadastro e gestão de usuários</h2>
+              <p className="mt-2 max-w-2xl text-sm text-emerald-100">Gerencie perfis, responsáveis, gestores, analistas e colaboradores. Esta tela é exclusiva do administrador.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="rounded-3xl bg-white/10 px-5 py-4 ring-1 ring-white/10"><p className="text-3xl font-black">{users.length}</p><p className="text-xs text-emerald-100">Total</p></div>
+              <div className="rounded-3xl bg-green-500/20 px-5 py-4 ring-1 ring-green-300/20"><p className="text-3xl font-black">{activeUsers}</p><p className="text-xs text-green-100">Ativos</p></div>
+              <div className="rounded-3xl bg-orange-500/20 px-5 py-4 ring-1 ring-orange-300/20"><p className="text-3xl font-black">{admins}</p><p className="text-xs text-orange-100">Admins</p></div>
             </div>
           </div>
-          <div className="space-y-3">
-            {users.map((user)=><div key={user.id} className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-black">{user.warName || user.name}</h3><Badge tone={user.status === "Ativo" ? "low" : "default"}>{user.status}</Badge><Badge tone={user.role === "Administrador" ? "high" : user.role === "Gestor" ? "medium" : "default"}>{user.role}</Badge></div><p className="mt-1 text-sm text-slate-600">{user.name} • Matrícula: {user.register || "não informada"}</p></div><div className="flex flex-wrap gap-2"><div className="rounded-2xl bg-emerald-950 px-4 py-2 text-sm font-bold text-white"><Activity className="mr-1 inline h-4 w-4" /> {user.login}</div><Button size="sm" variant="outline" onClick={() => toggleUserStatus(user)}>{user.status === "Ativo" ? "Inativar" : "Ativar"}</Button><Button size="sm" variant="outline" onClick={() => deleteUser(user)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button></div></div><div className="mt-4 grid gap-2 text-sm md:grid-cols-3"><div className="rounded-xl bg-slate-50 p-3"><Building2 className="mr-1 inline h-4 w-4 text-orange-600" /> {user.unit || "Unidade não informada"}</div><div className="rounded-xl bg-slate-50 p-3"><Mail className="mr-1 inline h-4 w-4 text-orange-600" /> {user.email || "E-mail não informado"}</div><div className="rounded-xl bg-slate-50 p-3"><Phone className="mr-1 inline h-4 w-4 text-orange-600" /> {user.phone || "Telefone não informado"}</div></div></div>)}
-          </div>
         </div>
-      </CardContent>
-    </Card>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[430px_1fr]">
+        <Card className="rounded-[2rem] border-0 bg-white shadow-xl">
+          <CardContent className="p-6">
+            <h3 className="mb-1 flex items-center gap-2 text-xl font-black"><Settings className="h-5 w-5 text-orange-600" /> Novo usuário</h3>
+            <p className="mb-5 text-sm text-slate-500">Crie um usuário que poderá receber demandas e acessar o sistema.</p>
+            <div className="grid gap-3">
+              <Input placeholder="Nome completo" value={form.name} onChange={(e) => updateForm("name", e.target.value)} />
+              <Input placeholder="Nome de guerra / identificação" value={form.warName} onChange={(e) => updateForm("warName", e.target.value)} />
+              <div className="grid gap-3 md:grid-cols-2">
+                <Input placeholder="Matrícula" value={form.register} onChange={(e) => updateForm("register", e.target.value)} />
+                <Input placeholder="Unidade" value={form.unit} onChange={(e) => updateForm("unit", e.target.value)} />
+              </div>
+              <select value={form.role} onChange={(e) => updateForm("role", e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm">{userRoles.map((role)=><option key={role}>{role}</option>)}</select>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Input placeholder="E-mail" value={form.email} onChange={(e) => updateForm("email", e.target.value)} />
+                <Input placeholder="Telefone" value={form.phone} onChange={(e) => updateForm("phone", e.target.value)} />
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Input placeholder="Login" value={form.login} onChange={(e) => updateForm("login", e.target.value)} />
+                <Input placeholder="Senha provisória" type="password" value={form.password} onChange={(e) => updateForm("password", e.target.value)} />
+              </div>
+              <select value={form.status} onChange={(e) => updateForm("status", e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option>Ativo</option><option>Inativo</option></select>
+              <Button onClick={saveUser} className="h-11 bg-orange-600 hover:bg-orange-700"><UserPlus className="mr-2 h-4 w-4" /> Cadastrar usuário</Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-[2rem] border-0 bg-white shadow-xl">
+          <CardContent className="p-6">
+            <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="text-xl font-black">Usuários cadastrados</h3>
+                <p className="text-sm text-slate-500">{filteredUsers.length} usuários exibidos</p>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                <Input className="pl-9" placeholder="Pesquisar usuário" value={query} onChange={(e) => setQuery(e.target.value)} />
+              </div>
+            </div>
+
+            {users.length === 0 && (
+              <div className="rounded-3xl border border-dashed bg-slate-50 p-8 text-center">
+                <Users className="mx-auto h-10 w-10 text-slate-400" />
+                <h4 className="mt-3 text-lg font-black">Nenhum usuário carregado</h4>
+                <p className="mt-1 text-sm text-slate-500">Se o ADM existe no Supabase, verifique se a política RLS de SELECT da tabela app_users está ativa.</p>
+              </div>
+            )}
+
+            <div className="grid gap-3">
+              {filteredUsers.map((user) => (
+                <div key={user.id} className="group rounded-3xl border bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm transition hover:border-orange-200 hover:shadow-md">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex gap-4">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-950 text-lg font-black text-white">
+                        {(user.warName || user.name || "U").slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-lg font-black">{user.warName || user.name}</h3>
+                          <Badge tone={user.status === "Ativo" ? "low" : "default"}>{user.status}</Badge>
+                          <Badge tone={user.role === "Administrador" ? "high" : user.role === "Gestor" ? "medium" : "default"}>{user.role}</Badge>
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">{user.name} • Matrícula: {user.register || "não informada"}</p>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                          <span className="rounded-full bg-emerald-950 px-3 py-1 font-bold text-white"><Activity className="mr-1 inline h-3 w-3" /> {user.login}</span>
+                          <span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700"><Building2 className="mr-1 inline h-3 w-3" /> {user.unit || "Unidade não informada"}</span>
+                          <span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700"><Mail className="mr-1 inline h-3 w-3" /> {user.email || "Sem e-mail"}</span>
+                          <span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-700"><Phone className="mr-1 inline h-3 w-3" /> {user.phone || "Sem telefone"}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={() => toggleUserStatus(user)}>{user.status === "Ativo" ? "Inativar" : "Ativar"}</Button>
+                      <Button size="sm" variant="outline" onClick={() => deleteUser(user)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+    </div>
   )
 }
-
 function DemandCenter({ status, tasks, onBack, updateTaskStatus, deleteTask, duplicateTask, toggleChecklistItem, postponeTask }) {
   const [selectedId, setSelectedId] = useState(tasks[0]?.id || null);
   const [query, setQuery] = useState("");
@@ -381,9 +458,92 @@ function TVPanel({ tasks, users, counts, onClose }) {
   const lateTasks = tasks.filter((t) => t.status === "Atrasada");
   const riskTasks = tasks.filter((t) => t.status === "Risco de prazo");
   const todayTasks = tasks.filter((t) => t.date === today);
-  return <div className="fixed inset-0 z-[100] overflow-auto bg-slate-950 p-6 text-white"><div className="mx-auto max-w-7xl space-y-6"><div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div className="flex items-center gap-4"><div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-orange-600 text-3xl shadow-lg shadow-orange-950/40">🦉</div><div><h1 className="text-4xl font-black tracking-tight">SI 6ª CIA</h1><p className="text-sm font-black uppercase tracking-[0.35em] text-emerald-300">Tela operacional de monitoramento</p></div></div><Button onClick={onClose} className="bg-white text-slate-950 hover:bg-slate-200">Fechar TV</Button></div><div className="grid gap-4 md:grid-cols-5"><div className="rounded-3xl bg-blue-600 p-6"><p>A fazer</p><p className="text-5xl font-black">{counts["A fazer"]||0}</p></div><div className="rounded-3xl bg-red-600 p-6"><p>Atrasadas</p><p className="text-5xl font-black">{counts["Atrasada"]||0}</p></div><div className="rounded-3xl bg-zinc-700 p-6"><p>Paralisadas</p><p className="text-5xl font-black">{counts["Paralisada"]||0}</p></div><div className="rounded-3xl bg-yellow-500 p-6 text-slate-950"><p>Risco</p><p className="text-5xl font-black">{counts["Risco de prazo"]||0}</p></div><div className="rounded-3xl bg-green-600 p-6"><p>Concluídas</p><p className="text-5xl font-black">{counts["Concluída"]||0}</p></div></div><div className="grid gap-6 lg:grid-cols-3"><div className="rounded-3xl bg-white/10 p-6"><p className="text-sm font-black uppercase tracking-[0.25em] text-orange-300">Resumo geral</p><div className="mt-5 grid gap-3"><div className="flex justify-between rounded-2xl bg-white/10 p-4"><span>Total</span><b>{tasks.length}</b></div><div className="flex justify-between rounded-2xl bg-white/10 p-4"><span>Pendências</span><b>{pending}</b></div><div className="flex justify-between rounded-2xl bg-white/10 p-4"><span>Usuários ativos</span><b>{activeUsers}</b></div><div className="flex justify-between rounded-2xl bg-white/10 p-4"><span>Demandas hoje</span><b>{todayTasks.length}</b></div></div></div><div className="rounded-3xl bg-white/10 p-6"><p className="text-sm font-black uppercase tracking-[0.25em] text-red-300">Atrasadas</p><div className="mt-5 space-y-3">{lateTasks.slice(0,6).map((t)=><div key={t.id} className="rounded-2xl bg-red-500/20 p-4"><p className="font-black">{t.title}</p><p className="text-xs text-red-100">{t.responsible}</p></div>)}{lateTasks.length===0 && <p className="text-sm text-slate-300">Nenhuma demanda atrasada.</p>}</div></div><div className="rounded-3xl bg-white/10 p-6"><p className="text-sm font-black uppercase tracking-[0.25em] text-yellow-300">Risco de prazo</p><div className="mt-5 space-y-3">{riskTasks.slice(0,6).map((t)=><div key={t.id} className="rounded-2xl bg-yellow-500/20 p-4"><p className="font-black">{t.title}</p><p className="text-xs text-yellow-100">{t.responsible}</p></div>)}{riskTasks.length===0 && <p className="text-sm text-slate-300">Nenhuma demanda em risco.</p>}</div></div></div></div></div>
-}
+  const done = counts["Concluída"] || 0;
+  const performance = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
+  const topResponsible = users
+    .filter((user) => user.status === "Ativo")
+    .map((user) => {
+      const label = user.warName || user.name;
+      return { label, total: tasks.filter((task) => task.responsible === label && task.status !== "Concluída").length };
+    })
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
 
+  return (
+    <div className="fixed inset-0 z-[100] overflow-auto bg-[#020617] p-6 text-white">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(234,88,12,0.22),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(16,185,129,0.18),transparent_30%)]" />
+      <div className="relative mx-auto max-w-7xl space-y-6">
+        <section className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur">
+          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex h-20 w-20 items-center justify-center rounded-[1.7rem] bg-orange-600 text-4xl shadow-xl shadow-orange-950/40">🦉</div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.45em] text-orange-300">Monitoramento integrado</p>
+                <h1 className="mt-1 text-5xl font-black tracking-tight">SI 6ª CIA</h1>
+                <p className="mt-1 text-sm text-emerald-200">Demandas • prazos • responsáveis • risco operacional</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="rounded-3xl bg-white/10 px-5 py-3 text-right ring-1 ring-white/10">
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-300">Atualizado</p>
+                <p className="text-lg font-black">{new Date().toLocaleString("pt-BR")}</p>
+              </div>
+              <Button onClick={onClose} className="bg-white text-slate-950 hover:bg-slate-200">Fechar TV</Button>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-5">
+          <div className="rounded-[1.7rem] bg-blue-600 p-6 shadow-xl"><p className="text-sm font-bold opacity-90">A fazer</p><p className="mt-2 text-5xl font-black">{counts["A fazer"]||0}</p></div>
+          <div className="rounded-[1.7rem] bg-red-600 p-6 shadow-xl"><p className="text-sm font-bold opacity-90">Atrasadas</p><p className="mt-2 text-5xl font-black">{counts["Atrasada"]||0}</p></div>
+          <div className="rounded-[1.7rem] bg-zinc-700 p-6 shadow-xl"><p className="text-sm font-bold opacity-90">Paralisadas</p><p className="mt-2 text-5xl font-black">{counts["Paralisada"]||0}</p></div>
+          <div className="rounded-[1.7rem] bg-yellow-500 p-6 text-slate-950 shadow-xl"><p className="text-sm font-black opacity-90">Risco de prazo</p><p className="mt-2 text-5xl font-black">{counts["Risco de prazo"]||0}</p></div>
+          <div className="rounded-[1.7rem] bg-green-600 p-6 shadow-xl"><p className="text-sm font-bold opacity-90">Concluídas</p><p className="mt-2 text-5xl font-black">{counts["Concluída"]||0}</p></div>
+        </section>
+
+        <section className="grid gap-6 lg:grid-cols-[1fr_1fr_1fr]">
+          <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+            <p className="text-sm font-black uppercase tracking-[0.25em] text-orange-300">Resumo operacional</p>
+            <div className="mt-5 grid gap-3">
+              <div className="flex justify-between rounded-2xl bg-white/10 p-4"><span>Total de demandas</span><b>{tasks.length}</b></div>
+              <div className="flex justify-between rounded-2xl bg-white/10 p-4"><span>Pendências</span><b>{pending}</b></div>
+              <div className="flex justify-between rounded-2xl bg-white/10 p-4"><span>Usuários ativos</span><b>{activeUsers}</b></div>
+              <div className="flex justify-between rounded-2xl bg-white/10 p-4"><span>Demandas de hoje</span><b>{todayTasks.length}</b></div>
+            </div>
+            <div className="mt-5">
+              <div className="mb-2 flex justify-between text-sm"><span>Taxa de conclusão</span><b>{performance}%</b></div>
+              <div className="h-3 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-orange-500" style={{width:`${performance}%`}} /></div>
+            </div>
+          </div>
+
+          <div className="rounded-[2rem] border border-red-400/20 bg-red-500/10 p-6 backdrop-blur">
+            <p className="text-sm font-black uppercase tracking-[0.25em] text-red-300">Demandas atrasadas</p>
+            <div className="mt-5 space-y-3">
+              {lateTasks.slice(0,6).map((t)=><div key={t.id} className="rounded-2xl bg-red-500/20 p-4 ring-1 ring-red-300/10"><p className="font-black">{t.title}</p><p className="text-xs text-red-100">{t.responsible} • atraso: {t.overdueDate || t.internalDeadline}</p></div>)}
+              {lateTasks.length===0 && <p className="rounded-2xl bg-white/10 p-4 text-sm text-slate-300">Nenhuma demanda atrasada.</p>}
+            </div>
+          </div>
+
+          <div className="rounded-[2rem] border border-yellow-300/20 bg-yellow-500/10 p-6 backdrop-blur">
+            <p className="text-sm font-black uppercase tracking-[0.25em] text-yellow-300">Risco de prazo</p>
+            <div className="mt-5 space-y-3">
+              {riskTasks.slice(0,6).map((t)=><div key={t.id} className="rounded-2xl bg-yellow-500/20 p-4 ring-1 ring-yellow-300/10"><p className="font-black">{t.title}</p><p className="text-xs text-yellow-100">{t.responsible} • prazo: {t.officialDeadline}</p></div>)}
+              {riskTasks.length===0 && <p className="rounded-2xl bg-white/10 p-4 text-sm text-slate-300">Nenhuma demanda em risco.</p>}
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+          <p className="mb-5 text-sm font-black uppercase tracking-[0.25em] text-emerald-300">Pendências por responsável</p>
+          <div className="grid gap-3 md:grid-cols-5">
+            {topResponsible.map((item)=><div key={item.label} className="rounded-3xl bg-white/10 p-5 text-center ring-1 ring-white/10"><p className="text-4xl font-black">{item.total}</p><p className="mt-1 text-sm text-slate-300">{item.label}</p></div>)}
+            {topResponsible.length===0 && <p className="text-sm text-slate-300">Nenhum responsável ativo encontrado.</p>}
+          </div>
+        </section>
+      </div>
+    </div>
+  )
+}
 export default function App() {
   const [logged, setLogged] = useState(() => Boolean(localStorage.getItem("si6_session_user")));
   const [currentUser, setCurrentUser] = useState(() => {
@@ -407,7 +567,7 @@ export default function App() {
   const [tvOpen, setTvOpen] = useState(false);
 
   const counts = useMemo(() => getStatusCounts(tasks), [tasks]);
-  const isAdmin = currentUser?.role === "Administrador";
+  const isAdmin = (currentUser?.role || "").toLowerCase().includes("administrador") || (currentUser?.login || "").toUpperCase() === "ADM6CIA";
 
   const notify = (text) => { setMessage(text); window.setTimeout(() => setMessage(""), 2500); };
 
@@ -429,6 +589,10 @@ export default function App() {
       supabase.from("demands").select("*, responsible:app_users!demands_responsible_id_fkey(*), manager:app_users!demands_manager_id_fkey(*), workflow:workflows(*)").order("created_at", { ascending: false }),
       supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(200),
     ]);
+    if (usersRes.error) {
+      console.error("Erro ao carregar usuários:", usersRes.error);
+      notify("Erro ao carregar usuários do Supabase. Verifique permissões RLS.");
+    }
     if (usersRes.data) setUsers(usersRes.data.map(normalizeUser));
     if (workflowsRes.data) setWorkflows(workflowsRes.data.map(normalizeWorkflow));
     if (tasksRes.data) setTasks(tasksRes.data.map(normalizeTask));
@@ -636,9 +800,9 @@ export default function App() {
   if (!logged) return <Login onLogin={handleLogin} />;
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-orange-50 text-slate-900">
       {tvOpen && <TVPanel tasks={tasks} users={users} counts={counts} onClose={() => setTvOpen(false)} />}
-      <header className="bg-emerald-950 px-6 py-5 shadow-xl">
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-emerald-950/95 px-6 py-5 shadow-xl backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <OwlLogo />
           <div className="flex flex-wrap items-center gap-3 text-sm text-emerald-100">
