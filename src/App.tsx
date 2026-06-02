@@ -176,7 +176,7 @@ function StatCard({ label, value, icon: Icon, className }) {
   );
 }
 
-function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMonthDate, addQuickTask, updateTaskStatus, deleteTask, postponeTask, editTask, users }) {
+function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMonthDate, addQuickTask, updateTaskStatus, deleteTask, postponeTask, users }) {
   const [quickTitle, setQuickTitle] = useState("");
   const [quickResponsible, setQuickResponsible] = useState("");
   const [quickType, setQuickType] = useState("Inteligência");
@@ -266,8 +266,7 @@ function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMon
                     <p className="mt-2 text-xs text-slate-600">{task.notes}</p>
                     <p className="mt-2 text-xs font-bold text-red-600">Data para atraso: {task.overdueDate || task.internalDeadline}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <Button size="sm" variant="outline" onClick={() => markDoneAndClose(task.id)}><Check className="mr-1 h-3 w-3" /> Feita</Button>
-                      <Button size="sm" variant="outline" onClick={() => editCalendarTask(task)}><Edit3 className="mr-1 h-3 w-3" /> Editar</Button>
+                      <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "Concluída")}><Check className="mr-1 h-3 w-3" /> Feita</Button>
                       <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "A fazer")}><RotateCcw className="mr-1 h-3 w-3" /> Reabrir</Button>
                       <Button size="sm" variant="outline" onClick={() => postponeTask(task)}><Clock className="mr-1 h-3 w-3" /> Postergar</Button>
                       <Button size="sm" variant="outline" onClick={() => deleteTask(task.id)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button>
@@ -308,7 +307,7 @@ function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMon
                     <div className="mb-4 flex items-center justify-between"><h4 className="text-xl font-black">Demandas cadastradas neste dia</h4><Badge tone="dark">{selectedTasks.length} demandas</Badge></div>
                     <div className="grid gap-3">
                       {selectedTasks.length === 0 && <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">Nenhuma demanda cadastrada neste dia.</p>}
-                      {selectedTasks.map((task)=><div key={task.id} className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h5 className="text-lg font-black">{task.title}</h5><Badge tone={task.status === "Concluída" ? "low" : task.status === "Atrasada" ? "high" : "medium"}>{task.status}</Badge></div><p className="mt-2 text-sm text-slate-600">{task.notes}</p><p className="mt-2 text-xs text-slate-500">Responsável: {task.responsible} • Workflow: {task.workflow}</p></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => markDoneAndClose(task.id)}><Check className="mr-1 h-3 w-3" /> Feita</Button><Button size="sm" variant="outline" onClick={() => editCalendarTask(task)}><Edit3 className="mr-1 h-3 w-3" /> Editar</Button><Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "A fazer")}><RotateCcw className="mr-1 h-3 w-3" /> Reabrir</Button><Button size="sm" variant="outline" onClick={() => postponeTask(task)}><Clock className="mr-1 h-3 w-3" /> Postergar</Button><Button size="sm" variant="outline" onClick={() => deleteTask(task.id)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button></div></div></div>)}
+                      {selectedTasks.map((task)=><div key={task.id} className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h5 className="text-lg font-black">{task.title}</h5><Badge tone={task.status === "Concluída" ? "low" : task.status === "Atrasada" ? "high" : "medium"}>{task.status}</Badge></div><p className="mt-2 text-sm text-slate-600">{task.notes}</p><p className="mt-2 text-xs text-slate-500">Responsável: {task.responsible} • Workflow: {task.workflow}</p></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "Concluída")}><Check className="mr-1 h-3 w-3" /> Feita</Button><Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "A fazer")}><RotateCcw className="mr-1 h-3 w-3" /> Reabrir</Button><Button size="sm" variant="outline" onClick={() => postponeTask(task)}><Clock className="mr-1 h-3 w-3" /> Postergar</Button><Button size="sm" variant="outline" onClick={() => deleteTask(task.id)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button></div></div></div>)}
                     </div>
                   </div>
                 )}
@@ -713,27 +712,7 @@ export default function App() {
       console.error("Erro ao carregar usuários:", usersRes.error);
       notify("Erro ao carregar usuários do Supabase. Verifique permissões RLS.");
     }
-    if (usersRes.data) {
-      const normalizedUsers = usersRes.data.map(normalizeUser);
-      setUsers(normalizedUsers);
-
-      const storedSession = (() => {
-        try {
-          return JSON.parse(localStorage.getItem("si6_session_user") || "null");
-        } catch {
-          return null;
-        }
-      })();
-
-      const sessionId = storedSession?.id || currentUser?.id;
-      if (sessionId) {
-        const sameUser = normalizedUsers.find((user) => user.id === sessionId);
-        if (sameUser) {
-          setCurrentUser(sameUser);
-          localStorage.setItem("si6_session_user", JSON.stringify(sameUser));
-        }
-      }
-    }
+    if (usersRes.data) setUsers(usersRes.data.map(normalizeUser));
     if (workflowsRes.data) setWorkflows(workflowsRes.data.map(normalizeWorkflow));
     if (tasksRes.data) setTasks(tasksRes.data.map(normalizeTask));
     if (logsRes.data) setAuditLogs(logsRes.data);
@@ -841,7 +820,6 @@ export default function App() {
     if (error) return notify("Erro ao cadastrar tarefa.");
     await addAudit("Demanda criada", `Criou a demanda: ${newTitle}.`);
     setNewTitle(""); setNewResponsible("");
-    await loadData();
     notify("Tarefa cadastrada com sucesso.");
   }
 
@@ -858,48 +836,8 @@ export default function App() {
     });
     if (error) return notify("Erro ao adicionar atividade.");
     await addAudit("Demanda criada pelo calendário", `Criou a demanda: ${title}.`);
-    await loadData();
     notify("Atividade adicionada ao calendário.");
   }
-
-
-  async function editTask(task) {
-    const newTitle = window.prompt("Editar título da demanda:", task.title || "");
-    if (newTitle === null) return;
-
-    const newNotes = window.prompt("Editar observações/informações da demanda:", task.notes || "");
-    if (newNotes === null) return;
-
-    const currentDate = task.overdueDate || task.internalDeadline || task.date || selectedDate;
-    const newOverdueDate = window.prompt("Editar data de atraso da demanda (AAAA-MM-DD):", currentDate);
-    if (newOverdueDate === null) return;
-
-    if (newOverdueDate && !/^\d{4}-\d{2}-\d{2}$/.test(newOverdueDate)) {
-      notify("Data inválida. Use o formato AAAA-MM-DD.");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("demands")
-      .update({
-        title: newTitle.trim() || task.title,
-        notes: newNotes,
-        overdue_date: newOverdueDate || currentDate,
-        internal_deadline: newOverdueDate || task.internalDeadline,
-      })
-      .eq("id", task.id);
-
-    if (error) {
-      console.error(error);
-      notify("Erro ao editar demanda.");
-      return;
-    }
-
-    await addAudit("Demanda editada", `Editou a demanda: ${newTitle.trim() || task.title}.`);
-    await loadData();
-    notify("Demanda editada com sucesso.");
-  }
-
 
   async function deleteTask(id) {
     if (!permissions.deleteDemand) return notify("Seu perfil não possui permissão para excluir demandas.");
@@ -916,7 +854,6 @@ export default function App() {
     const { error } = await supabase.from("demands").update(values).eq("id", id);
     if (error) return notify("Erro ao atualizar status.");
     await addAudit("Status atualizado", `Alterou o status da demanda para: ${status}.`);
-    await loadData();
     notify("Status da tarefa atualizado.");
   }
 
