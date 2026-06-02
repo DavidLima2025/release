@@ -4,7 +4,8 @@ import { motion } from "framer-motion";
 import {
   Activity, AlertTriangle, ArrowLeft, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight,
   ClipboardCheck, Clock, Copy, Edit3, Eye, FileText, Filter, LayoutDashboard, ListChecks, Lock, Mail, PauseCircle,
-  Phone, Plus, RotateCcw, Search, Shield, Trash2, UserPlus, UserRound, Users
+  Phone, Plus, RotateCcw, Search,
+  Settings, Shield, Trash2, UserPlus, UserRound, Users
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { Card, CardContent } from "./components/ui/card";
