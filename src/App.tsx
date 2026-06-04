@@ -5,7 +5,7 @@ import {
   Activity, AlertTriangle, ArrowLeft, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight,
   ClipboardCheck, Clock, Copy, Edit3, Eye, FileText, Filter, LayoutDashboard, ListChecks, Lock, Mail, PauseCircle,
   Phone, Plus, RotateCcw, Search,
-  Settings, Shield, Trash2, UserPlus, UserRound, Users
+  Settings, Shield, Trash2, Upload, UserPlus, UserRound, Users
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { Card, CardContent } from "./components/ui/card";
@@ -123,6 +123,48 @@ function normalizeTask(row) {
   };
 }
 
+function normalizeAttachment(row) {
+  return {
+    id: row.id,
+    demandId: row.demand_id,
+    fileName: row.file_name,
+    filePath: row.file_path,
+    fileSize: row.file_size || 0,
+    mimeType: row.mime_type || "",
+    uploadedBy: row.uploaded_by || "",
+    createdAt: row.created_at,
+  };
+}
+
+function addDaysToDate(date, days) {
+  const next = new Date(date + "T00:00:00");
+  next.setDate(next.getDate() + days);
+  return next.toISOString().slice(0, 10);
+}
+
+function addMonthsToDate(date, months) {
+  const next = new Date(date + "T00:00:00");
+  next.setMonth(next.getMonth() + months);
+  return next.toISOString().slice(0, 10);
+}
+
+function buildRecurringDates(startDate, recurrence = "none", count = 1) {
+  const safeCount = Math.max(1, Math.min(Number(count) || 1, 60));
+  return Array.from({ length: recurrence === "none" ? 1 : safeCount }, (_, index) => {
+    if (recurrence === "daily") return addDaysToDate(startDate, index);
+    if (recurrence === "weekly") return addDaysToDate(startDate, index * 7);
+    if (recurrence === "monthly") return addMonthsToDate(startDate, index);
+    return startDate;
+  });
+}
+
+function formatBytes(bytes) {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
 function getStatusCounts(tasks) {
   return statuses.reduce((acc, status) => {
     acc[status] = tasks.filter((task) => task.status === status).length;
@@ -206,13 +248,17 @@ function StatCard({ label, value, icon: Icon, className }) {
   );
 }
 
-function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMonthDate, addQuickTask, updateTaskStatus, deleteTask, postponeTask, users }) {
+function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMonthDate, addQuickTask, updateTask, updateTaskStatus, deleteTask, postponeTask, users, attachments, uploadDemandFile, getAttachmentUrl }) {
   const [quickTitle, setQuickTitle] = useState("");
   const [quickResponsible, setQuickResponsible] = useState("");
   const [quickType, setQuickType] = useState("Inteligência");
   const [quickPriority, setQuickPriority] = useState("Média");
   const [quickOverdueDate, setQuickOverdueDate] = useState(selectedDate);
   const [quickNotes, setQuickNotes] = useState("");
+  const [quickRecurrence, setQuickRecurrence] = useState("none");
+  const [quickRecurrenceCount, setQuickRecurrenceCount] = useState(1);
+  const [editingTask, setEditingTask] = useState(null);
+  const [editForm, setEditForm] = useState(null);
   const [dayPanelOpen, setDayPanelOpen] = useState(false);
   const [dayPanelMode, setDayPanelMode] = useState("view");
   const selectedTasks = tasks.filter((task) => task.date === selectedDate);
@@ -221,6 +267,30 @@ function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMon
   const activeUsers = users.filter((u) => u.status === "Ativo");
 
   useEffect(() => setQuickOverdueDate(selectedDate), [selectedDate]);
+
+  const startEditTask = (task) => {
+    setEditingTask(task);
+    setEditForm({
+      title: task.title || "",
+      responsibleId: task.responsibleId || "",
+      type: task.type || "Inteligência",
+      priority: task.priority || "Média",
+      status: task.status || "A fazer",
+      date: task.date || selectedDate,
+      overdueDate: task.overdueDate || task.internalDeadline || task.date || selectedDate,
+      notes: task.notes || "",
+    });
+    setDayPanelOpen(true);
+    setDayPanelMode("edit");
+  };
+
+  const saveEditTask = () => {
+    if (!editingTask || !editForm?.title?.trim()) return;
+    updateTask(editingTask.id, editForm);
+    setEditingTask(null);
+    setEditForm(null);
+    setDayPanelMode("view");
+  };
 
   const saveQuickTask = () => {
     if (!quickTitle.trim()) return;
@@ -235,8 +305,10 @@ function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMon
       priority: quickPriority,
       overdueDate: quickOverdueDate || selectedDate,
       notes: quickNotes || "Demanda criada diretamente pelo calendário visual.",
+      recurrence: quickRecurrence,
+      recurrenceCount: quickRecurrenceCount,
     });
-    setQuickTitle(""); setQuickResponsible(""); setQuickType("Inteligência"); setQuickPriority("Média"); setQuickNotes(""); setDayPanelMode("view");
+    setQuickTitle(""); setQuickResponsible(""); setQuickType("Inteligência"); setQuickPriority("Média"); setQuickNotes(""); setQuickRecurrence("none"); setQuickRecurrenceCount(1); setDayPanelMode("view");
   };
 
   return (
@@ -338,16 +410,36 @@ function CalendarBoard({ tasks, selectedDate, setSelectedDate, monthDate, setMon
                       <select value={quickType} onChange={(e) => setQuickType(e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option>Inteligência</option><option>Dossiê</option><option>Operacional</option><option>Relatório</option><option>Gestão</option></select>
                       <select value={quickPriority} onChange={(e) => setQuickPriority(e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option>Baixa</option><option>Média</option><option>Alta</option><option>Crítica</option></select>
                       <div><label className="mb-1 block text-xs font-bold text-slate-500">Data para atraso da demanda</label><Input type="date" value={quickOverdueDate} onChange={(e) => setQuickOverdueDate(e.target.value)} /></div>
+                      <select value={quickRecurrence} onChange={(e) => setQuickRecurrence(e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option value="none">Sem recorrência</option><option value="daily">Diária</option><option value="weekly">Semanal</option><option value="monthly">Mensal</option></select>
+                      <div><label className="mb-1 block text-xs font-bold text-slate-500">Quantidade de repetições</label><Input type="number" min="1" max="60" value={quickRecurrenceCount} onChange={(e) => setQuickRecurrenceCount(e.target.value)} disabled={quickRecurrence === "none"} /></div>
                       <textarea className="min-h-28 rounded-md border bg-white p-3 text-sm md:col-span-2" placeholder="Informações da demanda" value={quickNotes} onChange={(e) => setQuickNotes(e.target.value)} />
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2"><Button onClick={saveQuickTask} className="bg-orange-600 hover:bg-orange-700"><Plus className="mr-2 h-4 w-4" /> Salvar demanda</Button><Button variant="outline" onClick={() => setDayPanelMode("view")}>Cancelar</Button></div>
+                  </div>
+                ) : dayPanelMode === "edit" && editForm ? (
+                  <div className="rounded-2xl border bg-slate-50 p-5">
+                    <h4 className="mb-4 flex items-center gap-2 text-xl font-black"><Edit3 className="h-5 w-5 text-orange-600" /> Editar demanda</h4>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Input placeholder="Título da demanda" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
+                      <select value={editForm.responsibleId} onChange={(e) => setEditForm({ ...editForm, responsibleId: e.target.value })} className="h-10 rounded-md border bg-white px-3 text-sm"><option value="">Selecione o responsável</option>{activeUsers.map((u)=><option key={u.id} value={u.id}>{u.warName || u.name}</option>)}</select>
+                      <select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })} className="h-10 rounded-md border bg-white px-3 text-sm"><option>Inteligência</option><option>Dossiê</option><option>Operacional</option><option>Relatório</option><option>Gestão</option></select>
+                      <select value={editForm.priority} onChange={(e) => setEditForm({ ...editForm, priority: e.target.value })} className="h-10 rounded-md border bg-white px-3 text-sm"><option>Baixa</option><option>Média</option><option>Alta</option><option>Crítica</option></select>
+                      <select value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })} className="h-10 rounded-md border bg-white px-3 text-sm">{statuses.map((s)=><option key={s}>{s}</option>)}</select>
+                      <div><label className="mb-1 block text-xs font-bold text-slate-500">Data no calendário</label><Input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} /></div>
+                      <div><label className="mb-1 block text-xs font-bold text-slate-500">Data para atraso</label><Input type="date" value={editForm.overdueDate} onChange={(e) => setEditForm({ ...editForm, overdueDate: e.target.value })} /></div>
+                      <textarea className="min-h-28 rounded-md border bg-white p-3 text-sm md:col-span-2" placeholder="Informações da demanda" value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2"><Button onClick={saveEditTask} className="bg-orange-600 hover:bg-orange-700"><Check className="mr-2 h-4 w-4" /> Salvar alterações</Button><Button variant="outline" onClick={() => setDayPanelMode("view")}>Cancelar</Button></div>
                   </div>
                 ) : (
                   <div>
                     <div className="mb-4 flex items-center justify-between"><h4 className="text-xl font-black">Demandas cadastradas neste dia</h4><Badge tone="dark">{selectedTasks.length} demandas</Badge></div>
                     <div className="grid gap-3">
                       {selectedTasks.length === 0 && <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">Nenhuma demanda cadastrada neste dia.</p>}
-                      {selectedTasks.map((task)=><div key={task.id} className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h5 className="text-lg font-black">{task.title}</h5><Badge tone={task.status === "Concluída" ? "low" : task.status === "Atrasada" ? "high" : "medium"}>{task.status}</Badge></div><p className="mt-2 text-sm text-slate-600">{task.notes}</p><p className="mt-2 text-xs text-slate-500">Responsável: {task.responsible} • Workflow: {task.workflow}</p></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "Concluída")}><Check className="mr-1 h-3 w-3" /> Feita</Button><Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "A fazer")}><RotateCcw className="mr-1 h-3 w-3" /> Reabrir</Button><Button size="sm" variant="outline" onClick={() => postponeTask(task)}><Clock className="mr-1 h-3 w-3" /> Postergar</Button><Button size="sm" variant="outline" onClick={() => deleteTask(task.id)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button></div></div></div>)}
+                      {selectedTasks.map((task)=>{
+                        const taskAttachments = attachments.filter((file) => file.demandId === task.id);
+                        return <div key={task.id} className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h5 className="text-lg font-black">{task.title}</h5><Badge tone={task.status === "Concluída" ? "low" : task.status === "Atrasada" ? "high" : "medium"}>{task.status}</Badge></div><p className="mt-2 text-sm text-slate-600">{task.notes}</p><p className="mt-2 text-xs text-slate-500">Responsável: {task.responsible} • Workflow: {task.workflow}</p>{taskAttachments.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{taskAttachments.map((file)=><a key={file.id} href={getAttachmentUrl(file.filePath)} target="_blank" rel="noreferrer" className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">{file.fileName} {formatBytes(file.fileSize)}</a>)}</div>}</div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => startEditTask(task)}><Edit3 className="mr-1 h-3 w-3" /> Editar</Button><label className="inline-flex h-9 cursor-pointer items-center rounded-md border px-3 text-sm font-medium"><Upload className="mr-1 h-3 w-3" /> Anexar<input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && uploadDemandFile(task, e.target.files[0])} /></label><Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "Concluída")}><Check className="mr-1 h-3 w-3" /> Feita</Button><Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, "A fazer")}><RotateCcw className="mr-1 h-3 w-3" /> Reabrir</Button><Button size="sm" variant="outline" onClick={() => postponeTask(task)}><Clock className="mr-1 h-3 w-3" /> Postergar</Button><Button size="sm" variant="outline" onClick={() => deleteTask(task.id)} className="text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button></div></div></div>
+                      })}
                     </div>
                   </div>
                 )}
@@ -835,6 +927,7 @@ export default function App() {
   const [monthDate, setMonthDate] = useState(new Date());
   const [users, setUsers] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [attachments, setAttachments] = useState([]);
   const [message, setMessage] = useState("");
   const [demandScreenStatus, setDemandScreenStatus] = useState(null);
   const [currentView, setCurrentView] = useState("painel");
@@ -859,11 +952,12 @@ export default function App() {
   }
 
   async function loadData() {
-    const [usersRes, workflowsRes, tasksRes, logsRes] = await Promise.all([
+    const [usersRes, workflowsRes, tasksRes, logsRes, attachmentsRes] = await Promise.all([
       supabase.from("app_users").select("id,name,war_name,register,unit,role,email,phone,login,status").order("created_at", { ascending: false }),
       supabase.from("workflows").select("*").order("position", { ascending: true }),
       supabase.from("demands").select("*, responsible:app_users!demands_responsible_id_fkey(*), manager:app_users!demands_manager_id_fkey(*), workflow:workflows(*)").order("created_at", { ascending: false }),
       supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(200),
+      supabase.from("demand_attachments").select("*").order("created_at", { ascending: false }),
     ]);
     if (usersRes.error) {
       console.error("Erro ao carregar usuários:", usersRes.error);
@@ -883,6 +977,7 @@ export default function App() {
     if (workflowsRes.data) setWorkflows(workflowsRes.data.map(normalizeWorkflow));
     if (tasksRes.data) setTasks(tasksRes.data.map(normalizeTask));
     if (logsRes.data) setAuditLogs(logsRes.data);
+    if (attachmentsRes.data) setAttachments(attachmentsRes.data.map(normalizeAttachment));
   }
 
   useEffect(() => { loadData(); }, []);
@@ -892,6 +987,7 @@ export default function App() {
       .on("postgres_changes", { event: "*", schema: "public", table: "workflows" }, loadData)
       .on("postgres_changes", { event: "*", schema: "public", table: "demands" }, loadData)
       .on("postgres_changes", { event: "*", schema: "public", table: "audit_logs" }, loadData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "demand_attachments" }, loadData)
       .subscribe();
 
     const refreshTimer = window.setInterval(() => {
@@ -988,20 +1084,65 @@ export default function App() {
     notify("Tarefa cadastrada com sucesso.");
   }
 
-  async function addQuickTask({ title, responsibleId, date, type = "Inteligência", priority = "Média", notes, overdueDate }) {
+  async function addQuickTask({ title, responsibleId, date, type = "Inteligência", priority = "Média", notes, overdueDate, recurrence = "none", recurrenceCount = 1 }) {
     if (!responsibleId) return notify("Selecione um responsável cadastrado.");
     const wf = workflows[0];
-    const { error } = await supabase.from("demands").insert({
+    const dates = buildRecurringDates(date, recurrence, recurrenceCount);
+    const rows = dates.map((itemDate) => ({
       title, type, status: "A fazer", priority, responsible_id: responsibleId, manager_id: currentUser?.id || null,
-      date, official_deadline: date, internal_deadline: date, overdue_date: overdueDate || date,
+      date: itemDate, official_deadline: itemDate, internal_deadline: itemDate, overdue_date: recurrence === "none" ? (overdueDate || itemDate) : itemDate,
       workflow_id: wf?.id || null,
       checklist: ["Triar demanda", "Executar atividade", "Registrar conclusão"],
       done: [false, false, false],
       notes,
-    });
+    }));
+    const { error } = await supabase.from("demands").insert(rows);
     if (error) return notify("Erro ao adicionar atividade.");
-    await addAudit("Demanda criada pelo calendário", `Criou a demanda: ${title}.`);
-    notify("Atividade adicionada ao calendário.");
+    await addAudit("Demanda criada pelo calendário", `Criou a demanda: ${title}${rows.length > 1 ? ` (${rows.length} recorrências)` : ""}.`);
+    notify(rows.length > 1 ? "Demandas recorrentes adicionadas ao calendário." : "Atividade adicionada ao calendário.");
+  }
+
+  async function updateTask(id, values) {
+    if (!values?.title?.trim()) return notify("Informe o título da demanda.");
+    if (!values?.responsibleId) return notify("Selecione um responsável cadastrado.");
+    const { error } = await supabase.from("demands").update({
+      title: values.title,
+      type: values.type,
+      status: values.status,
+      priority: values.priority,
+      responsible_id: values.responsibleId,
+      date: values.date,
+      official_deadline: values.date,
+      internal_deadline: values.overdueDate || values.date,
+      overdue_date: values.overdueDate || values.date,
+      notes: values.notes,
+    }).eq("id", id);
+    if (error) return notify("Erro ao editar demanda.");
+    await addAudit("Demanda editada", `Editou a demanda: ${values.title}.`);
+    notify("Demanda editada com sucesso.");
+  }
+
+  function getAttachmentUrl(path) {
+    return supabase.storage.from("demand-files").getPublicUrl(path).data.publicUrl;
+  }
+
+  async function uploadDemandFile(task, file) {
+    if (!file) return;
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${task.id}/${Date.now()}-${safeName}`;
+    const upload = await supabase.storage.from("demand-files").upload(path, file, { upsert: false });
+    if (upload.error) return notify("Erro ao subir arquivo. Verifique se o bucket demand-files existe.");
+    const { error } = await supabase.from("demand_attachments").insert({
+      demand_id: task.id,
+      file_name: file.name,
+      file_path: path,
+      file_size: file.size,
+      mime_type: file.type,
+      uploaded_by: currentUser?.id || null,
+    });
+    if (error) return notify("Arquivo enviado, mas houve erro ao registrar o anexo.");
+    await addAudit("Arquivo anexado", `Anexou arquivo na demanda: ${task.title}.`);
+    notify("Arquivo anexado com sucesso.");
   }
 
   async function deleteTask(id) {
@@ -1136,7 +1277,7 @@ export default function App() {
             {demandScreenStatus ? (
               <DemandCenter status={demandScreenStatus} tasks={tasks.filter((task) => task.status === demandScreenStatus)} onBack={() => setDemandScreenStatus(null)} updateTaskStatus={updateTaskStatus} deleteTask={deleteTask} duplicateTask={duplicateTask} toggleChecklistItem={toggleChecklistItem} postponeTask={postponeTask} />
             ) : (
-              <CalendarBoard tasks={tasks} selectedDate={selectedDate} setSelectedDate={setSelectedDate} monthDate={monthDate} setMonthDate={setMonthDate} addQuickTask={addQuickTask} updateTaskStatus={updateTaskStatus} deleteTask={deleteTask} postponeTask={postponeTask} users={users} />
+              <CalendarBoard tasks={tasks} selectedDate={selectedDate} setSelectedDate={setSelectedDate} monthDate={monthDate} setMonthDate={setMonthDate} addQuickTask={addQuickTask} updateTask={updateTask} updateTaskStatus={updateTaskStatus} deleteTask={deleteTask} postponeTask={postponeTask} users={users} attachments={attachments} uploadDemandFile={uploadDemandFile} getAttachmentUrl={getAttachmentUrl} />
             )}
 
             <section className="grid gap-6 lg:grid-cols-[360px_1fr]">
