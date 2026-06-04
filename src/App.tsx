@@ -81,6 +81,32 @@ function Badge({ children, tone = "default" }) {
   return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${tones[tone] || tones.default}`}>{children}</span>;
 }
 
+
+function isUuid(value) {
+  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function buildAuthorPayload(form, currentUser, includeCreatedBy = false) {
+  const categoryIsUuid = isUuid(form.categoryId);
+  const payload = {
+    name: form.name?.trim(),
+    alias: form.alias || "",
+    mother_name: form.motherName || "",
+    birth_date: form.birthDate || null,
+    document: form.document || "",
+    address: form.address || "",
+    neighborhood: form.neighborhood || "",
+    city: form.city || "",
+    crimes: form.crimes || (!categoryIsUuid && form.categoryId ? form.categoryId : ""),
+    status: form.status || "Suspeito",
+    risk_level: form.riskLevel || "Médio",
+    notes: form.notes || "",
+  };
+  if (categoryIsUuid) payload.category_id = form.categoryId;
+  if (includeCreatedBy && isUuid(currentUser?.id)) payload.created_by = currentUser.id;
+  return payload;
+}
+
 function normalizeUser(row) {
   return {
     id: row?.id || "",
@@ -1456,49 +1482,45 @@ export default function App() {
 
   async function addAuthor(form) {
     if (!form?.name?.trim()) return notify("Informe o nome do autor/suspeito.");
-    const { data, error } = await supabase.from("crime_authors").insert({
-      name: form.name,
-      alias: form.alias,
-      mother_name: form.motherName,
-      birth_date: form.birthDate || null,
-      document: form.document,
-      address: form.address,
-      neighborhood: form.neighborhood,
-      city: form.city,
-      crimes: form.crimes,
-      category_id: form.categoryId || null,
-      status: form.status,
-      risk_level: form.riskLevel,
-      notes: form.notes,
-      created_by: currentUser?.id || null,
-    }).select("*").single();
-    if (error) { notify("Erro ao criar pasta do autor/suspeito."); return null; }
+    const payload = buildAuthorPayload(form, currentUser, true);
+    let result = await supabase.from("crime_authors").insert(payload).select("*").single();
+
+    // Compatibilidade com banco antigo: se a coluna category_id ainda não existir, salva sem ela.
+    if (result.error && String(result.error.message || "").toLowerCase().includes("category_id")) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.category_id;
+      result = await supabase.from("crime_authors").insert(fallbackPayload).select("*").single();
+    }
+
+    if (result.error) {
+      console.error("Erro ao criar autor/suspeito:", result.error);
+      notify(`Erro ao cadastrar autor: ${result.error.message || "verifique o SQL do Supabase."}`);
+      return null;
+    }
     await addAudit("Pasta de autor criada", `Criou pasta de inteligência para: ${form.name}.`);
-    notify("Pasta criada com sucesso.");
+    notify("Autor/suspeito cadastrado com sucesso.");
     await loadData();
-    return normalizeAuthor(data);
+    return normalizeAuthor(result.data);
   }
 
   async function updateAuthor(id, form) {
     if (!form?.name?.trim()) return notify("Informe o nome do autor/suspeito.");
-    const { error } = await supabase.from("crime_authors").update({
-      name: form.name,
-      alias: form.alias,
-      mother_name: form.motherName,
-      birth_date: form.birthDate || null,
-      document: form.document,
-      address: form.address,
-      neighborhood: form.neighborhood,
-      city: form.city,
-      crimes: form.crimes,
-      category_id: form.categoryId || null,
-      status: form.status,
-      risk_level: form.riskLevel,
-      notes: form.notes,
-    }).eq("id", id);
-    if (error) return notify("Erro ao atualizar pasta.");
+    const payload = buildAuthorPayload(form, currentUser, false);
+    let result = await supabase.from("crime_authors").update(payload).eq("id", id);
+
+    // Compatibilidade com banco antigo: se a coluna category_id ainda não existir, atualiza sem ela.
+    if (result.error && String(result.error.message || "").toLowerCase().includes("category_id")) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.category_id;
+      result = await supabase.from("crime_authors").update(fallbackPayload).eq("id", id);
+    }
+
+    if (result.error) {
+      console.error("Erro ao atualizar autor/suspeito:", result.error);
+      return notify(`Erro ao atualizar autor: ${result.error.message || "verifique o SQL do Supabase."}`);
+    }
     await addAudit("Pasta de autor atualizada", `Atualizou dados de: ${form.name}.`);
-    notify("Pasta atualizada com sucesso.");
+    notify("Autor/suspeito atualizado com sucesso.");
   }
 
   async function deleteAuthor(id) {
