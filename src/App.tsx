@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
-  Activity, AlertTriangle, ArrowLeft, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight,
+  Activity, AlertTriangle, ArrowLeft, Building2, CalendarDays, Camera, Check, CheckCircle2, ChevronLeft, ChevronRight,
   ClipboardCheck, Clock, Copy, Edit3, Eye, FileText, Filter, FolderOpen, Image as ImageIcon, LayoutDashboard, ListChecks, Lock, Mail, PauseCircle,
   Paperclip, Phone, Plus, RotateCcw, Search,
   Settings, Shield, Trash2, Upload, UserPlus, UserRound, Users
@@ -148,9 +148,20 @@ function normalizeAuthor(row) {
     neighborhood: row.neighborhood || "",
     city: row.city || "",
     crimes: row.crimes || "",
+    categoryId: row.category_id || "",
     status: row.status || "Suspeito",
     riskLevel: row.risk_level || "Médio",
     notes: row.notes || "",
+    createdAt: row.created_at,
+  };
+}
+
+
+function normalizeAuthorCategory(row) {
+  return {
+    id: row.id,
+    name: row.name || "Pasta sem nome",
+    description: row.description || "",
     createdAt: row.created_at,
   };
 }
@@ -681,76 +692,147 @@ function AuditPanel({ logs }) {
   return <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70"><CardContent className="p-6"><div className="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div><h2 className="flex items-center gap-2 text-xl font-black"><Activity className="h-5 w-5 text-orange-600" /> Auditoria do sistema</h2><p className="text-sm text-slate-500">Histórico de ações registradas no Supabase.</p></div><Badge tone="dark">{logs.length} registros</Badge></div><div className="max-h-[520px] space-y-3 overflow-auto pr-1">{logs.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">Nenhuma ação registrada ainda.</div>}{logs.map((log)=><div key={log.id} className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between"><div><p className="text-sm font-black text-slate-900">{log.action}</p><p className="mt-1 text-sm text-slate-600">{log.details}</p><p className="mt-2 text-xs text-slate-500">Usuário: <b>{log.user_name}</b> • Perfil: <b>{log.user_role}</b></p></div><Badge tone="medium">{new Date(log.created_at).toLocaleString("pt-BR")}</Badge></div></div>)}</div></CardContent></Card>
 }
 
-function AuthorIntelligencePanel({ authors, photos, reports, addAuthor, updateAuthor, deleteAuthor, uploadAuthorFile, getIntelFileUrl }) {
-  const emptyAuthor = { name: "", alias: "", motherName: "", birthDate: "", document: "", address: "", neighborhood: "", city: "", crimes: "", status: "Suspeito", riskLevel: "Médio", notes: "" };
+function AuthorIntelligencePanel({ categories, authors, photos, reports, addAuthorCategory, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, uploadAuthorFile, getIntelFileUrl }) {
+  const defaultCategoryId = categories[0]?.id || "all";
+  const emptyAuthor = { name: "", alias: "", motherName: "", birthDate: "", document: "", address: "", neighborhood: "", city: "", crimes: "", categoryId: defaultCategoryId === "all" ? "" : defaultCategoryId, status: "Suspeito", riskLevel: "Médio", notes: "" };
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState(authors[0]?.id || null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState(defaultCategoryId);
+  const [selectedId, setSelectedId] = useState(null);
   const [form, setForm] = useState(emptyAuthor);
   const [editing, setEditing] = useState(false);
+  const [pendingPhoto, setPendingPhoto] = useState(null);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryDescription, setNewCategoryDescription] = useState("");
+
+  const fallbackFolders = useMemo(() => {
+    if (categories.length > 0) return categories;
+    const names = ["Tráfico de drogas", "Receptação", "Arrombamento", "Furto de correntinha"];
+    return names.map((name) => ({ id: name, name, description: "Pasta padrão" }));
+  }, [categories]);
 
   useEffect(() => {
-    if (!selectedId && authors[0]?.id) setSelectedId(authors[0].id);
-  }, [authors, selectedId]);
+    if (!selectedCategoryId && fallbackFolders[0]?.id) setSelectedCategoryId(fallbackFolders[0].id);
+  }, [fallbackFolders, selectedCategoryId]);
 
-  const visibleAuthors = authors.filter((author) => `${author.name} ${author.alias} ${author.motherName} ${author.document} ${author.address} ${author.neighborhood} ${author.city} ${author.crimes} ${author.notes}`.toLowerCase().includes(query.toLowerCase()));
-  const selectedAuthor = visibleAuthors.find((author) => author.id === selectedId) || visibleAuthors[0] || authors.find((author) => author.id === selectedId);
+  useEffect(() => {
+    if (!editing && !form.categoryId && selectedCategoryId !== "all") setForm((current) => ({ ...current, categoryId: selectedCategoryId }));
+  }, [selectedCategoryId, editing, form.categoryId]);
+
+  const authorsInFolder = authors.filter((author) => selectedCategoryId === "all" ? true : (author.categoryId === selectedCategoryId || (!author.categoryId && author.crimes === selectedCategoryId)));
+  const visibleAuthors = authorsInFolder.filter((author) => `${author.name} ${author.alias} ${author.motherName} ${author.document} ${author.address} ${author.neighborhood} ${author.city} ${author.crimes} ${author.notes}`.toLowerCase().includes(query.toLowerCase()));
+  const selectedAuthor = visibleAuthors.find((author) => author.id === selectedId) || visibleAuthors[0] || null;
   const selectedPhotos = selectedAuthor ? photos.filter((file) => file.authorId === selectedAuthor.id) : [];
   const selectedReports = selectedAuthor ? reports.filter((file) => file.authorId === selectedAuthor.id) : [];
+  const selectedFolder = fallbackFolders.find((folder) => folder.id === selectedCategoryId);
 
   const updateForm = (field, value) => setForm((current) => ({ ...current, [field]: value }));
-  const resetForm = () => { setForm(emptyAuthor); setEditing(false); };
+  const resetForm = () => { setForm({ ...emptyAuthor, categoryId: selectedCategoryId === "all" ? "" : selectedCategoryId }); setEditing(false); setPendingPhoto(null); };
   const startEdit = (author) => {
-    setForm({ name: author.name, alias: author.alias, motherName: author.motherName, birthDate: author.birthDate, document: author.document, address: author.address, neighborhood: author.neighborhood, city: author.city, crimes: author.crimes, status: author.status, riskLevel: author.riskLevel, notes: author.notes });
+    setForm({ name: author.name, alias: author.alias, motherName: author.motherName, birthDate: author.birthDate, document: author.document, address: author.address, neighborhood: author.neighborhood, city: author.city, crimes: author.crimes, categoryId: author.categoryId || "", status: author.status, riskLevel: author.riskLevel, notes: author.notes });
     setSelectedId(author.id);
     setEditing(true);
   };
+  const createCategory = async () => {
+    const created = await addAuthorCategory({ name: newCategoryName, description: newCategoryDescription });
+    if (created?.id) {
+      setSelectedCategoryId(created.id);
+      setForm((current) => ({ ...current, categoryId: created.id }));
+      setNewCategoryName("");
+      setNewCategoryDescription("");
+    }
+  };
   const submit = async () => {
-    if (editing && selectedAuthor) await updateAuthor(selectedAuthor.id, form);
-    else await addAuthor(form);
+    const preparedForm = { ...form, categoryId: form.categoryId || (selectedCategoryId === "all" ? "" : selectedCategoryId) };
+    if (editing && selectedAuthor) {
+      await updateAuthor(selectedAuthor.id, preparedForm);
+      if (pendingPhoto) await uploadAuthorFile(selectedAuthor, pendingPhoto, "photo");
+    } else {
+      const createdAuthor = await addAuthor(preparedForm);
+      if (createdAuthor && pendingPhoto) {
+        await uploadAuthorFile(createdAuthor, pendingPhoto, "photo");
+        setSelectedId(createdAuthor.id);
+      }
+    }
     resetForm();
   };
 
   return (
-    <section className="grid gap-6 xl:grid-cols-[380px_1fr]">
-      <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
-        <CardContent className="p-6">
-          <div className="mb-5 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="flex items-center gap-2 text-xl font-black"><FolderOpen className="h-5 w-5 text-orange-600" /> Banco de autores e suspeitos</h2>
-              <p className="mt-1 text-sm text-slate-500">Pastas individuais com fotos, dados e relatórios de inteligência.</p>
+    <section className="grid gap-6 xl:grid-cols-[360px_1fr]">
+      <div className="space-y-6">
+        <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
+          <CardContent className="p-6">
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="flex items-center gap-2 text-xl font-black"><FolderOpen className="h-5 w-5 text-orange-600" /> Banco de Alvos</h2>
+                <p className="mt-1 text-sm text-slate-500">Pastas por modalidade criminal, com cards de autores/suspeitos dentro.</p>
+              </div>
+              <Badge tone="dark">{authors.length} alvos</Badge>
             </div>
-            <Badge tone="dark">{authors.length} registros</Badge>
-          </div>
-          <div className="relative mb-4"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><Input className="pl-9" placeholder="Pesquisar nome, vulgo, crime, bairro..." value={query} onChange={(e) => setQuery(e.target.value)} /></div>
-          <div className="max-h-[620px] space-y-3 overflow-auto pr-1">
-            {visibleAuthors.length === 0 && <div className="rounded-2xl border bg-white p-4 text-sm text-slate-500">Nenhum autor/suspeito encontrado.</div>}
-            {visibleAuthors.map((author) => {
-              const cover = photos.find((file) => file.authorId === author.id);
-              return <button key={author.id} type="button" onClick={() => setSelectedId(author.id)} className={`w-full rounded-2xl border bg-white p-3 text-left shadow-sm transition hover:shadow-md ${selectedAuthor?.id === author.id ? "border-orange-600 ring-2 ring-orange-100" : ""}`}>
-                <div className="flex gap-3">
-                  <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-100 ring-1 ring-slate-200">
-                    {cover ? <img src={getIntelFileUrl(cover.filePath)} alt={author.name} className="h-full w-full object-cover" /> : <UserRound className="h-8 w-8 text-slate-400" />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate font-black">{author.name}</h3>
-                    <p className="text-xs text-slate-500">Vulgo: {author.alias || "Não informado"}</p>
-                    <div className="mt-2 flex flex-wrap gap-1"><Badge>{author.status}</Badge><Badge tone={author.riskLevel === "Alto" ? "high" : author.riskLevel === "Médio" ? "medium" : "low"}>{author.riskLevel}</Badge></div>
-                  </div>
-                </div>
-              </button>;
-            })}
-          </div>
-        </CardContent>
-      </Card>
+            <div className="mb-4 rounded-2xl bg-emerald-950 p-4 text-white">
+              <p className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-emerald-100">Criar nova pasta</p>
+              <div className="space-y-2">
+                <Input className="bg-white text-slate-900" placeholder="Ex.: Tráfico de drogas" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
+                <Input className="bg-white text-slate-900" placeholder="Observação da pasta" value={newCategoryDescription} onChange={(e) => setNewCategoryDescription(e.target.value)} />
+                <Button onClick={createCategory} className="w-full bg-orange-600 hover:bg-orange-700"><Plus className="mr-2 h-4 w-4" /> Criar pasta</Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <button type="button" onClick={() => { setSelectedCategoryId("all"); setSelectedId(null); }} className={`w-full rounded-2xl border p-4 text-left shadow-sm transition hover:shadow-md ${selectedCategoryId === "all" ? "border-orange-600 bg-orange-50 ring-2 ring-orange-100" : "bg-white"}`}>
+                <div className="flex items-center justify-between gap-3"><span className="font-black">Todas as pastas</span><Badge>{authors.length}</Badge></div>
+                <p className="mt-1 text-xs text-slate-500">Pesquisa geral do banco.</p>
+              </button>
+              {fallbackFolders.map((folder) => {
+                const total = authors.filter((author) => author.categoryId === folder.id || (!author.categoryId && author.crimes === folder.id)).length;
+                return <div key={folder.id} className={`rounded-2xl border p-4 shadow-sm transition ${selectedCategoryId === folder.id ? "border-orange-600 bg-orange-50 ring-2 ring-orange-100" : "bg-white"}`}>
+                  <button type="button" onClick={() => { setSelectedCategoryId(folder.id); setSelectedId(null); setForm((current) => ({ ...current, categoryId: folder.id })); }} className="w-full text-left">
+                    <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 font-black"><FolderOpen className="h-4 w-4 text-orange-600" /> {folder.name}</span><Badge>{total}</Badge></div>
+                    <p className="mt-1 text-xs text-slate-500">{folder.description || "Sem observação."}</p>
+                  </button>
+                  {categories.some((item) => item.id === folder.id) && total === 0 && <Button size="sm" variant="outline" className="mt-3 text-red-600" onClick={() => deleteAuthorCategory(folder.id)}><Trash2 className="mr-1 h-3 w-3" /> Excluir pasta</Button>}
+                </div>;
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="space-y-6">
         <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
           <CardContent className="p-6">
+            <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-600">{selectedCategoryId === "all" ? "Visão geral" : "Pasta"}</p><h2 className="mt-1 text-2xl font-black">{selectedCategoryId === "all" ? "Todas as pastas" : selectedFolder?.name}</h2><p className="text-sm text-slate-500">Os cards abaixo pertencem à pasta selecionada.</p></div>
+              <Badge tone="dark">{visibleAuthors.length} cards</Badge>
+            </div>
+            <div className="relative mb-4"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><Input className="pl-9" placeholder="Pesquisar nome, vulgo, documento, bairro..." value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {visibleAuthors.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500 md:col-span-2 xl:col-span-3">Nenhum card encontrado nesta pasta.</div>}
+              {visibleAuthors.map((author) => {
+                const cover = photos.find((file) => file.authorId === author.id);
+                const authorFolder = fallbackFolders.find((folder) => folder.id === author.categoryId);
+                return <button key={author.id} type="button" onClick={() => setSelectedId(author.id)} className={`overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition hover:shadow-md ${selectedAuthor?.id === author.id ? "border-orange-600 ring-2 ring-orange-100" : ""}`}>
+                  <div className="grid h-40 place-items-center bg-slate-100">
+                    {cover ? <img src={getIntelFileUrl(cover.filePath)} alt={author.name} className="h-full w-full object-cover" /> : <UserRound className="h-12 w-12 text-slate-400" />}
+                  </div>
+                  <div className="p-4">
+                    <h3 className="truncate font-black">{author.name}</h3>
+                    <p className="text-xs text-slate-500">Vulgo: {author.alias || "Não informado"}</p>
+                    <p className="mt-1 text-xs text-slate-500">Pasta: {authorFolder?.name || author.crimes || "Não vinculada"}</p>
+                    <div className="mt-3 flex flex-wrap gap-1"><Badge>{author.status}</Badge><Badge tone={author.riskLevel === "Alto" ? "high" : author.riskLevel === "Médio" ? "medium" : "low"}>{author.riskLevel}</Badge></div>
+                  </div>
+                </button>;
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
+          <CardContent className="p-6">
             <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div><h2 className="flex items-center gap-2 text-xl font-black"><UserPlus className="h-5 w-5 text-orange-600" /> {editing ? "Editar pasta" : "Nova pasta"}</h2><p className="text-sm text-slate-500">Cadastro principal do autor/suspeito.</p></div>
+              <div><h2 className="flex items-center gap-2 text-xl font-black"><UserPlus className="h-5 w-5 text-orange-600" /> {editing ? "Editar card do alvo" : "Novo card do alvo"}</h2><p className="text-sm text-slate-500">Escolha a pasta e cadastre o autor/suspeito.</p></div>
               {editing && <Button variant="outline" onClick={resetForm}>Cancelar edição</Button>}
             </div>
             <div className="grid gap-3 md:grid-cols-3">
+              <select value={form.categoryId} onChange={(e) => updateForm("categoryId", e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm md:col-span-3"><option value="">Selecione a pasta do card</option>{fallbackFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select>
               <Input placeholder="Nome completo" value={form.name} onChange={(e) => updateForm("name", e.target.value)} />
               <Input placeholder="Vulgo / alcunha" value={form.alias} onChange={(e) => updateForm("alias", e.target.value)} />
               <Input placeholder="Nome da mãe" value={form.motherName} onChange={(e) => updateForm("motherName", e.target.value)} />
@@ -760,9 +842,13 @@ function AuthorIntelligencePanel({ authors, photos, reports, addAuthor, updateAu
               <Input placeholder="Endereço" value={form.address} onChange={(e) => updateForm("address", e.target.value)} />
               <Input placeholder="Bairro" value={form.neighborhood} onChange={(e) => updateForm("neighborhood", e.target.value)} />
               <Input placeholder="Cidade" value={form.city} onChange={(e) => updateForm("city", e.target.value)} />
-              <Input placeholder="Crimes vinculados" value={form.crimes} onChange={(e) => updateForm("crimes", e.target.value)} />
+              <Input placeholder="Crimes vinculados / modus operandi" value={form.crimes} onChange={(e) => updateForm("crimes", e.target.value)} />
               <select value={form.riskLevel} onChange={(e) => updateForm("riskLevel", e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option>Baixo</option><option>Médio</option><option>Alto</option></select>
-              <Button onClick={submit} className="bg-orange-600 hover:bg-orange-700"><Plus className="mr-2 h-4 w-4" /> {editing ? "Salvar alterações" : "Criar pasta"}</Button>
+              <label className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md border bg-white px-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                <Camera className="h-4 w-4 text-orange-600" /> {pendingPhoto ? pendingPhoto.name : "Escolher foto"}
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => setPendingPhoto(e.target.files?.[0] || null)} />
+              </label>
+              <Button onClick={submit} className="bg-orange-600 hover:bg-orange-700"><Plus className="mr-2 h-4 w-4" /> {editing ? "Salvar alterações" : "Criar card"}</Button>
               <textarea className="min-h-24 rounded-md border bg-white px-3 py-2 text-sm md:col-span-3" placeholder="Observações / vínculos / modus operandi" value={form.notes} onChange={(e) => updateForm("notes", e.target.value)} />
             </div>
           </CardContent>
@@ -771,8 +857,8 @@ function AuthorIntelligencePanel({ authors, photos, reports, addAuthor, updateAu
         {selectedAuthor ? <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
           <CardContent className="p-6">
             <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-600">Pasta selecionada</p><h2 className="mt-2 text-3xl font-black">{selectedAuthor.name}</h2><p className="mt-1 text-sm text-slate-500">Vulgo: <b>{selectedAuthor.alias || "Não informado"}</b></p></div>
-              <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => startEdit(selectedAuthor)}><Edit3 className="mr-1 h-4 w-4" /> Editar dados</Button><Button variant="outline" className="text-red-600" onClick={() => deleteAuthor(selectedAuthor.id)}><Trash2 className="mr-1 h-4 w-4" /> Excluir pasta</Button></div>
+              <div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-600">Card selecionado</p><h2 className="mt-2 text-3xl font-black">{selectedAuthor.name}</h2><p className="mt-1 text-sm text-slate-500">Vulgo: <b>{selectedAuthor.alias || "Não informado"}</b></p></div>
+              <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => startEdit(selectedAuthor)}><Edit3 className="mr-1 h-4 w-4" /> Editar dados</Button><Button variant="outline" className="text-red-600" onClick={() => deleteAuthor(selectedAuthor.id)}><Trash2 className="mr-1 h-4 w-4" /> Excluir card</Button></div>
             </div>
 
             <div className="mb-6 rounded-3xl bg-emerald-950 p-5 text-white">
@@ -784,12 +870,13 @@ function AuthorIntelligencePanel({ authors, photos, reports, addAuthor, updateAu
             </div>
 
             <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-2xl bg-slate-50 p-4"><b>Pasta:</b> {fallbackFolders.find((folder) => folder.id === selectedAuthor.categoryId)?.name || "Não vinculada"}</div>
               <div className="rounded-2xl bg-slate-50 p-4"><b>Status:</b> {selectedAuthor.status}</div>
               <div className="rounded-2xl bg-slate-50 p-4"><b>Risco:</b> {selectedAuthor.riskLevel}</div>
               <div className="rounded-2xl bg-slate-50 p-4"><b>Nascimento:</b> {selectedAuthor.birthDate || "Não informado"}</div>
               <div className="rounded-2xl bg-slate-50 p-4"><b>Mãe:</b> {selectedAuthor.motherName || "Não informado"}</div>
               <div className="rounded-2xl bg-slate-50 p-4"><b>Documento:</b> {selectedAuthor.document || "Não informado"}</div>
-              <div className="rounded-2xl bg-slate-50 p-4"><b>Cidade/Bairro:</b> {[selectedAuthor.city, selectedAuthor.neighborhood].filter(Boolean).join(" / ") || "Não informado"}</div>
+              <div className="rounded-2xl bg-slate-50 p-4 md:col-span-3"><b>Cidade/Bairro:</b> {[selectedAuthor.city, selectedAuthor.neighborhood].filter(Boolean).join(" / ") || "Não informado"}</div>
               <div className="rounded-2xl bg-slate-50 p-4 md:col-span-3"><b>Endereço:</b> {selectedAuthor.address || "Não informado"}</div>
               <div className="rounded-2xl bg-slate-50 p-4 md:col-span-3"><b>Crimes vinculados:</b> {selectedAuthor.crimes || "Não informado"}</div>
               <div className="rounded-2xl bg-slate-50 p-4 md:col-span-3"><b>Observações:</b><p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{selectedAuthor.notes || "Sem observações."}</p></div>
@@ -803,7 +890,7 @@ function AuthorIntelligencePanel({ authors, photos, reports, addAuthor, updateAu
               </div>
             </div>
           </CardContent>
-        </Card> : <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70"><CardContent className="p-8 text-center text-sm text-slate-500">Crie ou selecione uma pasta para visualizar os dados.</CardContent></Card>}
+        </Card> : <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70"><CardContent className="p-8 text-center text-sm text-slate-500">Crie ou selecione um card para visualizar os dados.</CardContent></Card>}
       </div>
     </section>
   );
@@ -1099,6 +1186,7 @@ export default function App() {
   const [users, setUsers] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [attachments, setAttachments] = useState([]);
+  const [authorCategories, setAuthorCategories] = useState([]);
   const [authors, setAuthors] = useState([]);
   const [authorPhotos, setAuthorPhotos] = useState([]);
   const [authorReports, setAuthorReports] = useState([]);
@@ -1126,12 +1214,13 @@ export default function App() {
   }
 
   async function loadData() {
-    const [usersRes, workflowsRes, tasksRes, logsRes, attachmentsRes, authorsRes, authorPhotosRes, authorReportsRes] = await Promise.all([
+    const [usersRes, workflowsRes, tasksRes, logsRes, attachmentsRes, authorCategoriesRes, authorsRes, authorPhotosRes, authorReportsRes] = await Promise.all([
       supabase.from("app_users").select("id,name,war_name,register,unit,role,email,phone,login,status").order("created_at", { ascending: false }),
       supabase.from("workflows").select("*").order("position", { ascending: true }),
       supabase.from("demands").select("*, responsible:app_users!demands_responsible_id_fkey(*), manager:app_users!demands_manager_id_fkey(*), workflow:workflows(*)").order("created_at", { ascending: false }),
       supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(200),
       supabase.from("demand_attachments").select("*").order("created_at", { ascending: false }),
+      supabase.from("author_categories").select("*").order("name", { ascending: true }),
       supabase.from("crime_authors").select("*").order("created_at", { ascending: false }),
       supabase.from("author_photos").select("*").order("created_at", { ascending: false }),
       supabase.from("author_reports").select("*").order("created_at", { ascending: false }),
@@ -1155,6 +1244,7 @@ export default function App() {
     if (tasksRes.data) setTasks(tasksRes.data.map(normalizeTask));
     if (logsRes.data) setAuditLogs(logsRes.data);
     if (attachmentsRes.data) setAttachments(attachmentsRes.data.map(normalizeAttachment));
+    if (authorCategoriesRes.data) setAuthorCategories(authorCategoriesRes.data.map(normalizeAuthorCategory));
     if (authorsRes.data) setAuthors(authorsRes.data.map(normalizeAuthor));
     if (authorPhotosRes.data) setAuthorPhotos(authorPhotosRes.data.map(normalizeAuthorFile));
     if (authorReportsRes.data) setAuthorReports(authorReportsRes.data.map(normalizeAuthorFile));
@@ -1168,6 +1258,7 @@ export default function App() {
       .on("postgres_changes", { event: "*", schema: "public", table: "demands" }, loadData)
       .on("postgres_changes", { event: "*", schema: "public", table: "audit_logs" }, loadData)
       .on("postgres_changes", { event: "*", schema: "public", table: "demand_attachments" }, loadData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "author_categories" }, loadData)
       .on("postgres_changes", { event: "*", schema: "public", table: "crime_authors" }, loadData)
       .on("postgres_changes", { event: "*", schema: "public", table: "author_photos" }, loadData)
       .on("postgres_changes", { event: "*", schema: "public", table: "author_reports" }, loadData)
@@ -1338,9 +1429,34 @@ export default function App() {
     return supabase.storage.from("intelligence-files").getPublicUrl(path).data.publicUrl;
   }
 
+  async function addAuthorCategory(category) {
+    const name = category?.name?.trim();
+    if (!name) return notify("Informe o nome da pasta.");
+    const { data, error } = await supabase.from("author_categories").insert({
+      name,
+      description: category.description || "",
+      created_by: currentUser?.id || null,
+    }).select("*").single();
+    if (error) { notify("Erro ao criar pasta. Execute o SQL atualizado no Supabase."); return null; }
+    await addAudit("Pasta criminal criada", `Criou a pasta: ${name}.`);
+    notify("Pasta criada com sucesso.");
+    await loadData();
+    return normalizeAuthorCategory(data);
+  }
+
+  async function deleteAuthorCategory(id) {
+    const inUse = authors.some((author) => author.categoryId === id);
+    if (inUse) return notify("Esta pasta possui cards vinculados e não pode ser excluída.");
+    if (!window.confirm("Excluir esta pasta vazia?")) return;
+    const { error } = await supabase.from("author_categories").delete().eq("id", id);
+    if (error) return notify("Erro ao excluir pasta.");
+    await addAudit("Pasta criminal excluída", "Excluiu uma pasta vazia do Banco de Alvos.");
+    notify("Pasta excluída.");
+  }
+
   async function addAuthor(form) {
     if (!form?.name?.trim()) return notify("Informe o nome do autor/suspeito.");
-    const { error } = await supabase.from("crime_authors").insert({
+    const { data, error } = await supabase.from("crime_authors").insert({
       name: form.name,
       alias: form.alias,
       mother_name: form.motherName,
@@ -1350,15 +1466,17 @@ export default function App() {
       neighborhood: form.neighborhood,
       city: form.city,
       crimes: form.crimes,
+      category_id: form.categoryId || null,
       status: form.status,
       risk_level: form.riskLevel,
       notes: form.notes,
       created_by: currentUser?.id || null,
-    });
-    if (error) return notify("Erro ao criar pasta do autor/suspeito.");
+    }).select("*").single();
+    if (error) { notify("Erro ao criar pasta do autor/suspeito."); return null; }
     await addAudit("Pasta de autor criada", `Criou pasta de inteligência para: ${form.name}.`);
     notify("Pasta criada com sucesso.");
-    loadData();
+    await loadData();
+    return normalizeAuthor(data);
   }
 
   async function updateAuthor(id, form) {
@@ -1373,6 +1491,7 @@ export default function App() {
       neighborhood: form.neighborhood,
       city: form.city,
       crimes: form.crimes,
+      category_id: form.categoryId || null,
       status: form.status,
       risk_level: form.riskLevel,
       notes: form.notes,
@@ -1594,7 +1713,7 @@ export default function App() {
         {currentView === "dashboard" && !permissions.dashboard && <PermissionCard title="Acesso restrito" description="Seu perfil não possui permissão para acessar o dashboard executivo." />}
         {currentView === "usuarios" && isAdmin && <UserManagement users={users} addUser={addUser} deleteUser={deleteUser} toggleUserStatus={toggleUserStatus} />}
         {currentView === "usuarios" && !isAdmin && <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70"><CardContent className="p-6"><h2 className="text-xl font-black text-red-600">Acesso restrito</h2><p className="mt-2 text-sm text-slate-500">Somente o administrador pode acessar o cadastro e gestão de usuários.</p></CardContent></Card>}
-        {currentView === "suspeitos" && <AuthorIntelligencePanel authors={authors} photos={authorPhotos} reports={authorReports} addAuthor={addAuthor} updateAuthor={updateAuthor} deleteAuthor={deleteAuthor} uploadAuthorFile={uploadAuthorFile} getIntelFileUrl={getIntelFileUrl} />}
+        {currentView === "suspeitos" && <AuthorIntelligencePanel categories={authorCategories} authors={authors} photos={authorPhotos} reports={authorReports} addAuthorCategory={addAuthorCategory} deleteAuthorCategory={deleteAuthorCategory} addAuthor={addAuthor} updateAuthor={updateAuthor} deleteAuthor={deleteAuthor} uploadAuthorFile={uploadAuthorFile} getIntelFileUrl={getIntelFileUrl} />}
       </main>
     </div>
   );
