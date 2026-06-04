@@ -3,8 +3,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Activity, AlertTriangle, ArrowLeft, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight,
-  ClipboardCheck, Clock, Copy, Edit3, Eye, FileText, Filter, LayoutDashboard, ListChecks, Lock, Mail, PauseCircle,
-  Phone, Plus, RotateCcw, Search,
+  ClipboardCheck, Clock, Copy, Edit3, Eye, FileText, Filter, FolderOpen, Image as ImageIcon, LayoutDashboard, ListChecks, Lock, Mail, PauseCircle,
+  Paperclip, Phone, Plus, RotateCcw, Search,
   Settings, Shield, Trash2, Upload, UserPlus, UserRound, Users
 } from "lucide-react";
 import { supabase } from "./supabase";
@@ -136,6 +136,39 @@ function normalizeAttachment(row) {
   };
 }
 
+function normalizeAuthor(row) {
+  return {
+    id: row.id,
+    name: row.name || "Autor sem nome",
+    alias: row.alias || "",
+    motherName: row.mother_name || "",
+    birthDate: row.birth_date || "",
+    document: row.document || "",
+    address: row.address || "",
+    neighborhood: row.neighborhood || "",
+    city: row.city || "",
+    crimes: row.crimes || "",
+    status: row.status || "Suspeito",
+    riskLevel: row.risk_level || "Médio",
+    notes: row.notes || "",
+    createdAt: row.created_at,
+  };
+}
+
+function normalizeAuthorFile(row) {
+  return {
+    id: row.id,
+    authorId: row.author_id,
+    fileName: row.file_name,
+    filePath: row.file_path,
+    fileSize: row.file_size || 0,
+    mimeType: row.mime_type || "",
+    description: row.description || "",
+    uploadedBy: row.uploaded_by || "",
+    createdAt: row.created_at,
+  };
+}
+
 function addDaysToDate(date, days) {
   const next = new Date(date + "T00:00:00");
   next.setDate(next.getDate() + days);
@@ -182,6 +215,16 @@ function buildCalendarDays(monthDate) {
   for (let day = 1; day <= lastDay.getDate(); day += 1) days.push(new Date(year, month, day).toISOString().slice(0, 10));
   while (days.length % 7 !== 0) days.push(null);
   return days;
+}
+
+function isSameMonthDate(date, referenceDate = new Date()) {
+  if (!date) return false;
+  const current = new Date(date + "T00:00:00");
+  return current.getFullYear() === referenceDate.getFullYear() && current.getMonth() === referenceDate.getMonth();
+}
+
+function isOpenTask(task) {
+  return task?.status !== "Concluída";
 }
 
 function OwlLogo() {
@@ -630,7 +673,7 @@ function ProcessTracker({ tasks, workflows, setTaskWorkflow, setTaskStatus }) {
     else if (selectedTask.status === "Concluída") setTaskStatus(selectedTask.id, "A fazer");
   };
   return (
-    <Card className="rounded-3xl border-0 bg-emerald-950 text-white shadow-sm"><CardContent className="p-6"><div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><h2 className="text-xl font-black">Acompanhamento do processo</h2><p className="mt-2 text-sm text-emerald-100">Selecione uma demanda e clique nas etapas até chegar a 100%.</p></div><div className="rounded-2xl bg-white/10 px-5 py-3 text-center"><p className="text-3xl font-black">{selectedTask ? progress : 0}%</p><p className="text-xs text-emerald-100">Andamento</p></div></div><select value={selectedTask?.id || ""} onChange={(e)=>setSelectedTaskId(e.target.value)} className="mb-5 h-11 w-full rounded-xl border border-white/10 bg-white/10 px-3 text-sm text-white">{tasks.map((task)=><option key={task.id} value={task.id} className="text-slate-900">{task.title}</option>)}</select>{selectedTask && <div><div className="mb-4 rounded-2xl bg-white/10 p-4"><p className="text-sm text-emerald-100">Demanda selecionada</p><h3 className="text-lg font-black">{selectedTask.title}</h3><p className="mt-1 text-xs text-emerald-100">Responsável: {selectedTask.responsible} • Status: {selectedTask.status}</p></div><div className="mb-5 h-3 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-orange-500 transition-all" style={{width:`${progress}%`}} /></div><div className="grid gap-3 md:grid-cols-5">{workflows.map((workflow,index)=>{const reached=index<=currentStep;const current=workflow.id===selectedTask.workflowId;return <button key={workflow.id} type="button" onClick={()=>advanceToStep(workflow)} className={`rounded-2xl border p-4 text-left transition hover:scale-[1.02] ${reached ? "border-orange-400 bg-orange-500 text-white" : "border-white/10 bg-white/10 text-emerald-50"} ${current ? "ring-2 ring-white" : ""}`}><p className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/20 text-sm font-black">{index+1}</p><p className="text-sm font-black">{workflow.name}</p><p className="mt-1 text-xs opacity-80">{current ? "Etapa atual" : reached ? "Já alcançada" : "Clique para avançar"}</p></button>})}</div></div>}</CardContent></Card>
+    <Card className="rounded-3xl border-0 bg-emerald-950 text-white shadow-sm"><CardContent className="p-6"><div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><h2 className="text-xl font-black">Acompanhamento do processo</h2><p className="mt-2 text-sm text-emerald-100">Selecione uma demanda em aberto e clique nas etapas até chegar a 100%.</p></div><div className="rounded-2xl bg-white/10 px-5 py-3 text-center"><p className="text-3xl font-black">{selectedTask ? progress : 0}%</p><p className="text-xs text-emerald-100">Andamento</p></div></div>{tasks.length === 0 && <div className="rounded-2xl bg-white/10 p-4 text-sm text-emerald-100">Nenhuma demanda em aberto no workflow.</div>}{tasks.length > 0 && <select value={selectedTask?.id || ""} onChange={(e)=>setSelectedTaskId(e.target.value)} className="mb-5 h-11 w-full rounded-xl border border-white/10 bg-white/10 px-3 text-sm text-white">{tasks.map((task)=><option key={task.id} value={task.id} className="text-slate-900">{task.title}</option>)}</select>}{selectedTask && <div><div className="mb-4 rounded-2xl bg-white/10 p-4"><p className="text-sm text-emerald-100">Demanda selecionada</p><h3 className="text-lg font-black">{selectedTask.title}</h3><p className="mt-1 text-xs text-emerald-100">Responsável: {selectedTask.responsible} • Status: {selectedTask.status}</p></div><div className="mb-5 h-3 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-orange-500 transition-all" style={{width:`${progress}%`}} /></div><div className="grid gap-3 md:grid-cols-5">{workflows.map((workflow,index)=>{const reached=index<=currentStep;const current=workflow.id===selectedTask.workflowId;return <button key={workflow.id} type="button" onClick={()=>advanceToStep(workflow)} className={`rounded-2xl border p-4 text-left transition hover:scale-[1.02] ${reached ? "border-orange-400 bg-orange-500 text-white" : "border-white/10 bg-white/10 text-emerald-50"} ${current ? "ring-2 ring-white" : ""}`}><p className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/20 text-sm font-black">{index+1}</p><p className="text-sm font-black">{workflow.name}</p><p className="mt-1 text-xs opacity-80">{current ? "Etapa atual" : reached ? "Já alcançada" : "Clique para avançar"}</p></button>})}</div></div>}</CardContent></Card>
   )
 }
 
@@ -638,6 +681,133 @@ function AuditPanel({ logs }) {
   return <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70"><CardContent className="p-6"><div className="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div><h2 className="flex items-center gap-2 text-xl font-black"><Activity className="h-5 w-5 text-orange-600" /> Auditoria do sistema</h2><p className="text-sm text-slate-500">Histórico de ações registradas no Supabase.</p></div><Badge tone="dark">{logs.length} registros</Badge></div><div className="max-h-[520px] space-y-3 overflow-auto pr-1">{logs.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">Nenhuma ação registrada ainda.</div>}{logs.map((log)=><div key={log.id} className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between"><div><p className="text-sm font-black text-slate-900">{log.action}</p><p className="mt-1 text-sm text-slate-600">{log.details}</p><p className="mt-2 text-xs text-slate-500">Usuário: <b>{log.user_name}</b> • Perfil: <b>{log.user_role}</b></p></div><Badge tone="medium">{new Date(log.created_at).toLocaleString("pt-BR")}</Badge></div></div>)}</div></CardContent></Card>
 }
 
+function AuthorIntelligencePanel({ authors, photos, reports, addAuthor, updateAuthor, deleteAuthor, uploadAuthorFile, getIntelFileUrl }) {
+  const emptyAuthor = { name: "", alias: "", motherName: "", birthDate: "", document: "", address: "", neighborhood: "", city: "", crimes: "", status: "Suspeito", riskLevel: "Médio", notes: "" };
+  const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState(authors[0]?.id || null);
+  const [form, setForm] = useState(emptyAuthor);
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    if (!selectedId && authors[0]?.id) setSelectedId(authors[0].id);
+  }, [authors, selectedId]);
+
+  const visibleAuthors = authors.filter((author) => `${author.name} ${author.alias} ${author.motherName} ${author.document} ${author.address} ${author.neighborhood} ${author.city} ${author.crimes} ${author.notes}`.toLowerCase().includes(query.toLowerCase()));
+  const selectedAuthor = visibleAuthors.find((author) => author.id === selectedId) || visibleAuthors[0] || authors.find((author) => author.id === selectedId);
+  const selectedPhotos = selectedAuthor ? photos.filter((file) => file.authorId === selectedAuthor.id) : [];
+  const selectedReports = selectedAuthor ? reports.filter((file) => file.authorId === selectedAuthor.id) : [];
+
+  const updateForm = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+  const resetForm = () => { setForm(emptyAuthor); setEditing(false); };
+  const startEdit = (author) => {
+    setForm({ name: author.name, alias: author.alias, motherName: author.motherName, birthDate: author.birthDate, document: author.document, address: author.address, neighborhood: author.neighborhood, city: author.city, crimes: author.crimes, status: author.status, riskLevel: author.riskLevel, notes: author.notes });
+    setSelectedId(author.id);
+    setEditing(true);
+  };
+  const submit = async () => {
+    if (editing && selectedAuthor) await updateAuthor(selectedAuthor.id, form);
+    else await addAuthor(form);
+    resetForm();
+  };
+
+  return (
+    <section className="grid gap-6 xl:grid-cols-[380px_1fr]">
+      <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
+        <CardContent className="p-6">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-xl font-black"><FolderOpen className="h-5 w-5 text-orange-600" /> Banco de autores e suspeitos</h2>
+              <p className="mt-1 text-sm text-slate-500">Pastas individuais com fotos, dados e relatórios de inteligência.</p>
+            </div>
+            <Badge tone="dark">{authors.length} registros</Badge>
+          </div>
+          <div className="relative mb-4"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><Input className="pl-9" placeholder="Pesquisar nome, vulgo, crime, bairro..." value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+          <div className="max-h-[620px] space-y-3 overflow-auto pr-1">
+            {visibleAuthors.length === 0 && <div className="rounded-2xl border bg-white p-4 text-sm text-slate-500">Nenhum autor/suspeito encontrado.</div>}
+            {visibleAuthors.map((author) => {
+              const cover = photos.find((file) => file.authorId === author.id);
+              return <button key={author.id} type="button" onClick={() => setSelectedId(author.id)} className={`w-full rounded-2xl border bg-white p-3 text-left shadow-sm transition hover:shadow-md ${selectedAuthor?.id === author.id ? "border-orange-600 ring-2 ring-orange-100" : ""}`}>
+                <div className="flex gap-3">
+                  <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-100 ring-1 ring-slate-200">
+                    {cover ? <img src={getIntelFileUrl(cover.filePath)} alt={author.name} className="h-full w-full object-cover" /> : <UserRound className="h-8 w-8 text-slate-400" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate font-black">{author.name}</h3>
+                    <p className="text-xs text-slate-500">Vulgo: {author.alias || "Não informado"}</p>
+                    <div className="mt-2 flex flex-wrap gap-1"><Badge>{author.status}</Badge><Badge tone={author.riskLevel === "Alto" ? "high" : author.riskLevel === "Médio" ? "medium" : "low"}>{author.riskLevel}</Badge></div>
+                  </div>
+                </div>
+              </button>;
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="space-y-6">
+        <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
+          <CardContent className="p-6">
+            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div><h2 className="flex items-center gap-2 text-xl font-black"><UserPlus className="h-5 w-5 text-orange-600" /> {editing ? "Editar pasta" : "Nova pasta"}</h2><p className="text-sm text-slate-500">Cadastro principal do autor/suspeito.</p></div>
+              {editing && <Button variant="outline" onClick={resetForm}>Cancelar edição</Button>}
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <Input placeholder="Nome completo" value={form.name} onChange={(e) => updateForm("name", e.target.value)} />
+              <Input placeholder="Vulgo / alcunha" value={form.alias} onChange={(e) => updateForm("alias", e.target.value)} />
+              <Input placeholder="Nome da mãe" value={form.motherName} onChange={(e) => updateForm("motherName", e.target.value)} />
+              <Input type="date" value={form.birthDate} onChange={(e) => updateForm("birthDate", e.target.value)} />
+              <Input placeholder="Documento / RG / CPF" value={form.document} onChange={(e) => updateForm("document", e.target.value)} />
+              <select value={form.status} onChange={(e) => updateForm("status", e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option>Suspeito</option><option>Autor</option><option>Monitorado</option><option>Foragido</option><option>Preso</option></select>
+              <Input placeholder="Endereço" value={form.address} onChange={(e) => updateForm("address", e.target.value)} />
+              <Input placeholder="Bairro" value={form.neighborhood} onChange={(e) => updateForm("neighborhood", e.target.value)} />
+              <Input placeholder="Cidade" value={form.city} onChange={(e) => updateForm("city", e.target.value)} />
+              <Input placeholder="Crimes vinculados" value={form.crimes} onChange={(e) => updateForm("crimes", e.target.value)} />
+              <select value={form.riskLevel} onChange={(e) => updateForm("riskLevel", e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option>Baixo</option><option>Médio</option><option>Alto</option></select>
+              <Button onClick={submit} className="bg-orange-600 hover:bg-orange-700"><Plus className="mr-2 h-4 w-4" /> {editing ? "Salvar alterações" : "Criar pasta"}</Button>
+              <textarea className="min-h-24 rounded-md border bg-white px-3 py-2 text-sm md:col-span-3" placeholder="Observações / vínculos / modus operandi" value={form.notes} onChange={(e) => updateForm("notes", e.target.value)} />
+            </div>
+          </CardContent>
+        </Card>
+
+        {selectedAuthor ? <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
+          <CardContent className="p-6">
+            <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-600">Pasta selecionada</p><h2 className="mt-2 text-3xl font-black">{selectedAuthor.name}</h2><p className="mt-1 text-sm text-slate-500">Vulgo: <b>{selectedAuthor.alias || "Não informado"}</b></p></div>
+              <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => startEdit(selectedAuthor)}><Edit3 className="mr-1 h-4 w-4" /> Editar dados</Button><Button variant="outline" className="text-red-600" onClick={() => deleteAuthor(selectedAuthor.id)}><Trash2 className="mr-1 h-4 w-4" /> Excluir pasta</Button></div>
+            </div>
+
+            <div className="mb-6 rounded-3xl bg-emerald-950 p-5 text-white">
+              <div className="mb-3 flex items-center justify-between"><h3 className="flex items-center gap-2 font-black"><ImageIcon className="h-5 w-5 text-orange-300" /> Fotos</h3><label className="cursor-pointer rounded-xl bg-orange-600 px-4 py-2 text-sm font-bold hover:bg-orange-700"><Upload className="mr-1 inline h-4 w-4" /> Subir foto<input type="file" accept="image/*" className="hidden" onChange={(e) => uploadAuthorFile(selectedAuthor, e.target.files?.[0], "photo")} /></label></div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {selectedPhotos.length === 0 && <div className="rounded-2xl bg-white/10 p-5 text-sm text-emerald-100">Nenhuma foto anexada.</div>}
+                {selectedPhotos.map((file) => <a key={file.id} href={getIntelFileUrl(file.filePath)} target="_blank" rel="noreferrer" className="overflow-hidden rounded-2xl bg-white/10 ring-1 ring-white/10"><img src={getIntelFileUrl(file.filePath)} alt={file.fileName} className="h-44 w-full object-cover" /><p className="truncate p-2 text-xs text-emerald-50">{file.fileName}</p></a>)}
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-2xl bg-slate-50 p-4"><b>Status:</b> {selectedAuthor.status}</div>
+              <div className="rounded-2xl bg-slate-50 p-4"><b>Risco:</b> {selectedAuthor.riskLevel}</div>
+              <div className="rounded-2xl bg-slate-50 p-4"><b>Nascimento:</b> {selectedAuthor.birthDate || "Não informado"}</div>
+              <div className="rounded-2xl bg-slate-50 p-4"><b>Mãe:</b> {selectedAuthor.motherName || "Não informado"}</div>
+              <div className="rounded-2xl bg-slate-50 p-4"><b>Documento:</b> {selectedAuthor.document || "Não informado"}</div>
+              <div className="rounded-2xl bg-slate-50 p-4"><b>Cidade/Bairro:</b> {[selectedAuthor.city, selectedAuthor.neighborhood].filter(Boolean).join(" / ") || "Não informado"}</div>
+              <div className="rounded-2xl bg-slate-50 p-4 md:col-span-3"><b>Endereço:</b> {selectedAuthor.address || "Não informado"}</div>
+              <div className="rounded-2xl bg-slate-50 p-4 md:col-span-3"><b>Crimes vinculados:</b> {selectedAuthor.crimes || "Não informado"}</div>
+              <div className="rounded-2xl bg-slate-50 p-4 md:col-span-3"><b>Observações:</b><p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{selectedAuthor.notes || "Sem observações."}</p></div>
+            </div>
+
+            <div className="mt-6 rounded-3xl border bg-white p-5">
+              <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><h3 className="flex items-center gap-2 font-black"><Paperclip className="h-5 w-5 text-orange-600" /> Relatórios de inteligência anexados</h3><label className="cursor-pointer rounded-xl border px-4 py-2 text-sm font-bold hover:bg-slate-50"><Upload className="mr-1 inline h-4 w-4" /> Subir relatório<input type="file" className="hidden" onChange={(e) => uploadAuthorFile(selectedAuthor, e.target.files?.[0], "report")} /></label></div>
+              <div className="space-y-2">
+                {selectedReports.length === 0 && <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">Nenhum relatório anexado.</p>}
+                {selectedReports.map((file) => <a key={file.id} href={getIntelFileUrl(file.filePath)} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-2xl border p-3 text-sm hover:bg-slate-50"><span className="flex items-center gap-2"><FileText className="h-4 w-4 text-orange-600" /> {file.fileName}</span><span className="text-xs text-slate-500">{formatBytes(file.fileSize)}</span></a>)}
+              </div>
+            </div>
+          </CardContent>
+        </Card> : <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70"><CardContent className="p-8 text-center text-sm text-slate-500">Crie ou selecione uma pasta para visualizar os dados.</CardContent></Card>}
+      </div>
+    </section>
+  );
+}
 function TVPanel({ tasks, users, counts, onClose }) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -919,6 +1089,7 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(today);
   const [statusFilter, setStatusFilter] = useState("Todas");
   const [search, setSearch] = useState("");
+  const [searchDate, setSearchDate] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [newResponsible, setNewResponsible] = useState("");
   const [newWorkflow, setNewWorkflow] = useState("");
@@ -928,6 +1099,9 @@ export default function App() {
   const [users, setUsers] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [attachments, setAttachments] = useState([]);
+  const [authors, setAuthors] = useState([]);
+  const [authorPhotos, setAuthorPhotos] = useState([]);
+  const [authorReports, setAuthorReports] = useState([]);
   const [message, setMessage] = useState("");
   const [demandScreenStatus, setDemandScreenStatus] = useState(null);
   const [currentView, setCurrentView] = useState("painel");
@@ -952,12 +1126,15 @@ export default function App() {
   }
 
   async function loadData() {
-    const [usersRes, workflowsRes, tasksRes, logsRes, attachmentsRes] = await Promise.all([
+    const [usersRes, workflowsRes, tasksRes, logsRes, attachmentsRes, authorsRes, authorPhotosRes, authorReportsRes] = await Promise.all([
       supabase.from("app_users").select("id,name,war_name,register,unit,role,email,phone,login,status").order("created_at", { ascending: false }),
       supabase.from("workflows").select("*").order("position", { ascending: true }),
       supabase.from("demands").select("*, responsible:app_users!demands_responsible_id_fkey(*), manager:app_users!demands_manager_id_fkey(*), workflow:workflows(*)").order("created_at", { ascending: false }),
       supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(200),
       supabase.from("demand_attachments").select("*").order("created_at", { ascending: false }),
+      supabase.from("crime_authors").select("*").order("created_at", { ascending: false }),
+      supabase.from("author_photos").select("*").order("created_at", { ascending: false }),
+      supabase.from("author_reports").select("*").order("created_at", { ascending: false }),
     ]);
     if (usersRes.error) {
       console.error("Erro ao carregar usuários:", usersRes.error);
@@ -978,6 +1155,9 @@ export default function App() {
     if (tasksRes.data) setTasks(tasksRes.data.map(normalizeTask));
     if (logsRes.data) setAuditLogs(logsRes.data);
     if (attachmentsRes.data) setAttachments(attachmentsRes.data.map(normalizeAttachment));
+    if (authorsRes.data) setAuthors(authorsRes.data.map(normalizeAuthor));
+    if (authorPhotosRes.data) setAuthorPhotos(authorPhotosRes.data.map(normalizeAuthorFile));
+    if (authorReportsRes.data) setAuthorReports(authorReportsRes.data.map(normalizeAuthorFile));
   }
 
   useEffect(() => { loadData(); }, []);
@@ -988,6 +1168,9 @@ export default function App() {
       .on("postgres_changes", { event: "*", schema: "public", table: "demands" }, loadData)
       .on("postgres_changes", { event: "*", schema: "public", table: "audit_logs" }, loadData)
       .on("postgres_changes", { event: "*", schema: "public", table: "demand_attachments" }, loadData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "crime_authors" }, loadData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "author_photos" }, loadData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "author_reports" }, loadData)
       .subscribe();
 
     const refreshTimer = window.setInterval(() => {
@@ -1001,11 +1184,17 @@ export default function App() {
   }, []);
 
   const filteredTasks = useMemo(() => tasks.filter((task) => {
-    const byDate = task.date === selectedDate;
+    const normalizedSearch = search.trim().toLowerCase();
+    const hasSearch = normalizedSearch.length > 0 || Boolean(searchDate);
+    const isVisibleInDefaultList = isOpenTask(task) || isSameMonthDate(task.date, monthDate);
+    const byDefaultVisibility = hasSearch ? true : isVisibleInDefaultList;
     const byStatus = statusFilter === "Todas" || task.status === statusFilter;
-    const bySearch = `${task.title} ${task.type} ${task.responsible} ${task.notes}`.toLowerCase().includes(search.toLowerCase());
-    return byDate && byStatus && bySearch;
-  }), [tasks, selectedDate, statusFilter, search]);
+    const bySearch = !normalizedSearch || `${task.title} ${task.type} ${task.responsible} ${task.manager} ${task.workflow} ${task.notes}`.toLowerCase().includes(normalizedSearch);
+    const bySearchDate = !searchDate || task.date === searchDate || task.internalDeadline === searchDate || task.officialDeadline === searchDate || task.overdueDate === searchDate;
+    return byDefaultVisibility && byStatus && bySearch && bySearchDate;
+  }), [tasks, monthDate, statusFilter, search, searchDate]);
+
+  const openTasks = useMemo(() => tasks.filter(isOpenTask), [tasks]);
 
   async function handleLogin(login, password) {
     const { data, error } = await supabase.rpc("login_user", { p_login: login, p_password: password });
@@ -1145,6 +1334,83 @@ export default function App() {
     notify("Arquivo anexado com sucesso.");
   }
 
+  function getIntelFileUrl(path) {
+    return supabase.storage.from("intelligence-files").getPublicUrl(path).data.publicUrl;
+  }
+
+  async function addAuthor(form) {
+    if (!form?.name?.trim()) return notify("Informe o nome do autor/suspeito.");
+    const { error } = await supabase.from("crime_authors").insert({
+      name: form.name,
+      alias: form.alias,
+      mother_name: form.motherName,
+      birth_date: form.birthDate || null,
+      document: form.document,
+      address: form.address,
+      neighborhood: form.neighborhood,
+      city: form.city,
+      crimes: form.crimes,
+      status: form.status,
+      risk_level: form.riskLevel,
+      notes: form.notes,
+      created_by: currentUser?.id || null,
+    });
+    if (error) return notify("Erro ao criar pasta do autor/suspeito.");
+    await addAudit("Pasta de autor criada", `Criou pasta de inteligência para: ${form.name}.`);
+    notify("Pasta criada com sucesso.");
+    loadData();
+  }
+
+  async function updateAuthor(id, form) {
+    if (!form?.name?.trim()) return notify("Informe o nome do autor/suspeito.");
+    const { error } = await supabase.from("crime_authors").update({
+      name: form.name,
+      alias: form.alias,
+      mother_name: form.motherName,
+      birth_date: form.birthDate || null,
+      document: form.document,
+      address: form.address,
+      neighborhood: form.neighborhood,
+      city: form.city,
+      crimes: form.crimes,
+      status: form.status,
+      risk_level: form.riskLevel,
+      notes: form.notes,
+    }).eq("id", id);
+    if (error) return notify("Erro ao atualizar pasta.");
+    await addAudit("Pasta de autor atualizada", `Atualizou dados de: ${form.name}.`);
+    notify("Pasta atualizada com sucesso.");
+  }
+
+  async function deleteAuthor(id) {
+    if (!window.confirm("Excluir esta pasta e seus registros do banco?")) return;
+    const { error } = await supabase.from("crime_authors").delete().eq("id", id);
+    if (error) return notify("Erro ao excluir pasta.");
+    await addAudit("Pasta de autor excluída", "Excluiu uma pasta de autor/suspeito.");
+    notify("Pasta excluída.");
+  }
+
+  async function uploadAuthorFile(author, file, kind = "report") {
+    if (!file || !author?.id) return;
+    const table = kind === "photo" ? "author_photos" : "author_reports";
+    const folder = kind === "photo" ? "fotos" : "relatorios";
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${author.id}/${folder}/${Date.now()}-${safeName}`;
+    const upload = await supabase.storage.from("intelligence-files").upload(path, file, { upsert: false });
+    if (upload.error) return notify("Erro ao subir arquivo. Verifique se o bucket intelligence-files existe.");
+    const { error } = await supabase.from(table).insert({
+      author_id: author.id,
+      file_name: file.name,
+      file_path: path,
+      file_size: file.size,
+      mime_type: file.type,
+      uploaded_by: currentUser?.id || null,
+    });
+    if (error) return notify("Arquivo enviado, mas houve erro ao registrar no banco.");
+    await addAudit(kind === "photo" ? "Foto anexada" : "Relatório anexado", `Anexou arquivo na pasta: ${author.name}.`);
+    notify(kind === "photo" ? "Foto anexada com sucesso." : "Relatório anexado com sucesso.");
+  }
+
   async function deleteTask(id) {
     if (!permissions.deleteDemand) return notify("Seu perfil não possui permissão para excluir demandas.");
     const { error } = await supabase.from("demands").delete().eq("id", id);
@@ -1254,7 +1520,7 @@ export default function App() {
             <Badge tone="dark"><Users className="mr-1 inline h-3 w-3" /> {users.filter((user) => user.status === "Ativo").length} usuários ativos</Badge>
             <Button variant="secondary" className="!bg-white/10 !text-white hover:!bg-white/20 ring-1 ring-white/10" onClick={() => { setCurrentView("painel"); setDemandScreenStatus(null); }}>Painel</Button>
             {isAdmin && <Button variant="secondary" className="!bg-white/10 !text-white hover:!bg-white/20 ring-1 ring-white/10" onClick={() => { setCurrentView("usuarios"); setDemandScreenStatus(null); }}>Usuários</Button>}
-            <Button variant="secondary" className="!bg-white/10 !text-white hover:!bg-white/20 ring-1 ring-white/10" onClick={() => { setCurrentView("auditoria"); setDemandScreenStatus(null); }}>Auditoria</Button>
+            <Button variant="secondary" className="!bg-white/10 !text-white hover:!bg-white/20 ring-1 ring-white/10" onClick={() => { setCurrentView("suspeitos"); setDemandScreenStatus(null); }}>Autores/Suspeitos</Button>
             <Button variant="secondary" className="!bg-orange-600 !text-white hover:!bg-orange-700 shadow-lg shadow-orange-900/20" onClick={() => setTvOpen(true)}>Tela TV</Button>
             <Button variant="secondary" className="!bg-white/10 !text-white hover:!bg-white/20 ring-1 ring-white/10" onClick={() => { setLogged(false); setCurrentUser(null); localStorage.removeItem("si6_session_user"); }}>Sair</Button>
           </div>
@@ -1295,8 +1561,8 @@ export default function App() {
               <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
                 <CardContent className="p-6">
                   <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div><h2 className="flex items-center gap-2 text-xl font-black"><LayoutDashboard className="h-5 w-5 text-orange-600" /> Tela de tarefas</h2><p className="text-sm text-slate-500">Demandas feitas, pendentes, workflow, checklist e responsáveis.</p></div>
-                    <div className="flex gap-2"><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><Input className="pl-9" placeholder="Pesquisar" value={search} onChange={(e) => setSearch(e.target.value)} /></div><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option>Todas</option>{statuses.map((s)=><option key={s}>{s}</option>)}</select></div>
+                    <div><h2 className="flex items-center gap-2 text-xl font-black"><LayoutDashboard className="h-5 w-5 text-orange-600" /> Tela de tarefas</h2><p className="text-sm text-slate-500">Em aberto sempre visíveis; concluídas aparecem somente no mês atual. A pesquisa consulta todo o histórico.</p></div>
+                    <div className="flex flex-wrap gap-2"><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><Input className="pl-9" placeholder="Pesquisar em todas" value={search} onChange={(e) => setSearch(e.target.value)} /></div><Input type="date" value={searchDate} onChange={(e) => setSearchDate(e.target.value)} className="w-40" title="Pesquisar por data" /><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option>Todas</option>{statuses.map((s)=><option key={s}>{s}</option>)}</select>{(search || searchDate) && <Button variant="outline" onClick={() => { setSearch(""); setSearchDate(""); }}>Limpar</Button>}</div>
                   </div>
                   <div className="space-y-4">
                     {filteredTasks.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">Nenhuma tarefa encontrada para o filtro atual.</div>}
@@ -1316,10 +1582,10 @@ export default function App() {
                   <h2 className="mb-2 flex items-center gap-2 text-xl font-black"><Filter className="h-5 w-5 text-orange-600" /> Workflow das tarefas</h2>
                   <p className="mb-4 text-sm text-slate-500">Crie novas etapas de workflow para organizar as demandas.</p>
                   <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto]"><Input placeholder="Nome do novo workflow. Exemplo: Monitoramento" value={workflowName} onChange={(e)=>setWorkflowName(e.target.value)} onKeyDown={(e)=>e.key==="Enter"&&addWorkflow()} /><Button onClick={addWorkflow} className="bg-orange-600 hover:bg-orange-700"><Plus className="mr-2 h-4 w-4" /> Criar workflow</Button></div>
-                  <div className="grid gap-3 md:grid-cols-5">{workflows.map((flow,index)=>{const inUse=tasks.some((t)=>t.workflowId===flow.id);return <div key={flow.id} className="rounded-2xl bg-white p-4 text-center shadow-sm ring-1 ring-slate-100"><p className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-emerald-950 text-sm font-black text-white">{index+1}</p><p className="text-sm font-bold">{flow.name}</p><p className="mt-1 text-xs text-slate-500">{inUse?"Em uso":"Livre"}</p>{!inUse&&<Button size="sm" variant="outline" onClick={()=>deleteWorkflow(flow)} className="mt-3 text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button>}</div>})}</div>
+                  <div className="grid gap-3 md:grid-cols-5">{workflows.map((flow,index)=>{const inUse=openTasks.some((t)=>t.workflowId===flow.id);return <div key={flow.id} className="rounded-2xl bg-white p-4 text-center shadow-sm ring-1 ring-slate-100"><p className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-emerald-950 text-sm font-black text-white">{index+1}</p><p className="text-sm font-bold">{flow.name}</p><p className="mt-1 text-xs text-slate-500">{inUse?"Em uso":"Livre"}</p>{!inUse&&<Button size="sm" variant="outline" onClick={()=>deleteWorkflow(flow)} className="mt-3 text-red-600"><Trash2 className="mr-1 h-3 w-3" /> Excluir</Button>}</div>})}</div>
                 </CardContent>
               </Card>
-              <ProcessTracker tasks={tasks} workflows={workflows} setTaskWorkflow={setTaskWorkflow} setTaskStatus={updateTaskStatus} />
+              <ProcessTracker tasks={openTasks} workflows={workflows} setTaskWorkflow={setTaskWorkflow} setTaskStatus={updateTaskStatus} />
             </section>
           </>
         )}
@@ -1328,8 +1594,7 @@ export default function App() {
         {currentView === "dashboard" && !permissions.dashboard && <PermissionCard title="Acesso restrito" description="Seu perfil não possui permissão para acessar o dashboard executivo." />}
         {currentView === "usuarios" && isAdmin && <UserManagement users={users} addUser={addUser} deleteUser={deleteUser} toggleUserStatus={toggleUserStatus} />}
         {currentView === "usuarios" && !isAdmin && <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70"><CardContent className="p-6"><h2 className="text-xl font-black text-red-600">Acesso restrito</h2><p className="mt-2 text-sm text-slate-500">Somente o administrador pode acessar o cadastro e gestão de usuários.</p></CardContent></Card>}
-        {currentView === "auditoria" && permissions.audit && <AuditPanel logs={auditLogs} />}
-        {currentView === "auditoria" && !permissions.audit && <PermissionCard title="Acesso restrito" description="Seu perfil não possui permissão para visualizar auditoria." />}
+        {currentView === "suspeitos" && <AuthorIntelligencePanel authors={authors} photos={authorPhotos} reports={authorReports} addAuthor={addAuthor} updateAuthor={updateAuthor} deleteAuthor={deleteAuthor} uploadAuthorFile={uploadAuthorFile} getIntelFileUrl={getIntelFileUrl} />}
       </main>
     </div>
   );
