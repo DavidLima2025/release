@@ -81,32 +81,6 @@ function Badge({ children, tone = "default" }) {
   return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${tones[tone] || tones.default}`}>{children}</span>;
 }
 
-
-function isUuid(value) {
-  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
-function buildAuthorPayload(form, currentUser, includeCreatedBy = false) {
-  const categoryIsUuid = isUuid(form.categoryId);
-  const payload = {
-    name: form.name?.trim(),
-    alias: form.alias || "",
-    mother_name: form.motherName || "",
-    birth_date: form.birthDate || null,
-    document: form.document || "",
-    address: form.address || "",
-    neighborhood: form.neighborhood || "",
-    city: form.city || "",
-    crimes: form.crimes || (!categoryIsUuid && form.categoryId ? form.categoryId : ""),
-    status: form.status || "Suspeito",
-    risk_level: form.riskLevel || "Médio",
-    notes: form.notes || "",
-  };
-  if (categoryIsUuid) payload.category_id = form.categoryId;
-  if (includeCreatedBy && isUuid(currentUser?.id)) payload.created_by = currentUser.id;
-  return payload;
-}
-
 function normalizeUser(row) {
   return {
     id: row?.id || "",
@@ -174,7 +148,7 @@ function normalizeAuthor(row) {
     neighborhood: row.neighborhood || "",
     city: row.city || "",
     crimes: row.crimes || "",
-    categoryId: row.category_id || "",
+    categoryId: row.category_id || row.folder_id || "",
     status: row.status || "Suspeito",
     riskLevel: row.risk_level || "Médio",
     notes: row.notes || "",
@@ -830,20 +804,23 @@ function AuthorIntelligencePanel({ categories, authors, photos, reports, addAuth
               <Badge tone="dark">{visibleAuthors.length} cards</Badge>
             </div>
             <div className="relative mb-4"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><Input className="pl-9" placeholder="Pesquisar nome, vulgo, documento, bairro..." value={query} onChange={(e) => setQuery(e.target.value)} /></div>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {visibleAuthors.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500 md:col-span-2 xl:col-span-3">Nenhum card encontrado nesta pasta.</div>}
+            <div className="grid gap-4 lg:grid-cols-2">
+              {visibleAuthors.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500 lg:col-span-2">Nenhum card encontrado nesta pasta.</div>}
               {visibleAuthors.map((author) => {
                 const cover = photos.find((file) => file.authorId === author.id);
                 const authorFolder = fallbackFolders.find((folder) => folder.id === author.categoryId);
-                return <button key={author.id} type="button" onClick={() => setSelectedId(author.id)} className={`overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition hover:shadow-md ${selectedAuthor?.id === author.id ? "border-orange-600 ring-2 ring-orange-100" : ""}`}>
-                  <div className="grid h-40 place-items-center bg-slate-100">
-                    {cover ? <img src={getIntelFileUrl(cover.filePath)} alt={author.name} className="h-full w-full object-cover" /> : <UserRound className="h-12 w-12 text-slate-400" />}
-                  </div>
-                  <div className="p-4">
-                    <h3 className="truncate font-black">{author.name}</h3>
-                    <p className="text-xs text-slate-500">Vulgo: {author.alias || "Não informado"}</p>
-                    <p className="mt-1 text-xs text-slate-500">Pasta: {authorFolder?.name || author.crimes || "Não vinculada"}</p>
-                    <div className="mt-3 flex flex-wrap gap-1"><Badge>{author.status}</Badge><Badge tone={author.riskLevel === "Alto" ? "high" : author.riskLevel === "Médio" ? "medium" : "low"}>{author.riskLevel}</Badge></div>
+                return <button key={author.id} type="button" onClick={() => setSelectedId(author.id)} className={`group rounded-3xl border bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${selectedAuthor?.id === author.id ? "border-orange-600 ring-2 ring-orange-100" : "border-slate-200"}`}>
+                  <div className="flex gap-4">
+                    <div className="grid h-28 w-24 shrink-0 place-items-center overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
+                      {cover ? <img src={getIntelFileUrl(cover.filePath)} alt={author.name} className="h-full w-full object-cover" /> : <UserRound className="h-10 w-10 text-slate-400" />}
+                    </div>
+                    <div className="min-w-0 flex-1 py-1">
+                      <div className="mb-2 flex flex-wrap gap-1"><Badge>{author.status}</Badge><Badge tone={author.riskLevel === "Alto" ? "high" : author.riskLevel === "Médio" ? "medium" : "low"}>{author.riskLevel}</Badge></div>
+                      <h3 className="truncate text-lg font-black text-slate-950">{author.name}</h3>
+                      <p className="truncate text-sm text-slate-600"><b>Vulgo:</b> {author.alias || "Não informado"}</p>
+                      <p className="truncate text-xs text-slate-500"><b>Pasta:</b> {authorFolder?.name || "Não vinculada"}</p>
+                      <p className="mt-2 line-clamp-2 text-xs text-slate-500">{author.crimes || author.notes || "Sem informações complementares."}</p>
+                    </div>
                   </div>
                 </button>;
               })}
@@ -882,16 +859,32 @@ function AuthorIntelligencePanel({ categories, authors, photos, reports, addAuth
 
         {selectedAuthor ? <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70">
           <CardContent className="p-6">
-            <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-600">Card selecionado</p><h2 className="mt-2 text-3xl font-black">{selectedAuthor.name}</h2><p className="mt-1 text-sm text-slate-500">Vulgo: <b>{selectedAuthor.alias || "Não informado"}</b></p></div>
-              <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => startEdit(selectedAuthor)}><Edit3 className="mr-1 h-4 w-4" /> Editar dados</Button><Button variant="outline" className="text-red-600" onClick={() => deleteAuthor(selectedAuthor.id)}><Trash2 className="mr-1 h-4 w-4" /> Excluir card</Button></div>
+            <div className="mb-6 overflow-hidden rounded-3xl border bg-white shadow-sm">
+              <div className="grid gap-0 md:grid-cols-[260px_1fr]">
+                <div className="relative min-h-72 bg-slate-100">
+                  {selectedPhotos[0] ? <a href={getIntelFileUrl(selectedPhotos[0].filePath)} target="_blank" rel="noreferrer"><img src={getIntelFileUrl(selectedPhotos[0].filePath)} alt={selectedAuthor.name} className="h-full min-h-72 w-full object-cover" /></a> : <div className="grid h-full min-h-72 place-items-center text-slate-400"><UserRound className="h-20 w-20" /></div>}
+                  <div className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1 text-xs font-black text-emerald-950 shadow">Foto principal</div>
+                </div>
+                <div className="p-6">
+                  <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-600">Card selecionado</p><h2 className="mt-2 text-3xl font-black text-slate-950">{selectedAuthor.name}</h2><p className="mt-1 text-sm text-slate-500">Vulgo: <b>{selectedAuthor.alias || "Não informado"}</b></p></div>
+                    <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => startEdit(selectedAuthor)}><Edit3 className="mr-1 h-4 w-4" /> Editar dados</Button><Button variant="outline" className="text-red-600" onClick={() => deleteAuthor(selectedAuthor.id)}><Trash2 className="mr-1 h-4 w-4" /> Excluir card</Button></div>
+                  </div>
+                  <div className="mb-4 flex flex-wrap gap-2"><Badge>{selectedAuthor.status}</Badge><Badge tone={selectedAuthor.riskLevel === "Alto" ? "high" : selectedAuthor.riskLevel === "Médio" ? "medium" : "low"}>Risco: {selectedAuthor.riskLevel}</Badge><Badge tone="dark">{selectedPhotos.length} foto(s)</Badge></div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl bg-slate-50 p-4"><b>Pasta:</b><br />{fallbackFolders.find((folder) => folder.id === selectedAuthor.categoryId)?.name || "Não vinculada"}</div>
+                    <div className="rounded-2xl bg-slate-50 p-4"><b>Crimes:</b><br />{selectedAuthor.crimes || "Não informado"}</div>
+                  </div>
+                  <div className="mt-4 rounded-2xl bg-slate-50 p-4"><b>Observações:</b><p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{selectedAuthor.notes || "Sem observações."}</p></div>
+                </div>
+              </div>
             </div>
 
             <div className="mb-6 rounded-3xl bg-emerald-950 p-5 text-white">
-              <div className="mb-3 flex items-center justify-between"><h3 className="flex items-center gap-2 font-black"><ImageIcon className="h-5 w-5 text-orange-300" /> Fotos</h3><label className="cursor-pointer rounded-xl bg-orange-600 px-4 py-2 text-sm font-bold hover:bg-orange-700"><Upload className="mr-1 inline h-4 w-4" /> Subir foto<input type="file" accept="image/*" className="hidden" onChange={(e) => uploadAuthorFile(selectedAuthor, e.target.files?.[0], "photo")} /></label></div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="mb-3 flex items-center justify-between gap-3"><h3 className="flex items-center gap-2 font-black"><ImageIcon className="h-5 w-5 text-orange-300" /> Galeria de fotos</h3><label className="cursor-pointer rounded-xl bg-orange-600 px-4 py-2 text-sm font-bold hover:bg-orange-700"><Upload className="mr-1 inline h-4 w-4" /> Subir foto<input type="file" accept="image/*" className="hidden" onChange={(e) => uploadAuthorFile(selectedAuthor, e.target.files?.[0], "photo")} /></label></div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 {selectedPhotos.length === 0 && <div className="rounded-2xl bg-white/10 p-5 text-sm text-emerald-100">Nenhuma foto anexada.</div>}
-                {selectedPhotos.map((file) => <a key={file.id} href={getIntelFileUrl(file.filePath)} target="_blank" rel="noreferrer" className="overflow-hidden rounded-2xl bg-white/10 ring-1 ring-white/10"><img src={getIntelFileUrl(file.filePath)} alt={file.fileName} className="h-44 w-full object-cover" /><p className="truncate p-2 text-xs text-emerald-50">{file.fileName}</p></a>)}
+                {selectedPhotos.map((file, index) => <a key={file.id} href={getIntelFileUrl(file.filePath)} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-2xl bg-white/10 ring-1 ring-white/10"><div className="relative"><img src={getIntelFileUrl(file.filePath)} alt={file.fileName} className="h-36 w-full object-cover transition group-hover:scale-105" />{index === 0 && <span className="absolute left-2 top-2 rounded-full bg-orange-600 px-2 py-1 text-[10px] font-black">Principal</span>}</div><p className="truncate p-2 text-xs text-emerald-50">{file.fileName}</p></a>)}
               </div>
             </div>
 
@@ -1246,7 +1239,7 @@ export default function App() {
       supabase.from("demands").select("*, responsible:app_users!demands_responsible_id_fkey(*), manager:app_users!demands_manager_id_fkey(*), workflow:workflows(*)").order("created_at", { ascending: false }),
       supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(200),
       supabase.from("demand_attachments").select("*").order("created_at", { ascending: false }),
-      supabase.from("author_categories").select("*").order("name", { ascending: true }),
+      supabase.from("author_folders").select("*").order("name", { ascending: true }),
       supabase.from("crime_authors").select("*").order("created_at", { ascending: false }),
       supabase.from("author_photos").select("*").order("created_at", { ascending: false }),
       supabase.from("author_reports").select("*").order("created_at", { ascending: false }),
@@ -1284,7 +1277,7 @@ export default function App() {
       .on("postgres_changes", { event: "*", schema: "public", table: "demands" }, loadData)
       .on("postgres_changes", { event: "*", schema: "public", table: "audit_logs" }, loadData)
       .on("postgres_changes", { event: "*", schema: "public", table: "demand_attachments" }, loadData)
-      .on("postgres_changes", { event: "*", schema: "public", table: "author_categories" }, loadData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "author_folders" }, loadData)
       .on("postgres_changes", { event: "*", schema: "public", table: "crime_authors" }, loadData)
       .on("postgres_changes", { event: "*", schema: "public", table: "author_photos" }, loadData)
       .on("postgres_changes", { event: "*", schema: "public", table: "author_reports" }, loadData)
@@ -1458,7 +1451,7 @@ export default function App() {
   async function addAuthorCategory(category) {
     const name = category?.name?.trim();
     if (!name) return notify("Informe o nome da pasta.");
-    const { data, error } = await supabase.from("author_categories").insert({
+    const { data, error } = await supabase.from("author_folders").insert({
       name,
       description: category.description || "",
       created_by: currentUser?.id || null,
@@ -1474,7 +1467,7 @@ export default function App() {
     const inUse = authors.some((author) => author.categoryId === id);
     if (inUse) return notify("Esta pasta possui cards vinculados e não pode ser excluída.");
     if (!window.confirm("Excluir esta pasta vazia?")) return;
-    const { error } = await supabase.from("author_categories").delete().eq("id", id);
+    const { error } = await supabase.from("author_folders").delete().eq("id", id);
     if (error) return notify("Erro ao excluir pasta.");
     await addAudit("Pasta criminal excluída", "Excluiu uma pasta vazia do Banco de Alvos.");
     notify("Pasta excluída.");
@@ -1482,45 +1475,49 @@ export default function App() {
 
   async function addAuthor(form) {
     if (!form?.name?.trim()) return notify("Informe o nome do autor/suspeito.");
-    const payload = buildAuthorPayload(form, currentUser, true);
-    let result = await supabase.from("crime_authors").insert(payload).select("*").single();
-
-    // Compatibilidade com banco antigo: se a coluna category_id ainda não existir, salva sem ela.
-    if (result.error && String(result.error.message || "").toLowerCase().includes("category_id")) {
-      const fallbackPayload = { ...payload };
-      delete fallbackPayload.category_id;
-      result = await supabase.from("crime_authors").insert(fallbackPayload).select("*").single();
-    }
-
-    if (result.error) {
-      console.error("Erro ao criar autor/suspeito:", result.error);
-      notify(`Erro ao cadastrar autor: ${result.error.message || "verifique o SQL do Supabase."}`);
-      return null;
-    }
+    const { data, error } = await supabase.from("crime_authors").insert({
+      name: form.name,
+      alias: form.alias,
+      mother_name: form.motherName,
+      birth_date: form.birthDate || null,
+      document: form.document,
+      address: form.address,
+      neighborhood: form.neighborhood,
+      city: form.city,
+      crimes: form.crimes,
+      folder_id: form.categoryId || null,
+      status: form.status,
+      risk_level: form.riskLevel,
+      notes: form.notes,
+      created_by: currentUser?.id || null,
+    }).select("*").single();
+    if (error) { notify("Erro ao criar pasta do autor/suspeito."); return null; }
     await addAudit("Pasta de autor criada", `Criou pasta de inteligência para: ${form.name}.`);
-    notify("Autor/suspeito cadastrado com sucesso.");
+    notify("Pasta criada com sucesso.");
     await loadData();
-    return normalizeAuthor(result.data);
+    return normalizeAuthor(data);
   }
 
   async function updateAuthor(id, form) {
     if (!form?.name?.trim()) return notify("Informe o nome do autor/suspeito.");
-    const payload = buildAuthorPayload(form, currentUser, false);
-    let result = await supabase.from("crime_authors").update(payload).eq("id", id);
-
-    // Compatibilidade com banco antigo: se a coluna category_id ainda não existir, atualiza sem ela.
-    if (result.error && String(result.error.message || "").toLowerCase().includes("category_id")) {
-      const fallbackPayload = { ...payload };
-      delete fallbackPayload.category_id;
-      result = await supabase.from("crime_authors").update(fallbackPayload).eq("id", id);
-    }
-
-    if (result.error) {
-      console.error("Erro ao atualizar autor/suspeito:", result.error);
-      return notify(`Erro ao atualizar autor: ${result.error.message || "verifique o SQL do Supabase."}`);
-    }
+    const { error } = await supabase.from("crime_authors").update({
+      name: form.name,
+      alias: form.alias,
+      mother_name: form.motherName,
+      birth_date: form.birthDate || null,
+      document: form.document,
+      address: form.address,
+      neighborhood: form.neighborhood,
+      city: form.city,
+      crimes: form.crimes,
+      folder_id: form.categoryId || null,
+      status: form.status,
+      risk_level: form.riskLevel,
+      notes: form.notes,
+    }).eq("id", id);
+    if (error) return notify("Erro ao atualizar pasta.");
     await addAudit("Pasta de autor atualizada", `Atualizou dados de: ${form.name}.`);
-    notify("Autor/suspeito atualizado com sucesso.");
+    notify("Pasta atualizada com sucesso.");
   }
 
   async function deleteAuthor(id) {
@@ -1550,6 +1547,7 @@ export default function App() {
     if (error) return notify("Arquivo enviado, mas houve erro ao registrar no banco.");
     await addAudit(kind === "photo" ? "Foto anexada" : "Relatório anexado", `Anexou arquivo na pasta: ${author.name}.`);
     notify(kind === "photo" ? "Foto anexada com sucesso." : "Relatório anexado com sucesso.");
+    await loadData();
   }
 
   async function deleteTask(id) {
