@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Activity, AlertTriangle, ArrowLeft, Building2, CalendarDays, Camera, Check, CheckCircle2, ChevronLeft, ChevronRight,
@@ -178,6 +178,77 @@ function normalizeAuthorFile(row) {
     uploadedBy: row.uploaded_by || "",
     createdAt: row.created_at,
   };
+}
+
+function cleanTrelloText(text = "") {
+  return String(text || "")
+    .replace(/[•●]/g, "")
+    .replace(/\r/g, "")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+}
+
+function firstNonEmptyLine(text = "") {
+  return cleanTrelloText(text).split("\n").map((line) => line.trim()).filter(Boolean)[0] || "";
+}
+
+function extractField(text = "", labels = []) {
+  const normalized = cleanTrelloText(text);
+  for (const label of labels) {
+    const regex = new RegExp(`${label}\\s*[:：-]?\\s*([^\\n]+)`, "i");
+    const match = normalized.match(regex);
+    if (match?.[1]) return match[1].trim().replace(/^[-:]+/, "").trim();
+  }
+  return "";
+}
+
+function extractDocument(text = "") {
+  const normalized = cleanTrelloText(text);
+  const explicit = normalized.match(/(?:RG|CPF|DOCUMENTO)\s*[:：-]?\s*([A-Z]{0,3}\s*-?\s*[0-9.\-\/]{6,})/i);
+  if (explicit?.[1]) return explicit[1].replace(/\s+/g, " ").trim();
+  const standalone = normalized.match(/\b\d{7,11}\b/);
+  return standalone?.[0] || "";
+}
+
+function normalizeSuspectName(raw = "") {
+  let text = cleanTrelloText(raw);
+  text = text.replace(/NOME\s*[:：-]?/i, "");
+  text = text.replace(/(?:RG|CPF|DOCUMENTO)\s*[:：-]?.*$/i, "");
+  text = text.replace(/\b\d{7,11}\b/g, "");
+  text = text.replace(/[-–—]+$/g, "").trim();
+  return text || "Autor sem nome";
+}
+
+function parseTrelloAuthor(listName = "", cards = []) {
+  const cardTexts = cards.map((card) => [card?.name, card?.desc].filter(Boolean).join("\n")).filter(Boolean);
+  const merged = [listName, ...cardTexts].join("\n");
+  const nameFromField = extractField(merged, ["NOME"]);
+  const nameBase = nameFromField || firstNonEmptyLine(listName) || firstNonEmptyLine(merged);
+  const alias = extractField(merged, ["VULGO", "ALCUNHA"]);
+  const crimes = extractField(merged, ["FUNÇÃO", "FUNCAO", "CRIME", "CRIMES", "MODUS OPERANDI"]);
+  const document = extractDocument(merged);
+  const usefulDescriptions = cards
+    .map((card) => cleanTrelloText(card?.desc || ""))
+    .filter(Boolean);
+  const notes = usefulDescriptions.join("\n\n");
+  return {
+    name: normalizeSuspectName(nameBase),
+    alias: /^(nao|não|n[aã]o tem|sem|informado|não informado)$/i.test(alias) ? "" : alias,
+    document,
+    crimes: crimes || "Furto de correntinha/celular/arrombamento/roubo",
+    notes,
+    status: "Suspeito",
+    riskLevel: "Médio",
+  };
+}
+
+function isImageAttachment(attachment) {
+  const name = String(attachment?.name || attachment?.url || "").toLowerCase();
+  return /\.(png|jpe?g|webp|gif|bmp)$/i.test(name) || String(attachment?.mimeType || "").startsWith("image/");
+}
+
+function getTrelloAttachmentUrl(attachment) {
+  return attachment?.url || attachment?.previewUrl2x || attachment?.previewUrl || "";
 }
 
 function addDaysToDate(date, days) {
@@ -692,7 +763,7 @@ function AuditPanel({ logs }) {
   return <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70"><CardContent className="p-6"><div className="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div><h2 className="flex items-center gap-2 text-xl font-black"><Activity className="h-5 w-5 text-orange-600" /> Auditoria do sistema</h2><p className="text-sm text-slate-500">Histórico de ações registradas no Supabase.</p></div><Badge tone="dark">{logs.length} registros</Badge></div><div className="max-h-[520px] space-y-3 overflow-auto pr-1">{logs.length === 0 && <div className="rounded-2xl border bg-white p-5 text-sm text-slate-500">Nenhuma ação registrada ainda.</div>}{logs.map((log)=><div key={log.id} className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between"><div><p className="text-sm font-black text-slate-900">{log.action}</p><p className="mt-1 text-sm text-slate-600">{log.details}</p><p className="mt-2 text-xs text-slate-500">Usuário: <b>{log.user_name}</b> • Perfil: <b>{log.user_role}</b></p></div><Badge tone="medium">{new Date(log.created_at).toLocaleString("pt-BR")}</Badge></div></div>)}</div></CardContent></Card>
 }
 
-function AuthorIntelligencePanel({ categories, authors, photos, reports, addAuthorCategory, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, uploadAuthorFile, getIntelFileUrl }) {
+function AuthorIntelligencePanel({ categories, authors, photos, reports, addAuthorCategory, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, uploadAuthorFile, importTrelloBoard, getIntelFileUrl }) {
   const defaultCategoryId = categories[0]?.id || "all";
   const emptyAuthor = { name: "", alias: "", motherName: "", birthDate: "", document: "", address: "", neighborhood: "", city: "", crimes: "", categoryId: defaultCategoryId === "all" ? "" : defaultCategoryId, status: "Suspeito", riskLevel: "Médio", notes: "" };
   const [query, setQuery] = useState("");
@@ -703,6 +774,8 @@ function AuthorIntelligencePanel({ categories, authors, photos, reports, addAuth
   const [pendingPhoto, setPendingPhoto] = useState(null);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryDescription, setNewCategoryDescription] = useState("");
+  const [importingTrello, setImportingTrello] = useState(false);
+  const authorFormRef = useRef(null);
 
   const fallbackFolders = useMemo(() => {
     if (categories.length > 0) return categories;
@@ -730,7 +803,9 @@ function AuthorIntelligencePanel({ categories, authors, photos, reports, addAuth
   const startEdit = (author) => {
     setForm({ name: author.name, alias: author.alias, motherName: author.motherName, birthDate: author.birthDate, document: author.document, address: author.address, neighborhood: author.neighborhood, city: author.city, crimes: author.crimes, categoryId: author.categoryId || "", status: author.status, riskLevel: author.riskLevel, notes: author.notes });
     setSelectedId(author.id);
+    if (author.categoryId && selectedCategoryId === "all") setSelectedCategoryId(author.categoryId);
     setEditing(true);
+    window.setTimeout(() => authorFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
   };
   const createCategory = async () => {
     const created = await addAuthorCategory({ name: newCategoryName, description: newCategoryDescription });
@@ -739,6 +814,21 @@ function AuthorIntelligencePanel({ categories, authors, photos, reports, addAuth
       setForm((current) => ({ ...current, categoryId: created.id }));
       setNewCategoryName("");
       setNewCategoryDescription("");
+    }
+  };
+
+  const handleTrelloImport = async (file) => {
+    if (!file || !importTrelloBoard) return;
+    setImportingTrello(true);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const folderId = await importTrelloBoard(parsed);
+      if (folderId) setSelectedCategoryId(folderId);
+    } catch (error) {
+      alert("Erro ao ler o JSON do Trello. Verifique se o arquivo exportado está correto.");
+    } finally {
+      setImportingTrello(false);
     }
   };
   const submit = async () => {
@@ -775,6 +865,14 @@ function AuthorIntelligencePanel({ categories, authors, photos, reports, addAuth
                 <Input className="bg-white text-slate-900" placeholder="Observação da pasta" value={newCategoryDescription} onChange={(e) => setNewCategoryDescription(e.target.value)} />
                 <Button onClick={createCategory} className="w-full bg-orange-600 hover:bg-orange-700"><Plus className="mr-2 h-4 w-4" /> Criar pasta</Button>
               </div>
+            </div>
+            <div className="mb-4 rounded-2xl border border-dashed border-orange-300 bg-orange-50 p-4">
+              <p className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-orange-700">Importar Trello</p>
+              <p className="mb-3 text-xs text-slate-600">Importa listas como alvos, cartões como dados e anexos como fotos/relatórios.</p>
+              <label className={`flex cursor-pointer items-center justify-center rounded-xl px-4 py-3 text-sm font-black text-white ${importingTrello ? "bg-slate-400" : "bg-orange-600 hover:bg-orange-700"}`}>
+                <Upload className="mr-2 h-4 w-4" /> {importingTrello ? "Importando..." : "Escolher JSON do Trello"}
+                <input type="file" accept="application/json,.json" className="hidden" disabled={importingTrello} onChange={(e) => handleTrelloImport(e.target.files?.[0])} />
+              </label>
             </div>
             <div className="space-y-2">
               <button type="button" onClick={() => { setSelectedCategoryId("all"); setSelectedId(null); }} className={`w-full rounded-2xl border p-4 text-left shadow-sm transition hover:shadow-md ${selectedCategoryId === "all" ? "border-orange-600 bg-orange-50 ring-2 ring-orange-100" : "bg-white"}`}>
@@ -1445,6 +1543,8 @@ export default function App() {
   }
 
   function getIntelFileUrl(path) {
+    if (!path) return "";
+    if (/^https?:\/\//i.test(path)) return path;
     return supabase.storage.from("intelligence-files").getPublicUrl(path).data.publicUrl;
   }
 
@@ -1518,6 +1618,8 @@ export default function App() {
     if (error) return notify("Erro ao atualizar pasta.");
     await addAudit("Pasta de autor atualizada", `Atualizou dados de: ${form.name}.`);
     notify("Pasta atualizada com sucesso.");
+    await loadData();
+    return true;
   }
 
   async function deleteAuthor(id) {
@@ -1548,6 +1650,93 @@ export default function App() {
     await addAudit(kind === "photo" ? "Foto anexada" : "Relatório anexado", `Anexou arquivo na pasta: ${author.name}.`);
     notify(kind === "photo" ? "Foto anexada com sucesso." : "Relatório anexado com sucesso.");
     await loadData();
+  }
+
+  async function importTrelloBoard(board) {
+    if (!board?.lists || !board?.cards) return notify("JSON do Trello inválido.");
+    const folderName = (board.name || "Importado do Trello").trim();
+    let folderId = null;
+    const existingFolder = await supabase.from("author_folders").select("*").eq("name", folderName).maybeSingle();
+    if (existingFolder.data?.id) {
+      folderId = existingFolder.data.id;
+    } else {
+      const createdFolder = await supabase.from("author_folders").insert({ name: folderName, description: "Importado do JSON do Trello", created_by: currentUser?.id || null }).select("*").single();
+      if (createdFolder.error) return notify("Erro ao criar pasta de importação do Trello.");
+      folderId = createdFolder.data.id;
+    }
+
+    const cardsByList = (board.cards || []).reduce((acc, card) => {
+      if (card.closed) return acc;
+      const listId = card.idList;
+      if (!acc[listId]) acc[listId] = [];
+      acc[listId].push(card);
+      return acc;
+    }, {});
+
+    let importedAuthors = 0;
+    let importedFiles = 0;
+    for (const list of board.lists || []) {
+      if (list.closed) continue;
+      const listCards = cardsByList[list.id] || [];
+      const parsed = parseTrelloAuthor(list.name, listCards);
+      if (!parsed.name || parsed.name === "Autor sem nome") continue;
+
+      const maybeExisting = await supabase
+        .from("crime_authors")
+        .select("*")
+        .eq("name", parsed.name)
+        .eq("folder_id", folderId)
+        .maybeSingle();
+
+      let authorRow = maybeExisting.data;
+      if (!authorRow?.id) {
+        const created = await supabase.from("crime_authors").insert({
+          name: parsed.name,
+          alias: parsed.alias,
+          document: parsed.document,
+          crimes: parsed.crimes,
+          folder_id: folderId,
+          status: parsed.status,
+          risk_level: parsed.riskLevel,
+          notes: parsed.notes,
+          created_by: currentUser?.id || null,
+        }).select("*").single();
+        if (created.error) continue;
+        authorRow = created.data;
+        importedAuthors += 1;
+      } else {
+        await supabase.from("crime_authors").update({
+          alias: authorRow.alias || parsed.alias,
+          document: authorRow.document || parsed.document,
+          crimes: authorRow.crimes || parsed.crimes,
+          notes: [authorRow.notes, parsed.notes].filter(Boolean).join("\n\n"),
+        }).eq("id", authorRow.id);
+      }
+
+      const attachments = listCards.flatMap((card) => (card.attachments || []).map((attachment) => ({ ...attachment, cardName: card.name })));
+      for (const attachment of attachments) {
+        const url = getTrelloAttachmentUrl(attachment);
+        if (!url) continue;
+        const table = isImageAttachment(attachment) ? "author_photos" : "author_reports";
+        const exists = await supabase.from(table).select("id").eq("author_id", authorRow.id).eq("file_path", url).maybeSingle();
+        if (exists.data?.id) continue;
+        const insertedFile = await supabase.from(table).insert({
+          author_id: authorRow.id,
+          file_name: attachment.name || attachment.cardName || "Anexo Trello",
+          file_path: url,
+          file_size: attachment.bytes || 0,
+          mime_type: attachment.mimeType || (isImageAttachment(attachment) ? "image/*" : ""),
+          description: "Importado do Trello",
+          uploaded_by: currentUser?.id || null,
+        });
+        if (!insertedFile.error) importedFiles += 1;
+      }
+    }
+
+    await addAudit("Importação Trello", `Importou ${importedAuthors} alvo(s) e ${importedFiles} anexo(s) do quadro ${folderName}.`);
+    notify(`Importação concluída: ${importedAuthors} alvo(s) e ${importedFiles} anexo(s).`);
+    await loadData();
+    return folderId;
   }
 
   async function deleteTask(id) {
@@ -1733,7 +1922,7 @@ export default function App() {
         {currentView === "dashboard" && !permissions.dashboard && <PermissionCard title="Acesso restrito" description="Seu perfil não possui permissão para acessar o dashboard executivo." />}
         {currentView === "usuarios" && isAdmin && <UserManagement users={users} addUser={addUser} deleteUser={deleteUser} toggleUserStatus={toggleUserStatus} />}
         {currentView === "usuarios" && !isAdmin && <Card className="rounded-[2rem] border-0 bg-white/90 soft-card ring-1 ring-slate-200/70"><CardContent className="p-6"><h2 className="text-xl font-black text-red-600">Acesso restrito</h2><p className="mt-2 text-sm text-slate-500">Somente o administrador pode acessar o cadastro e gestão de usuários.</p></CardContent></Card>}
-        {currentView === "suspeitos" && <AuthorIntelligencePanel categories={authorCategories} authors={authors} photos={authorPhotos} reports={authorReports} addAuthorCategory={addAuthorCategory} deleteAuthorCategory={deleteAuthorCategory} addAuthor={addAuthor} updateAuthor={updateAuthor} deleteAuthor={deleteAuthor} uploadAuthorFile={uploadAuthorFile} getIntelFileUrl={getIntelFileUrl} />}
+        {currentView === "suspeitos" && <AuthorIntelligencePanel categories={authorCategories} authors={authors} photos={authorPhotos} reports={authorReports} addAuthorCategory={addAuthorCategory} deleteAuthorCategory={deleteAuthorCategory} addAuthor={addAuthor} updateAuthor={updateAuthor} deleteAuthor={deleteAuthor} uploadAuthorFile={uploadAuthorFile} importTrelloBoard={importTrelloBoard} getIntelFileUrl={getIntelFileUrl} />}
       </main>
     </div>
   );
