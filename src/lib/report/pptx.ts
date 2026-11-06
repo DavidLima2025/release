@@ -5,7 +5,7 @@
 import PptxGenJS from "pptxgenjs";
 import { layoutOrganogram, ROLE_COLOR, STAGES, stageIndex } from "../investigation";
 import type { ReportModel, Rich } from "./model";
-import { dateBr } from "./model";
+import { dateBr, linkedSources, sourceShortLabel } from "./model";
 
 const BLACK = "0B0B0C";
 const INK = "231F20";
@@ -144,8 +144,8 @@ export async function renderPptx(model: ReportModel): Promise<Uint8Array> {
 
   // ---------- Organograma ----------
   const { targets, links } = model.input;
-  if (targets.length > 1) {
-    const slide = content("Organograma", "Estrutura hierárquica e vínculos");
+  if (targets.length >= 1) {
+    const slide = content("Organograma", targets.length === 1 ? "Alvo identificado até o momento" : "Estrutura hierárquica e vínculos");
     const layout = layoutOrganogram(targets);
     const people = new Map(model.people.map((p) => [p.targetId, p]));
     const areaX = 1.3, areaY = 1.65, areaW = 11.5, areaH = 5.0;
@@ -192,6 +192,48 @@ export async function renderPptx(model: ReportModel): Promise<Uint8Array> {
         { text: name, options: { bold: true, fontFace: TITLE_FONT, fontSize: nameSize, color: BLACK, breakLine: true } },
         { text: [person?.alias ? `"${person.alias}"` : "", person?.role || ""].filter(Boolean).join(" · "), options: { fontFace: BODY_FONT, fontSize: Math.max(6, 9 * s), color: INK } },
       ], { x: p.cx - bw / 2, y: p.ty + 0.07 * s, w: bw, h: bh - 0.07 * s, align: "center", valign: "middle", margin: 0.04, fit: "shrink" });
+    });
+  }
+
+  // ---------- Alvos × ocorrências ----------
+  const sources = linkedSources(model.input);
+  if (sources.length && model.people.length) {
+    const slide = content("Alvos × ocorrências", "Em quais BOs e fontes cada alvo aparece");
+    const row = (n: number, maxW: number) => {
+      const gap = 0.2;
+      const bw = Math.min(maxW, (11.4 - gap * (n - 1)) / n);
+      const x0 = 1.3 + (11.4 - (n * bw + gap * (n - 1))) / 2;
+      return { bw, x: (i: number) => x0 + i * (bw + gap) };
+    };
+    const top = row(model.people.length, 2.4);
+    const bottom = row(sources.length, 2.2);
+    const y0 = 1.8, y1 = 4.7, BH = 1.0;
+    sources.forEach((src, j) => src.authorIds.forEach((id) => {
+      const i = model.people.findIndex((p) => p.authorId === id);
+      if (i < 0) return;
+      const x1 = top.x(i) + top.bw / 2;
+      const x2 = bottom.x(j) + bottom.bw / 2;
+      slide.addShape(pptx.ShapeType.line, { x: Math.min(x1, x2), y: y0 + BH, w: Math.abs(x2 - x1) || 0.001, h: y1 - y0 - BH, flipH: x2 < x1, line: { color: GOLD, width: 1.5 } });
+    }));
+    model.people.forEach((p, i) => {
+      const color = (ROLE_COLOR[p.role] || "#6B655A").replace("#", "");
+      slide.addShape(pptx.ShapeType.rect, { x: top.x(i), y: y0, w: top.bw, h: BH, fill: { color: "FFFFFF" }, line: { color, width: 1.5 } });
+      slide.addShape(pptx.ShapeType.rect, { x: top.x(i), y: y0, w: top.bw, h: 0.07, fill: { color }, line: { color, width: 0 } });
+      const size = Math.max(7, Math.min(11, (top.bw * 72 * 1.8) / (p.name.length * 0.62)));
+      slide.addText([
+        { text: p.name, options: { bold: true, fontFace: TITLE_FONT, fontSize: size, color: BLACK, breakLine: true } },
+        { text: [p.alias ? `"${p.alias}"` : "", p.role].filter(Boolean).join(" · "), options: { fontFace: BODY_FONT, fontSize: Math.max(7, size - 2), color: INK } },
+      ], { x: top.x(i), y: y0 + 0.07, w: top.bw, h: BH - 0.07, align: "center", valign: "middle", margin: 0.04 });
+    });
+    sources.forEach((src, j) => {
+      const label = sourceShortLabel(src);
+      slide.addShape(pptx.ShapeType.rect, { x: bottom.x(j), y: y1, w: bottom.bw, h: BH, fill: { color: BLACK }, line: { color: BLACK } });
+      slide.addShape(pptx.ShapeType.rect, { x: bottom.x(j), y: y1, w: bottom.bw, h: 0.07, fill: { color: GOLD }, line: { color: GOLD, width: 0 } });
+      slide.addText([
+        { text: label.kind, options: { bold: true, fontFace: TITLE_FONT, fontSize: 9, color: GOLD_LIGHT, breakLine: true } },
+        { text: label.ref, options: { bold: true, fontFace: TITLE_FONT, fontSize: Math.max(7, Math.min(11, (bottom.bw * 72 * 1.6) / (label.ref.length * 0.62))), color: "FFFFFF", breakLine: true } },
+        { text: label.date, options: { fontFace: BODY_FONT, fontSize: 9, color: GOLD_LIGHT } },
+      ], { x: bottom.x(j), y: y1 + 0.07, w: bottom.bw, h: BH - 0.07, align: "center", valign: "middle", margin: 0.04 });
     });
   }
 

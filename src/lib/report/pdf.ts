@@ -9,7 +9,7 @@
 import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import { layoutOrganogram, ROLE_COLOR } from "../investigation";
 import type { Block, ReportModel, ReportPerson, Rich } from "./model";
-import { dateBr } from "./model";
+import { dateBr, linkedSources, sourceShortLabel } from "./model";
 
 const CM = 28.3465;
 const PAGE_W = 595.28;
@@ -325,6 +325,73 @@ function organogram(w: Writer, model: ReportModel, block: Extract<Block, { type:
   w.y += 6;
 }
 
+// ---------- Alvos × ocorrências ----------
+function linkChart(w: Writer, model: ReportModel, block: Extract<Block, { type: "links" }>) {
+  const people = model.people;
+  const sources = linkedSources(model.input);
+  const rowLayout = (n: number, maxW: number) => {
+    const gap = 10;
+    const bw = Math.min(maxW, (CONTENT_W - gap * (n - 1)) / n);
+    const total = n * bw + gap * (n - 1);
+    const x0 = M_LEFT + (CONTENT_W - total) / 2;
+    return { bw, x: (i: number) => x0 + i * (bw + gap) };
+  };
+  const top = rowLayout(people.length, 118);
+  const bottom = rowLayout(sources.length, 104);
+  const BH = 40;
+  const GAP = 70;
+  const height = BH * 2 + GAP;
+  w.y += 6;
+  w.ensure(height + SMALL_LEAD * 3);
+  w.small(`${block.label} – ${block.caption}`);
+  const y0 = w.y + 4;
+  const y1 = y0 + BH + GAP;
+  const fit = (text: string, font: PDFFont, size: number, max: number) => {
+    let t = clean(text);
+    while (t.length > 3 && font.widthOfTextAtSize(t, size) > max) t = `${t.slice(0, -2)}…`;
+    return t;
+  };
+  // linhas primeiro (ficam por baixo das caixas)
+  sources.forEach((src, j) => {
+    src.authorIds.forEach((id) => {
+      const i = people.findIndex((p) => p.authorId === id);
+      if (i < 0) return;
+      w.page.drawLine({ start: { x: top.x(i) + top.bw / 2, y: PAGE_H - y0 - BH }, end: { x: bottom.x(j) + bottom.bw / 2, y: PAGE_H - y1 }, thickness: 0.8, color: GOLD });
+    });
+  });
+  people.forEach((p, i) => {
+    const x = top.x(i);
+    const color = hex(ROLE_COLOR[p.role] || "#6B655A");
+    w.page.drawRectangle({ x, y: PAGE_H - y0 - BH, width: top.bw, height: BH, color: WHITE, borderColor: color, borderWidth: 1 });
+    w.page.drawRectangle({ x, y: PAGE_H - y0 - 3, width: top.bw, height: 3, color });
+    const size = Math.max(5.5, Math.min(7.5, top.bw / 14));
+    const lines = layoutRich(w.fonts, [{ text: p.name, bold: true }], size, top.bw - 6).slice(0, 2);
+    lines.forEach((l, li) => {
+      const t = l.tokens.map((k) => k.text).join("");
+      const tw = w.fonts.bold.widthOfTextAtSize(t, size);
+      w.page.drawText(t, { x: x + (top.bw - tw) / 2, y: PAGE_H - y0 - 10 - li * size * 1.15 - size * 0.8, size, font: w.fonts.bold, color: BLACK });
+    });
+    const sub = fit(p.alias ? `"${p.alias}" · ${p.role}` : p.role, w.fonts.regular, size - 0.8, top.bw - 6);
+    const sw = w.fonts.regular.widthOfTextAtSize(sub, size - 0.8);
+    w.page.drawText(sub, { x: x + (top.bw - sw) / 2, y: PAGE_H - y0 - BH + 5, size: size - 0.8, font: w.fonts.regular, color: INK });
+  });
+  sources.forEach((src, j) => {
+    const x = bottom.x(j);
+    const label = sourceShortLabel(src);
+    w.page.drawRectangle({ x, y: PAGE_H - y1 - BH, width: bottom.bw, height: BH, color: BLACK });
+    w.page.drawRectangle({ x, y: PAGE_H - y1 - 3, width: bottom.bw, height: 3, color: GOLD });
+    const size = Math.max(5.5, Math.min(7.2, bottom.bw / 14));
+    [[label.kind, w.fonts.bold, GOLD], [label.ref, w.fonts.bold, WHITE], [label.date, w.fonts.regular, rgb(0.81, 0.76, 0.61)]].forEach(([text, font, color], li) => {
+      const t = fit(String(text || ""), font as PDFFont, size, bottom.bw - 6);
+      const tw = (font as PDFFont).widthOfTextAtSize(t, size);
+      w.page.drawText(t, { x: x + (bottom.bw - tw) / 2, y: PAGE_H - y1 - 9 - li * (size + 3) - size * 0.8, size, font: font as PDFFont, color: color as ReturnType<typeof rgb> });
+    });
+  });
+  w.y = y1 + BH + 6;
+  w.small(block.source);
+  w.y += 6;
+}
+
 // ---------- Elementos pré-textuais ----------
 function cover(w: Writer, model: ReportModel, logo?: PDFImage) {
   const page = w.addPage(false);
@@ -474,6 +541,7 @@ export async function renderPdf(model: ReportModel): Promise<Uint8Array> {
         });
       } else if (block.type === "table") table(w, block);
       else if (block.type === "org") organogram(w, model, block);
+      else if (block.type === "links") linkChart(w, model, block);
       else if (block.type === "person") await person(w, block.person, block.label, images, source);
     }
   }

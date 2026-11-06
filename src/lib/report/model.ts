@@ -19,6 +19,7 @@ export type Block =
   | { type: "list"; items: string[] }
   | { type: "table"; label: string; caption: string; headers: string[]; widths: number[]; rows: string[][]; source: string }
   | { type: "org"; label: string; caption: string; source: string }
+  | { type: "links"; label: string; caption: string; source: string }
   | { type: "person"; person: ReportPerson; label: string };
 
 export type Section = { number: string; title: string; level: 1 | 2; blocks: Block[] };
@@ -122,6 +123,19 @@ export function referenceFor(item: InvestigationItem, place: string, today: Date
   }
 }
 
+/** Fontes do relatório que citam algum alvo do dossiê (para o quadro alvos × ocorrências). */
+export function linkedSources(input: ReportInput) {
+  const ids = new Set(input.people.map((p) => p.authorId));
+  return input.items
+    .filter((i) => i.includeInReport && i.authorIds.some((a) => ids.has(a)))
+    .sort((a, b) => (a.itemDate || "9999").localeCompare(b.itemDate || "9999"));
+}
+
+export function sourceShortLabel(item: InvestigationItem) {
+  const kind = item.kind === "Boletim de ocorrência" ? "REDS" : item.kind.split(" ")[0];
+  return { kind: kind.toUpperCase(), ref: item.reference || item.title, date: dateBr(item.itemDate) };
+}
+
 export function buildReport(input: ReportInput): ReportModel {
   const inv = input.investigation;
   const today = input.today || new Date();
@@ -166,13 +180,20 @@ export function buildReport(input: ReportInput): ReportModel {
   }
 
   // 4 Estrutura e vínculos
-  if (input.targets.length > 1 || input.links.length) {
+  if (input.targets.length >= 1) {
     const blocks: Block[] = [];
-    const hasHierarchy = input.targets.some((t) => t.parentId);
-    if (hasHierarchy || input.targets.length > 1) {
+    figura += 1;
+    blocks.push({
+      type: "p", indent: true,
+      text: input.targets.length === 1
+        ? `A Figura ${figura} apresenta o alvo identificado até o momento; não foram levantados outros integrantes.`
+        : `A Figura ${figura} apresenta a estrutura hierárquica identificada${input.links.length ? ", e as linhas tracejadas indicam os demais vínculos" : ""}.`,
+    });
+    blocks.push({ type: "org", label: `Figura ${figura}`, caption: `Organograma — ${inv.title}`, source });
+    if (linkedSources(input).length) {
       figura += 1;
-      blocks.push({ type: "p", indent: true, text: `A Figura ${figura} apresenta a estrutura hierárquica identificada${input.links.length ? ", e as linhas tracejadas indicam os demais vínculos" : ""}.` });
-      blocks.push({ type: "org", label: `Figura ${figura}`, caption: `Organograma — ${inv.title}`, source });
+      blocks.push({ type: "p", indent: true, text: `A Figura ${figura} relaciona cada alvo às ocorrências e fontes em que aparece.` });
+      blocks.push({ type: "links", label: `Figura ${figura}`, caption: "Vínculos entre alvos e ocorrências", source });
     }
     if (input.links.length) {
       quadro += 1;

@@ -14,11 +14,19 @@ import type { InvestigationsApi } from "../hooks/useInvestigations";
 // Tipos de envolvimento que entram marcados como alvo (vítima, testemunha etc. ficam desmarcados).
 const SUSPECT = /AUTOR|SUSPEITO|INFRATOR|CONDUZIDO|PRESO|CO-?AUTOR|PARTICIPE|AUTUADO|ADOLESCENTE/i;
 
+type ConflictField = "birthDate" | "motherName" | "fatherName" | "document" | "address";
+/** keep = manter o card; replace = usar o dado do BO; add = manter e acrescentar (documentos/endereços). */
+type Conflict = { field: ConflictField; label: string; current: string; incoming: string; choice: "keep" | "replace" | "add" };
+
 type Person = {
   key: number;
   include: boolean;
   tipo: string;
   existing?: Author;
+  match: "doc" | "name" | "";
+  mode: "merge" | "new";
+  conflicts: Conflict[];
+  boAttached: boolean;
   form: {
     name: string; alias: string; motherName: string; fatherName: string; birthDate: string; document: string; address: string;
     neighborhood: string; city: string; crimes: string; categoryId: string; status: string; riskLevel: string; notes: string;
@@ -40,10 +48,32 @@ function documentOf(e: BoEnvolvido) {
 const norm = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim().toUpperCase();
 const digits = (t: string) => (t || "").replace(/\D/g, "");
 
-/** Procura o envolvido no banco de alvos pelo nome ou por RG/CPF. */
-function findExisting(authors: Author[], e: BoEnvolvido) {
+/** Procura o envolvido no banco de alvos: primeiro por RG/CPF (forte), depois pelo nome (fraco: pode ser homônimo). */
+function findExisting(authors: Author[], e: BoEnvolvido): { author?: Author; match: "doc" | "name" | "" } {
   const docs = [digits(e.rg), digits(e.cpf)].filter((d) => d.length >= 6);
-  return authors.find((a) => norm(a.name) === norm(e.nome) || (docs.length > 0 && docs.some((d) => digits(a.document).includes(d))));
+  const byDoc = docs.length ? authors.find((a) => docs.some((d) => digits(a.document).includes(d))) : undefined;
+  if (byDoc) return { author: byDoc, match: "doc" };
+  const byName = authors.find((a) => norm(a.name) === norm(e.nome));
+  return byName ? { author: byName, match: "name" } : { match: "" };
+}
+
+const fullAddress = (address: string, neighborhood: string, city: string) => [address, neighborhood, city].filter(Boolean).join(" — ");
+
+/** Compara o card existente com o que veio no BO. */
+function compare(a: Author, form: Person["form"]): Conflict[] {
+  const out: Conflict[] = [];
+  const differs = (x: string, y: string) => Boolean(x && y) && norm(x) !== norm(y);
+  if (differs(a.birthDate, form.birthDate)) out.push({ field: "birthDate", label: "Nascimento", current: formatBR(a.birthDate), incoming: formatBR(form.birthDate), choice: "keep" });
+  if (differs(a.motherName, form.motherName)) out.push({ field: "motherName", label: "Mãe", current: a.motherName, incoming: form.motherName, choice: "keep" });
+  if (differs(a.fatherName, form.fatherName)) out.push({ field: "fatherName", label: "Pai", current: a.fatherName, incoming: form.fatherName, choice: "keep" });
+  const newDocs = form.document.split(" · ").filter((d) => digits(d).length >= 6 && !digits(a.document).includes(digits(d)));
+  if (a.document && newDocs.length) out.push({ field: "document", label: "Documentos", current: a.document, incoming: newDocs.join(" · "), choice: "add" });
+  const current = fullAddress(a.address, a.neighborhood, a.city);
+  const incoming = fullAddress(form.address, form.neighborhood, form.city);
+  if (a.address && form.address && !norm(current).includes(norm(form.address)) && !norm(incoming).includes(norm(a.address))) {
+    out.push({ field: "address", label: "Endereço", current, incoming, choice: "add" });
+  }
+  return out;
 }
 
 type Props = { open: boolean; data: AppData; api?: InvestigationsApi; onClose: () => void; onDone?: (authorIds: string[]) => void; investigationId?: string };
@@ -78,10 +108,11 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
       const natureza = lib.naturezaCurta(parsed.natureza);
       const folder = data.authorCategories.find((f) => norm(natureza).includes(norm(f.name)) || norm(f.name).includes(norm(natureza)));
       setPeople(parsed.envolvidos.filter((e) => e.nome).map((e) => {
-        const existing = findExisting(data.authors, e);
+        const { author: existing, match } = findExisting(data.authors, e);
         const address = [e.endereco, e.numeroEndereco].filter(Boolean).join(", ");
+        const boAttached = Boolean(existing && parsed.numero && data.authorReports.some((r) => r.authorId === existing.id && (r.description || r.fileName).includes(parsed.numero)));
         return {
-          key: e.numero, include: SUSPECT.test(e.tipo) && !/JURIDICA|LTDA|ME$|EIRELI|S\/A/i.test(e.nome), tipo: e.tipo, existing,
+          key: e.numero, include: SUSPECT.test(e.tipo) && !/JURIDICA|LTDA|ME$|EIRELI|S\/A/i.test(e.nome), tipo: e.tipo, existing, match, mode: "merge" as const, conflicts: [] as Conflict[], boAttached,
           role: /AUTOR|INFRATOR|PRESO|CONDUZIDO/i.test(e.tipo) ? "Executor" : "Associado",
           photo: null, preview: "",
           form: {
@@ -92,6 +123,12 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
             notes: `Envolvido como ${e.tipo.toLowerCase()} no REDS ${parsed.numero || ""}${parsed.dataFato ? ` (${formatBR(parsed.dataFato)})` : ""} — ${parsed.natureza}${parsed.local.logradouro ? `, ${parsed.local.logradouro}${parsed.local.numero ? `, ${parsed.local.numero}` : ""}${parsed.local.bairro ? ` — ${parsed.local.bairro}` : ""}` : ""}.`,
           },
         };
+      }).map((p) => {
+        if (!p.existing) return p;
+        const conflicts = compare(p.existing, p.form);
+        // Mesmo nome, mas mãe/nascimento/documento diferentes: provável homônimo — sugere card novo.
+        const homonym = p.match === "name" && conflicts.some((c) => c.field === "birthDate" || c.field === "motherName" || c.field === "document");
+        return { ...p, conflicts, mode: homonym ? ("new" as const) : ("merge" as const) };
       }));
     } catch (error) {
       console.error(error);
@@ -119,12 +156,29 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
     for (const p of selected) {
       setSaving(`Salvando ${p.form.name}…`);
       let author: { id: string; name: string } | null = null;
-      if (p.existing) {
-        // Completa só o que estava vazio no card e acrescenta a observação do BO.
+      if (p.existing && p.mode === "merge") {
+        // Completa o que estava vazio; nas divergências segue a escolha feita em cada campo.
         const e = p.existing;
         const merged: any = { ...e };
         (Object.keys(p.form) as (keyof Person["form"])[]).forEach((k) => { if (!merged[k] && p.form[k]) merged[k] = p.form[k]; });
-        merged.notes = e.notes?.includes(bo.numero) ? e.notes : [e.notes, p.form.notes].filter(Boolean).join("\n\n");
+        const extraNotes: string[] = [];
+        const when = `REDS ${bo.numero}${bo.dataFato ? `, ${formatBR(bo.dataFato)}` : ""}`;
+        p.conflicts.forEach((c) => {
+          if (c.field === "address") {
+            if (c.choice === "replace") { merged.address = p.form.address; merged.neighborhood = p.form.neighborhood; merged.city = p.form.city; extraNotes.push(`Endereço anterior: ${c.current}.`); }
+            else if (c.choice === "add") extraNotes.push(`Outro endereço informado (${when}): ${c.incoming}.`);
+          } else if (c.field === "document") {
+            if (c.choice === "add") merged.document = `${e.document} · ${c.incoming}`;
+            else if (c.choice === "replace") merged.document = p.form.document;
+          } else if (c.choice === "replace") {
+            merged[c.field] = p.form[c.field];
+            extraNotes.push(`${c.label} alterado(a) de "${c.current}" para "${c.incoming}" (${when}).`);
+          } else {
+            extraNotes.push(`Divergência — ${c.label.toLowerCase()} informado(a) como "${c.incoming}" no ${when}.`);
+          }
+        });
+        const boNote = e.notes?.includes(bo.numero) ? "" : p.form.notes;
+        merged.notes = [e.notes, boNote, ...extraNotes].filter(Boolean).join("\n\n");
         merged.crimes = e.crimes && !norm(e.crimes).includes(norm(p.form.crimes.split(" — ")[0])) ? `${e.crimes}; ${p.form.crimes}` : e.crimes || p.form.crimes;
         if (p.form.alias && p.form.alias !== e.alias) merged.alias = p.form.alias;
         if (await data.updateAuthor(e.id, merged, { silent: true })) author = { id: e.id, name: e.name };
@@ -134,7 +188,8 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
       if (!author) continue;
       authorIds.push(author.id);
       if (p.photo) await data.uploadAuthorFile(author, p.photo, "photo", { silent: true, description: `Foto cadastrada pelo ${ref}` });
-      if (attachBo) await data.uploadAuthorFile(author, file, "report", { silent: true, description: `${ref} — ${p.tipo.toLowerCase()}` });
+      // Mesmo BO já anexado a este card: não duplica o arquivo.
+      if (attachBo && !(p.boAttached && p.mode === "merge")) await data.uploadAuthorFile(author, file, "report", { silent: true, description: `${ref} — ${p.tipo.toLowerCase()}` });
     }
 
     // Vínculo com a investigação: alvos + BO como fonte + coautoria.
@@ -199,6 +254,19 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
             {bo.local.logradouro && <span className="inline-flex items-center gap-1 text-sm text-white/70"><MapPin className="h-3.5 w-3.5" />{bo.local.logradouro}{bo.local.numero ? `, ${bo.local.numero}` : ""} · {bo.local.bairro}</span>}
           </div>
 
+          {(() => {
+            const onCards = bo.numero ? data.authors.filter((a) => data.authorReports.some((r) => r.authorId === a.id && (r.description || r.fileName).includes(bo.numero))) : [];
+            const inInvestigations = bo.numero && api ? api.investigations.filter((inv) => api.items.some((it) => it.investigationId === inv.id && it.reference === bo.numero)) : [];
+            if (!onCards.length && !inInvestigations.length) return null;
+            return (
+              <div className="rounded-sm border-l-4 border-status-risk bg-status-risk/10 px-4 py-3 text-sm">
+                <b>Este REDS já foi cadastrado antes.</b>{" "}
+                {onCards.length > 0 && <>Está no card de {onCards.map((a) => a.name).join(", ")}. </>}
+                {inInvestigations.length > 0 && <>É fonte em {inInvestigations.map((i) => i.code).join(", ")}. </>}
+                Pode salvar de novo sem medo: o PDF não é anexado duas vezes ao mesmo card, a observação não se repete e o BO não entra duplicado na investigação.
+              </div>
+            );
+          })()}
           {people.length === 0 && <p className="text-sm text-pm-muted">Nenhum envolvido identificado neste BO.</p>}
           {people.map((p) => (
             <div key={p.key} className={`rounded-sm border bg-white ${p.include ? "border-pm-gold" : "border-pm-line opacity-75"}`}>
@@ -206,8 +274,46 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
                 <input type="checkbox" className="h-5 w-5 accent-[#7A6C45]" checked={p.include} onChange={(e) => update(p.key, { include: e.target.checked })} />
                 <span className="font-black uppercase">{p.form.name}</span>
                 <Badge tone={SUSPECT.test(p.tipo) ? "late" : "default"}>{p.tipo}</Badge>
-                {p.existing ? <Badge tone="gold">Já está no banco — completa o card</Badge> : <Badge tone="todo">Card novo</Badge>}
+                {!p.existing && <Badge tone="todo">Card novo</Badge>}
+                {p.existing && p.mode === "merge" && <Badge tone="gold">{p.match === "doc" ? "Mesmo RG/CPF" : "Mesmo nome"} — atualiza o card existente</Badge>}
+                {p.existing && p.mode === "new" && <Badge tone="late">Possível homônimo — cria card novo</Badge>}
+                {p.boAttached && <Badge tone="dark">Este BO já está no card</Badge>}
               </label>
+              {p.include && p.existing && (
+                <div className="border-b border-pm-line bg-pm-cream/60 px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-3 text-sm">
+                    <span>Já existe no banco de alvos: <b>{p.existing.name}</b>{p.existing.alias ? ` ("${p.existing.alias}")` : ""}{p.existing.birthDate ? `, nascido em ${formatBR(p.existing.birthDate)}` : ""}.</span>
+                    <Select className="h-9 w-auto" value={p.mode} onChange={(e) => update(p.key, { mode: e.target.value as Person["mode"] })}>
+                      <option value="merge">É a mesma pessoa — atualizar o card</option>
+                      <option value="new">É outra pessoa (homônimo) — criar card novo</option>
+                    </Select>
+                  </div>
+                  {p.mode === "merge" && p.conflicts.length > 0 && (
+                    <div className="mt-3 overflow-x-auto">
+                      <p className="pm-label">Dados diferentes do card — escolha o que fazer</p>
+                      <table className="w-full text-sm">
+                        <thead><tr className="text-left text-[11px] uppercase tracking-wider text-pm-muted"><th className="py-1 pr-3">Campo</th><th className="py-1 pr-3">No card</th><th className="py-1 pr-3">Neste BO</th><th className="py-1">Ação</th></tr></thead>
+                        <tbody>
+                          {p.conflicts.map((c, ci) => (
+                            <tr key={c.field} className="border-t border-pm-line align-top">
+                              <td className="py-1.5 pr-3 font-bold">{c.label}</td>
+                              <td className="py-1.5 pr-3">{c.current}</td>
+                              <td className="py-1.5 pr-3 font-semibold text-pm-gold-dark">{c.incoming}</td>
+                              <td className="py-1.5">
+                                <Select className="h-8 w-72 text-xs" value={c.choice} onChange={(e) => update(p.key, { conflicts: p.conflicts.map((x, xi) => (xi === ci ? { ...x, choice: e.target.value as Conflict["choice"] } : x)) })}>
+                                  {(c.field === "address" || c.field === "document") && <option value="add">Manter e acrescentar o novo</option>}
+                                  <option value="keep">{c.field === "address" || c.field === "document" ? "Manter só o do card" : "Manter o do card (registra a divergência)"}</option>
+                                  <option value="replace">Trocar pelo do BO</option>
+                                </Select>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
               {p.include && (
                 <div className="grid gap-4 p-4 md:grid-cols-[150px_1fr]">
                   <label className="group relative flex aspect-[3/4] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-sm border border-dashed border-pm-line bg-pm-cream text-center text-xs text-pm-muted hover:border-pm-gold">

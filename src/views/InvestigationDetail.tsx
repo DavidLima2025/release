@@ -8,7 +8,7 @@ import { Card, CardContent, EmptyState, SectionHeader } from "../components/ui/c
 import { Field, Input, Select, Textarea } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Modal } from "../components/ui/modal";
-import { Organogram } from "../components/Organogram";
+import { LinkChart, Organogram } from "../components/Organogram";
 import { BoAuthorModal } from "../components/BoAuthorModal";
 import {
   CLASSIFICATIONS, INFO_RATINGS, INVESTIGATION_STATUSES, ITEM_KINDS, Investigation, InvestigationItem, InvestigationLink, InvestigationTarget,
@@ -378,6 +378,15 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
           </div>
         </CardContent>
       </Card>
+
+      {api.items.some((i) => i.investigationId === inv.id && i.authorIds.length) && (
+        <Card>
+          <CardContent>
+            <SectionHeader icon={Link2} title="Alvos × ocorrências" subtitle="Em quais BOs e fontes cada alvo aparece. Para ligar um alvo a uma fonte, edite a fonte e marque os alvos citados." />
+            <LinkChart targets={targets} items={api.items.filter((i) => i.investigationId === inv.id)} authors={data.authors} />
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid items-start gap-5 xl:grid-cols-[1fr_380px]">
         <Card>
