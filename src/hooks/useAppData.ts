@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DEMAND_BUCKET, INTEL_BUCKET, supabase } from "../supabase";
+import { DEMAND_BUCKET, INTEL_BUCKET, setSessionToken, supabase } from "../supabase";
 import {
   AppUser, Attachment, AuditLog, Author, AuthorCategory, AuthorFile, DEFAULT_CHECKLIST, MAIN_ADMIN_LOGIN, Task, Workflow,
   getPermissions, normalizeAttachment, normalizeAuthor, normalizeAuthorCategory, normalizeAuthorFile, normalizeTask,
@@ -71,6 +71,7 @@ export function useAppData(notify: Notify) {
   userRef.current = currentUser;
   const tokenRef = useRef(session?.token || "");
   tokenRef.current = session?.token || "";
+  setSessionToken(tokenRef.current);
   const loadingRef = useRef(false);
   const pendingRef = useRef(false);
   const timerRef = useRef<number | null>(null);
@@ -81,6 +82,7 @@ export function useAppData(notify: Notify) {
 
   const endSession = useCallback((message?: string) => {
     saveSession(null);
+    setSessionToken("");
     setSession(null);
     setLoading(true);
     if (message) notify(message, "error");
@@ -170,7 +172,8 @@ export function useAppData(notify: Notify) {
     const tables = ["app_users", "workflows", "demands", "audit_logs", "demand_attachments", "author_folders", "crime_authors", "author_photos", "author_reports"];
     const channel = tables.reduce((ch, table) => ch.on("postgres_changes" as any, { event: "*", schema: "public", table }, reload), supabase.channel("si6cia-live"));
     channel.subscribe();
-    const poll = window.setInterval(loadData, 60000);
+    // Com as tabelas protegidas por sessão o realtime não entrega eventos; a lista se atualiza a cada 30 s.
+    const poll = window.setInterval(loadData, 30000);
     const clock = window.setInterval(() => setToday(todayISO()), 60000);
     return () => {
       window.clearInterval(poll);
@@ -197,6 +200,7 @@ export function useAppData(notify: Notify) {
     const next = applyServerUser(data[0], data[0].session_token);
     userRef.current = next.user;
     tokenRef.current = next.token;
+    setSessionToken(next.token);
     return null;
   }
 
