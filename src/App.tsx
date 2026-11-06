@@ -10,6 +10,7 @@ import { Button } from "./components/ui/button";
 import { TaskFormModal } from "./components/TaskFormModal";
 import { PostponeModal } from "./components/PostponeModal";
 import { BoImportModal } from "./components/BoImportModal";
+import { ChangePasswordModal, ForcePasswordChange } from "./components/PasswordForm";
 import { Layout, View } from "./views/Layout";
 import { LoginView } from "./views/LoginView";
 import { SetupView } from "./views/SetupView";
@@ -49,6 +50,7 @@ function AuthenticatedApp() {
   const [postponing, setPostponing] = useState<Task | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [tvOpen, setTvOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
 
   const openCreate = useCallback((date: string) => setTaskForm({ open: true, task: null, date }), []);
   const openEdit = useCallback((task: Task) => setTaskForm({ open: true, task, date: task.date }), []);
@@ -63,7 +65,11 @@ function AuthenticatedApp() {
 
   const openStatus = (status: Status) => { setStatusFilter(status); setView("tarefas"); };
 
+  if (data.checkingSession) return <div className="grid min-h-screen place-items-center bg-pm-black text-pm-gold-light"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!data.currentUser) return <><LoginView onLogin={data.login} /><ToastStack toasts={toasts} /></>;
+  if (data.currentUser.mustChangePassword) {
+    return <><ForcePasswordChange name={data.currentUser.warName || data.currentUser.name} onSubmit={data.changeOwnPassword} onLogout={() => data.logout()} /><ToastStack toasts={toasts} /></>;
+  }
 
   // Garante que um perfil sem permissão não fique numa tela restrita.
   const allowed: Record<View, boolean> = {
@@ -92,7 +98,7 @@ function AuthenticatedApp() {
   return (
     <>
       <Layout view={current} setView={setView} data={data} onOpenTv={() => setTvOpen(true)} onImportBo={() => setImportOpen(true)}
-        title={title} subtitle={current === "painel" ? `${subtitle} · hoje ${formatBR(data.today)}` : subtitle} actions={headerActions}>
+        onChangePassword={() => setPasswordOpen(true)} title={title} subtitle={current === "painel" ? `${subtitle} · hoje ${formatBR(data.today)}` : subtitle} actions={headerActions}>
         {data.loading ? (
           <div className="flex items-center gap-3 py-20 text-pm-muted"><Loader2 className="h-5 w-5 animate-spin" />Carregando dados…</div>
         ) : (
@@ -116,6 +122,7 @@ function AuthenticatedApp() {
       <PostponeModal task={postponing} today={data.today} onClose={() => setPostponing(null)} onConfirm={data.postponeTask} />
       <BoImportModal open={importOpen} selectedDate={selectedDate} data={data} onClose={() => setImportOpen(false)}
         onCreated={(date) => { notify("Demanda(s) criada(s) a partir do BO, com o PDF anexado."); if (date) { selectDate(date); setView("painel"); } }} />
+      <ChangePasswordModal open={passwordOpen} onClose={() => setPasswordOpen(false)} onSubmit={data.changeOwnPassword} />
       {tvOpen && <TVPanel data={data} onClose={closeTv} />}
       <ToastStack toasts={toasts} />
     </>

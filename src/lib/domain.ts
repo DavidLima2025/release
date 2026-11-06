@@ -36,6 +36,7 @@ export function getPermissions(user?: AppUser | null): Permissions {
 export type AppUser = {
   id: string; name: string; warName: string; register: string; unit: string; role: string;
   email: string; phone: string; login: string; status: string;
+  mustChangePassword: boolean; lastLoginAt: string;
 };
 
 export type Workflow = { id: string; name: string; position: number };
@@ -105,6 +106,8 @@ export function normalizeUser(row: any): AppUser {
     phone: row?.phone || "",
     login: row?.login || "",
     status: row?.status || "Ativo",
+    mustChangePassword: Boolean(row?.must_change_password),
+    lastLoginAt: row?.last_login_at || "",
   };
 }
 

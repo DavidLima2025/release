@@ -8,7 +8,10 @@ import {
 import { Recurrence, addDays, buildRecurringDates, daysBetween, todayISO } from "../lib/dates";
 import { isImageAttachment, parseTrelloAuthor, trelloAttachmentUrl } from "../lib/trello";
 
-const SESSION_KEY = "si6_session_user";
+const SESSION_KEY = "si6_session";
+const LEGACY_SESSION_KEY = "si6_session_user";
+
+type Session = { token: string; user: AppUser };
 
 export type Notify = (text: string, tone?: "success" | "error" | "info") => void;
 
@@ -18,12 +21,40 @@ export type TaskInput = {
   workflowId?: string; checklist?: string[]; status?: string;
 };
 
-function readSession(): AppUser | null {
-  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); } catch { return null; }
+function readSession(): Session | null {
+  try {
+    localStorage.removeItem(LEGACY_SESSION_KEY); // sessão antiga (sem token) não vale mais
+    const value = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+    return value?.token && value?.user?.id ? value : null;
+  } catch { return null; }
+}
+
+function saveSession(session: Session | null) {
+  try {
+    if (session) localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    else localStorage.removeItem(SESSION_KEY);
+  } catch { /* navegador sem armazenamento: a sessão dura só esta aba */ }
+}
+
+function toRow(user: AppUser) {
+  return {
+    id: user.id, name: user.name, war_name: user.warName, register: user.register, unit: user.unit, role: user.role,
+    email: user.email, phone: user.phone, login: user.login, status: user.status,
+    must_change_password: user.mustChangePassword, last_login_at: user.lastLoginAt,
+  };
+}
+
+/** Mensagem do servidor (as funções SQL já devolvem o motivo em português). */
+function serverMessage(error: any, fallback: string) {
+  const text = String(error?.message || "");
+  if (/Could not find the function|function .* does not exist/i.test(text)) return "Funções de login não encontradas no banco. Rode o script supabase/00_autenticacao_admin.sql.";
+  return text && !/^(fetch|network)/i.test(text) ? text : fallback;
 }
 
 export function useAppData(notify: Notify) {
-  const [currentUser, setCurrentUser] = useState<AppUser | null>(readSession);
+  const [session, setSession] = useState<Session | null>(readSession);
+  const [checkingSession, setCheckingSession] = useState(() => Boolean(readSession()));
+  const currentUser = session?.user || null;
   const [loading, setLoading] = useState(true);
   const [today, setToday] = useState(todayISO());
   const [users, setUsers] = useState<AppUser[]>([]);
@@ -38,6 +69,8 @@ export function useAppData(notify: Notify) {
 
   const userRef = useRef(currentUser);
   userRef.current = currentUser;
+  const tokenRef = useRef(session?.token || "");
+  tokenRef.current = session?.token || "";
   const loadingRef = useRef(false);
   const pendingRef = useRef(false);
   const timerRef = useRef<number | null>(null);
@@ -46,20 +79,51 @@ export function useAppData(notify: Notify) {
   const tasks = useMemo(() => taskRows.map((row) => normalizeTask(row, today)), [taskRows, today]);
   const permissions = getPermissions(currentUser);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(SESSION_KEY);
-    setCurrentUser(null);
+  const endSession = useCallback((message?: string) => {
+    saveSession(null);
+    setSession(null);
+    setLoading(true);
+    if (message) notify(message, "error");
+  }, [notify]);
+
+  const logout = useCallback(async () => {
+    const token = tokenRef.current;
+    endSession();
+    if (token) await supabase.rpc("logout_user", { p_token: token });
+  }, [endSession]);
+
+  const applyServerUser = useCallback((row: any, token: string) => {
+    const next = { token, user: normalizeUser(row) };
+    saveSession(next);
+    setSession(next);
+    return next;
+  }, []);
+
+  // Ao abrir o sistema, confere no servidor se a sessão guardada ainda vale.
+  useEffect(() => {
+    const stored = readSession();
+    if (!stored) { setCheckingSession(false); return; }
+    supabase.rpc("validate_session", { p_token: stored.token }).then(({ data, error }) => {
+      if (error || !data?.length) endSession(error ? undefined : "Sua sessão expirou. Entre novamente.");
+      else applyServerUser(data[0], stored.token);
+      setCheckingSession(false);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadData = useCallback(async () => {
     if (loadingRef.current) { pendingRef.current = true; return; }
     loadingRef.current = true;
     try {
-      const [usersRes, workflowsRes, tasksRes, logsRes, attachmentsRes, categoriesRes, authorsRes, photosRes, reportsRes] = await Promise.all([
-        supabase.from("app_users").select("id,name,war_name,register,unit,role,email,phone,login,status").order("created_at", { ascending: false }),
+      const token = tokenRef.current;
+      if (!token) return;
+      const canAudit = getPermissions(userRef.current).audit;
+      const [sessionRes, usersRes, workflowsRes, tasksRes, logsRes, attachmentsRes, categoriesRes, authorsRes, photosRes, reportsRes] = await Promise.all([
+        supabase.rpc("validate_session", { p_token: token }),
+        supabase.from("app_users").select("id,name,war_name,register,unit,role,email,phone,login,status,last_login_at,must_change_password").order("created_at", { ascending: false }),
         supabase.from("workflows").select("*").order("position", { ascending: true }),
         supabase.from("demands").select("*, responsible:app_users!demands_responsible_id_fkey(id,name,war_name), manager:app_users!demands_manager_id_fkey(id,name,war_name), workflow:workflows(id,name,position)").order("date", { ascending: true }),
-        supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(300),
+        canAudit ? supabase.rpc("list_audit_logs", { p_token: token, p_limit: 1000 }) : Promise.resolve({ data: [], error: null }),
         supabase.from("demand_attachments").select("*").order("created_at", { ascending: false }),
         supabase.from("author_folders").select("*").order("name", { ascending: true }),
         supabase.from("crime_authors").select("*").order("created_at", { ascending: false }),
@@ -67,25 +131,15 @@ export function useAppData(notify: Notify) {
         supabase.from("author_reports").select("*").order("created_at", { ascending: false }),
       ]);
 
-      if (usersRes.error) notify("Erro ao carregar usuários. Verifique as políticas RLS da tabela app_users.", "error");
+      // A sessão é validada no servidor a cada recarga: usuário inativado, excluído ou com senha
+      // redefinida pelo administrador sai na hora.
+      if (!sessionRes.error && !sessionRes.data?.length) { endSession("Sua sessão foi encerrada. Entre novamente."); return; }
+      if (sessionRes.data?.[0] && tokenRef.current === token) applyServerUser(sessionRes.data[0], token);
+
+      if (usersRes.error) notify("Erro ao carregar usuários. Rode o script supabase/00_autenticacao_admin.sql.", "error");
       if (tasksRes.error) notify("Erro ao carregar demandas do Supabase.", "error");
 
-      if (usersRes.data) {
-        const list = usersRes.data.map(normalizeUser);
-        setUsers(list);
-        const sessionUser = userRef.current;
-        if (sessionUser?.id) {
-          // A sessão local só vale enquanto o usuário existir e estiver ativo no banco.
-          const fresh = list.find((user) => user.id === sessionUser.id);
-          if (!fresh || fresh.status !== "Ativo") {
-            logout();
-            notify("Sua sessão foi encerrada: usuário removido ou inativo.", "error");
-          } else {
-            setCurrentUser(fresh);
-            localStorage.setItem(SESSION_KEY, JSON.stringify(fresh));
-          }
-        }
-      }
+      if (usersRes.data) setUsers(usersRes.data.map(normalizeUser));
       if (workflowsRes.data) setWorkflows(workflowsRes.data.map(normalizeWorkflow).sort((a, b) => a.position - b.position));
       if (tasksRes.data) setTaskRows(tasksRes.data);
       if (logsRes.data) setAuditLogs(logsRes.data as AuditLog[]);
@@ -102,7 +156,7 @@ export function useAppData(notify: Notify) {
       setLoading(false);
       if (pendingRef.current) { pendingRef.current = false; loadData(); }
     }
-  }, [logout, notify]);
+  }, [applyServerUser, endSession, notify]);
 
   /** Agrupa várias mudanças seguidas (realtime + ações) em uma única recarga. */
   const reload = useCallback(() => {
@@ -124,7 +178,7 @@ export function useAppData(notify: Notify) {
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id]);
+  }, [currentUser?.id, session?.token]);
 
   async function addAudit(action: string, details: string) {
     const user = userRef.current;
@@ -135,39 +189,53 @@ export function useAppData(notify: Notify) {
   }
 
   // ---------- Sessão ----------
-  async function login(loginName: string, password: string) {
-    const { data, error } = await supabase.rpc("login_user", { p_login: loginName, p_password: password });
-    if (error || !data || data.length === 0) return false;
-    const user = normalizeUser(data[0]);
-    if (user.status !== "Ativo") return false;
-    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-    setCurrentUser(user);
-    userRef.current = user;
-    await addAudit("Login", `Usuário ${user.warName || user.name} acessou o sistema.`);
-    return true;
+  /** Retorna null em caso de sucesso, ou a mensagem de erro para a tela de login. */
+  async function login(loginName: string, password: string): Promise<string | null> {
+    const { data, error } = await supabase.rpc("login_user", { p_login: loginName, p_password: password, p_user_agent: navigator.userAgent });
+    if (error) return serverMessage(error, "Não foi possível conectar ao servidor.");
+    if (!data?.length) return "Usuário ou senha inválidos, usuário inativo ou bloqueado por 15 minutos após 5 tentativas.";
+    const next = applyServerUser(data[0], data[0].session_token);
+    userRef.current = next.user;
+    tokenRef.current = next.token;
+    return null;
+  }
+
+  async function changeOwnPassword(current: string, next: string): Promise<string | null> {
+    const { error } = await supabase.rpc("change_own_password", { p_token: tokenRef.current, p_current: current, p_new: next });
+    if (error) return serverMessage(error, "Não foi possível alterar a senha.");
+    if (session) applyServerUser({ ...toRow(session.user), must_change_password: false }, session.token);
+    notify("Senha alterada.");
+    reload();
+    return null;
+  }
+
+  async function fetchAuditLogs(from?: string, to?: string) {
+    const { data, error } = await supabase.rpc("list_audit_logs", {
+      p_token: tokenRef.current, p_from: from ? `${from}T00:00:00` : null, p_to: to ? `${addDays(to, 1)}T00:00:00` : null, p_limit: 5000,
+    });
+    if (error) { notify(serverMessage(error, "Erro ao carregar a auditoria."), "error"); return null; }
+    return (data || []) as AuditLog[];
   }
 
   // ---------- Usuários ----------
   async function addUser(user: any) {
     if (users.some((item) => item.login.toLowerCase() === user.login.toLowerCase())) { notify("Já existe usuário com esse login.", "error"); return false; }
     const { error } = await supabase.rpc("create_app_user", {
-      p_name: user.name, p_war_name: user.warName || user.name, p_register: user.register, p_unit: user.unit, p_role: user.role,
+      p_token: tokenRef.current, p_name: user.name, p_war_name: user.warName || user.name, p_register: user.register, p_unit: user.unit, p_role: user.role,
       p_email: user.email, p_phone: user.phone, p_login: user.login, p_password: user.password, p_status: user.status,
     });
-    if (error) { notify("Erro ao cadastrar usuário.", "error"); return false; }
-    await addAudit("Usuário cadastrado", `Cadastrou o usuário: ${user.warName || user.name}.`);
-    notify("Usuário cadastrado com sucesso.");
+    if (error) { notify(serverMessage(error, "Erro ao cadastrar usuário."), "error"); return false; }
+    notify("Usuário cadastrado. No primeiro acesso ele terá que trocar a senha.");
     reload();
     return true;
   }
 
   async function updateUser(id: string, values: Partial<AppUser>) {
-    const { error } = await supabase.from("app_users").update({
-      name: values.name, war_name: values.warName, register: values.register, unit: values.unit,
-      role: values.role, email: values.email, phone: values.phone,
-    }).eq("id", id);
-    if (error) { notify("Erro ao atualizar usuário.", "error"); return false; }
-    await addAudit("Usuário atualizado", `Atualizou o usuário: ${values.warName || values.name}.`);
+    const { error } = await supabase.rpc("admin_update_user", {
+      p_token: tokenRef.current, p_user_id: id, p_name: values.name, p_war_name: values.warName, p_register: values.register,
+      p_unit: values.unit, p_role: values.role, p_email: values.email, p_phone: values.phone,
+    });
+    if (error) { notify(serverMessage(error, "Erro ao atualizar usuário."), "error"); return false; }
     notify("Usuário atualizado.");
     reload();
     return true;
@@ -178,9 +246,8 @@ export function useAppData(notify: Notify) {
     if (user.id === currentUser?.id) return notify("Você não pode excluir o próprio usuário.", "error");
     if (tasks.some((task) => task.responsibleId === user.id && task.status !== "Concluída")) return notify("Este usuário tem demandas em aberto. Transfira-as ou inative o usuário.", "error");
     if (!window.confirm(`Excluir o usuário ${user.warName || user.name}?`)) return;
-    const { error } = await supabase.from("app_users").delete().eq("id", user.id);
-    if (error) return notify("Erro ao excluir usuário (ele pode ter demandas vinculadas).", "error");
-    await addAudit("Usuário removido", `Removeu o usuário: ${user.warName || user.name}.`);
+    const { error } = await supabase.rpc("admin_delete_user", { p_token: tokenRef.current, p_user_id: user.id });
+    if (error) return notify(serverMessage(error, "Erro ao excluir usuário."), "error");
     notify("Usuário removido.");
     reload();
   }
@@ -188,11 +255,18 @@ export function useAppData(notify: Notify) {
   async function toggleUserStatus(user: AppUser) {
     if (user.login.toUpperCase() === MAIN_ADMIN_LOGIN && user.status === "Ativo") return notify("O administrador principal não pode ser inativado.", "error");
     const status = user.status === "Ativo" ? "Inativo" : "Ativo";
-    const { error } = await supabase.from("app_users").update({ status }).eq("id", user.id);
-    if (error) return notify("Erro ao alterar usuário.", "error");
-    await addAudit("Situação de usuário alterada", `Alterou ${user.warName || user.name} para ${status}.`);
+    const { error } = await supabase.rpc("admin_set_user_status", { p_token: tokenRef.current, p_user_id: user.id, p_status: status });
+    if (error) return notify(serverMessage(error, "Erro ao alterar usuário."), "error");
     notify(`Usuário ${status === "Ativo" ? "ativado" : "inativado"}.`);
     reload();
+  }
+
+  async function resetUserPassword(user: AppUser, password: string) {
+    const { error } = await supabase.rpc("admin_reset_password", { p_token: tokenRef.current, p_user_id: user.id, p_new_password: password });
+    if (error) { notify(serverMessage(error, "Erro ao redefinir senha."), "error"); return false; }
+    notify(`Senha de ${user.warName || user.name} redefinida. Ele terá que trocar no próximo acesso.`);
+    reload();
+    return true;
   }
 
   // ---------- Demandas ----------
@@ -528,11 +602,11 @@ export function useAppData(notify: Notify) {
 
   return {
     // estado
-    currentUser, loading, today, users, workflows, tasks, auditLogs, attachments, authorCategories, authors, authorPhotos, authorReports, permissions,
+    currentUser, checkingSession, loading, today, users, workflows, tasks, auditLogs, attachments, authorCategories, authors, authorPhotos, authorReports, permissions,
     // sessão
-    login, logout, reload,
+    login, logout, reload, changeOwnPassword, fetchAuditLogs,
     // usuários
-    addUser, updateUser, deleteUser, toggleUserStatus,
+    addUser, updateUser, deleteUser, toggleUserStatus, resetUserPassword,
     // demandas
     createTasks, updateTask, setTaskStatus, deleteTask, toggleChecklistItem, postponeTask, duplicateTask, setTaskWorkflow,
     getAttachmentUrl, uploadDemandFile, deleteAttachment,

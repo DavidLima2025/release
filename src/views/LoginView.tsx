@@ -5,7 +5,7 @@ import { PmmgShield } from "../components/Brand";
 import { Button } from "../components/ui/button";
 import { Field, Input } from "../components/ui/input";
 
-export function LoginView({ onLogin }: { onLogin: (login: string, password: string) => Promise<boolean> }) {
+export function LoginView({ onLogin }: { onLogin: (login: string, password: string) => Promise<string | null> }) {
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -16,9 +16,9 @@ export function LoginView({ onLogin }: { onLogin: (login: string, password: stri
     if (!login.trim() || !password) return setError("Informe usuário e senha.");
     setBusy(true);
     setError("");
-    const ok = await onLogin(login.trim(), password);
+    const message = await onLogin(login.trim(), password);
     setBusy(false);
-    if (!ok) setError("Usuário ou senha inválidos, ou usuário inativo.");
+    if (message) { setError(message); setPassword(""); }
   };
 
   return (
@@ -44,6 +44,7 @@ export function LoginView({ onLogin }: { onLogin: (login: string, password: stri
           <p className="pm-eyebrow">Polícia Militar de Minas Gerais</p>
           <h2 className="pm-title mt-1">Acesso restrito</h2>
           <p className="pm-subtitle">Controle de demandas da Seção de Inteligência</p>
+          <p className="mt-4 text-xs text-pm-muted">Acesso individual e registrado em auditoria. Esqueceu a senha? Procure o administrador do sistema.</p>
           <form onSubmit={submit} className="mt-8 space-y-4">
             <Field label="Usuário"><Input value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="username" autoFocus className="h-12" /></Field>
             <Field label="Senha"><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" className="h-12" /></Field>

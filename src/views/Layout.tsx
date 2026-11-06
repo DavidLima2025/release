@@ -1,6 +1,6 @@
 import type * as React from "react";
 import { useState } from "react";
-import { Activity, CalendarDays, FolderOpen, GitBranch, LayoutDashboard, ListChecks, LogOut, Menu, MonitorPlay, ScanText, Users, X } from "lucide-react";
+import { Activity, CalendarDays, KeyRound, FolderOpen, GitBranch, LayoutDashboard, ListChecks, LogOut, Menu, MonitorPlay, ScanText, Users, X } from "lucide-react";
 import { Brand, PmFooterRule } from "../components/Brand";
 import type { AppData } from "../hooks/useAppData";
 
@@ -14,13 +14,14 @@ type Props = {
   data: AppData;
   onOpenTv: () => void;
   onImportBo: () => void;
+  onChangePassword: () => void;
   title: string;
   subtitle: string;
   actions?: React.ReactNode;
   children: React.ReactNode;
 };
 
-export function Layout({ view, setView, data, onOpenTv, onImportBo, title, subtitle, actions, children }: Props) {
+export function Layout({ view, setView, data, onOpenTv, onImportBo, onChangePassword, title, subtitle, actions, children }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { permissions, currentUser } = data;
   const lateCount = data.tasks.filter((t) => t.status === "Atrasada").length;
@@ -70,7 +71,8 @@ export function Layout({ view, setView, data, onOpenTv, onImportBo, title, subti
           <p className="truncate text-sm font-bold text-white">{currentUser?.warName || currentUser?.name}</p>
           <p className="truncate text-[11px] uppercase tracking-wider text-pm-gold-light">{currentUser?.role}</p>
         </div>
-        <button type="button" title="Sair" onClick={data.logout} className="grid h-9 w-9 place-items-center rounded-sm text-white/70 hover:bg-white/10 hover:text-white"><LogOut className="h-4 w-4" /></button>
+        <button type="button" title="Alterar minha senha" onClick={() => { onChangePassword(); setMenuOpen(false); }} className="grid h-9 w-9 place-items-center rounded-sm text-white/70 hover:bg-white/10 hover:text-white"><KeyRound className="h-4 w-4" /></button>
+        <button type="button" title="Sair" onClick={() => data.logout()} className="grid h-9 w-9 place-items-center rounded-sm text-white/70 hover:bg-white/10 hover:text-white"><LogOut className="h-4 w-4" /></button>
       </div>
     </div>
   );
