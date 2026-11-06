@@ -7,7 +7,10 @@ export type PdfTextItem = { str: string; x: number; y: number; w: number; h: num
 type Segment = { text: string; x0: number; x1: number; h: number; kind: "label" | "value" | "title" };
 type Row = { page: number; y: number; segments: Segment[]; text: string };
 
-export type BoEnvolvido = { numero: number; tipo: string; nome: string; natureza: string };
+export type BoEnvolvido = {
+  numero: number; tipo: string; nome: string; natureza: string; sexo: string; nascimento: string; naturalidade: string;
+  mae: string; pai: string; rg: string; cpf: string; endereco: string; numeroEndereco: string; bairro: string; municipio: string; uf: string;
+};
 export type BoMaterial = { objeto: string; quantidade: string; situacao: string; info: string };
 export type BoMilitar = { nome: string; cargo: string; matricula: string; unidade: string };
 
@@ -229,10 +232,26 @@ export function parseBoletim(items: PdfTextItem[]): Boletim {
   const envolvidosRange = sectionRange(rows, /^QUALIFICA.{1,3}O DOS ENVOLVIDOS/i);
   const envolvidosMap = new Map<number, BoEnvolvido>();
   blocks(rows, envolvidosRange, /^ENVOLVIDO\s+\d+/i).forEach((block) => {
-    const existing = envolvidosMap.get(block.numero) || { numero: block.numero, tipo: "", nome: "", natureza: "" };
-    existing.tipo ||= field(rows, /^TIPO ENVOLVIMENTO/i, block.from, block.to);
-    existing.nome ||= field(rows, /^NOME COMPLETO/i, block.from, block.to);
-    existing.natureza ||= field(rows, /^DESCRI.{1,3}O NATUREZA/i, block.from, block.to);
+    const existing: BoEnvolvido = envolvidosMap.get(block.numero) || {
+      numero: block.numero, tipo: "", nome: "", natureza: "", sexo: "", nascimento: "", naturalidade: "", mae: "", pai: "",
+      rg: "", cpf: "", endereco: "", numeroEndereco: "", bairro: "", municipio: "", uf: "",
+    };
+    const f = (label: RegExp) => field(rows, label, block.from, block.to);
+    existing.tipo ||= f(/^TIPO ENVOLVIMENTO/i);
+    existing.nome ||= f(/^NOME COMPLETO/i);
+    existing.natureza ||= f(/^DESCRI.{1,3}O NATUREZA/i);
+    existing.sexo ||= f(/^SEXO$/i);
+    existing.nascimento ||= brDateToIso(f(/^DATA NASCIMENTO/i));
+    existing.naturalidade ||= f(/^NATURALIDADE/i);
+    existing.mae ||= f(/^M.E$/i);
+    existing.pai ||= f(/^PAI$/i);
+    existing.rg ||= f(/^N.MERO DOCUMENTO IDENTIDADE/i);
+    existing.cpf ||= f(/^CPF/i);
+    existing.endereco ||= f(/^ENDERE.O \(AV/i).replace(/\s+/g, " ");
+    existing.numeroEndereco ||= f(/^N.MERO$/i);
+    existing.bairro ||= f(/^BAIRRO$/i);
+    existing.municipio ||= f(/^MUNIC.PIO$/i);
+    existing.uf ||= f(/^UF$/i);
     envolvidosMap.set(block.numero, existing);
   });
   // Envolvidos com o mesmo número em folhas diferentes aparecem como continuação.

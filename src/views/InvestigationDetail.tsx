@@ -9,6 +9,7 @@ import { Field, Input, Select, Textarea } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Modal } from "../components/ui/modal";
 import { Organogram } from "../components/Organogram";
+import { BoAuthorModal } from "../components/BoAuthorModal";
 import {
   CLASSIFICATIONS, INFO_RATINGS, INVESTIGATION_STATUSES, ITEM_KINDS, Investigation, InvestigationItem, InvestigationLink, InvestigationTarget,
   RELATIONS, ROLE_COLOR, SOURCE_RATINGS, STAGES, TARGET_ROLES, overallProgress, ratingLabel, stageIndex, stageProgress,
@@ -355,6 +356,7 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
   const [role, setRole] = useState("Associado");
   const [parentId, setParentId] = useState("");
   const [newOpen, setNewOpen] = useState(false);
+  const [boOpen, setBoOpen] = useState(false);
   const [link, setLink] = useState({ from: "", to: "", relation: "Comparsa", notes: "" });
   const authorOf = (t: InvestigationTarget) => data.authors.find((a) => a.id === t.authorId);
   const nameOf = (id: string) => { const t = targets.find((x) => x.id === id); return t ? authorOf(t)?.name || "?" : "—"; };
@@ -419,6 +421,7 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
                 </div>
                 <Button variant="primary" disabled={!authorId} onClick={add}><Plus />Vincular ao dossiê</Button>
                 <Button onClick={() => setNewOpen(true)}><UserPlus />Cadastrar alvo novo</Button>
+                <Button onClick={() => setBoOpen(true)}><ScanText />Cadastrar alvos pelo BO</Button>
               </div>
             </CardContent>
           </Card>
@@ -447,6 +450,7 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
           </Card>
         </div>
       </div>
+      <BoAuthorModal open={boOpen} data={data} api={api} investigationId={inv.id} onClose={() => setBoOpen(false)} />
       <NewTargetModal open={newOpen} data={data} targets={targets} nameOf={nameOf} onClose={() => setNewOpen(false)}
         onSave={async (form, r, p) => { const t = await api.createAndAddTarget(inv, form, r, p); if (t) { setNewOpen(false); setSelected(t.id); } }} />
     </div>

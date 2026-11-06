@@ -66,6 +66,9 @@ export function useAppData(notify: Notify) {
   const [authors, setAuthors] = useState<Author[]>([]);
   const [authorPhotos, setAuthorPhotos] = useState<AuthorFile[]>([]);
   const [authorReports, setAuthorReports] = useState<AuthorFile[]>([]);
+  // Links temporários dos arquivos do banco de alvos (o espaço intelligence-files é privado).
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  const signedAt = useRef<Record<string, number>>({});
 
   const userRef = useRef(currentUser);
   userRef.current = currentUser;
@@ -150,6 +153,19 @@ export function useAppData(notify: Notify) {
       if (authorsRes.data) setAuthors(authorsRes.data.map(normalizeAuthor));
       if (photosRes.data) setAuthorPhotos(photosRes.data.map(normalizeAuthorFile));
       if (reportsRes.data) setAuthorReports(reportsRes.data.map(normalizeAuthorFile));
+      const stored = [...(photosRes.data || []), ...(reportsRes.data || [])].map((r: any) => r.file_path as string)
+        .filter((path) => path && !/^https?:\/\//i.test(path));
+      const now = Date.now();
+      const missing = [...new Set(stored)].filter((path) => !signedAt.current[path] || now - signedAt.current[path] > 10 * 3600 * 1000);
+      for (let i = 0; i < missing.length; i += 100) {
+        const chunk = missing.slice(i, i + 100);
+        const { data: signed } = await supabase.storage.from(INTEL_BUCKET).createSignedUrls(chunk, 12 * 3600);
+        if (signed?.length) {
+          const next: Record<string, string> = {};
+          signed.forEach((item: any) => { if (item.signedUrl && item.path) { next[item.path] = item.signedUrl; signedAt.current[item.path] = now; } });
+          setSignedUrls((current) => ({ ...current, ...next }));
+        }
+      }
     } catch (error) {
       console.error(error);
       notify("Falha de conexão com o Supabase.", "error");
@@ -476,8 +492,9 @@ export function useAppData(notify: Notify) {
   function getIntelFileUrl(path: string) {
     if (!path) return "";
     if (/^https?:\/\//i.test(path)) return path;
-    return supabase.storage.from(INTEL_BUCKET).getPublicUrl(path).data.publicUrl;
+    return signedUrls[path] || "";
   }
+
 
   async function addAuthorCategory(category: { name: string; description: string }) {
     const name = category.name?.trim();
@@ -502,28 +519,28 @@ export function useAppData(notify: Notify) {
 
   function authorPayload(form: any) {
     return {
-      name: form.name.trim(), alias: form.alias, mother_name: form.motherName, birth_date: form.birthDate || null, document: form.document,
+      name: form.name.trim(), alias: form.alias, mother_name: form.motherName, father_name: form.fatherName || null, birth_date: form.birthDate || null, document: form.document,
       address: form.address, neighborhood: form.neighborhood, city: form.city, crimes: form.crimes, folder_id: form.categoryId || null,
       status: form.status, risk_level: form.riskLevel, notes: form.notes,
     };
   }
 
-  async function addAuthor(form: any) {
+  async function addAuthor(form: any, options: { silent?: boolean } = {}) {
     if (!form?.name?.trim()) { notify("Informe o nome do alvo.", "error"); return null; }
     const { data, error } = await supabase.from("crime_authors").insert({ ...authorPayload(form), created_by: currentUser?.id || null }).select("*").single();
     if (error) { notify("Erro ao criar card do alvo.", "error"); return null; }
     await addAudit("Alvo cadastrado", `Criou o card de: ${form.name}.`);
-    notify("Card do alvo criado.");
+    if (!options.silent) notify("Card do alvo criado.");
     reload();
     return normalizeAuthor(data);
   }
 
-  async function updateAuthor(id: string, form: any) {
+  async function updateAuthor(id: string, form: any, options: { silent?: boolean } = {}) {
     if (!form?.name?.trim()) { notify("Informe o nome do alvo.", "error"); return false; }
     const { error } = await supabase.from("crime_authors").update(authorPayload(form)).eq("id", id);
     if (error) { notify("Erro ao atualizar card.", "error"); return false; }
     await addAudit("Alvo atualizado", `Atualizou dados de: ${form.name}.`);
-    notify("Card atualizado.");
+    if (!options.silent) notify("Card atualizado.");
     reload();
     return true;
   }
@@ -537,19 +554,21 @@ export function useAppData(notify: Notify) {
     reload();
   }
 
-  async function uploadAuthorFile(author: { id: string; name: string }, file: File | undefined | null, kind: "photo" | "report" = "report") {
-    if (!file || !author?.id) return;
+  async function uploadAuthorFile(author: { id: string; name: string }, file: File | undefined | null, kind: "photo" | "report" = "report", options: { silent?: boolean; description?: string } = {}) {
+    if (!file || !author?.id) return false;
     const table = kind === "photo" ? "author_photos" : "author_reports";
     const path = `${author.id}/${kind === "photo" ? "fotos" : "relatorios"}/${Date.now()}-${safeFileName(file.name)}`;
     const upload = await supabase.storage.from(INTEL_BUCKET).upload(path, file, { upsert: false, contentType: file.type || undefined });
-    if (upload.error) return notify("Erro ao subir arquivo. Verifique se o bucket intelligence-files existe.", "error");
+    if (upload.error) { notify("Erro ao subir arquivo. Verifique se o bucket intelligence-files existe.", "error"); return false; }
     const { error } = await supabase.from(table).insert({
       author_id: author.id, file_name: file.name, file_path: path, file_size: file.size, mime_type: file.type, uploaded_by: currentUser?.id || null,
+      description: options.description || null,
     });
-    if (error) return notify("Arquivo enviado, mas houve erro ao registrar no banco.", "error");
+    if (error) { notify("Arquivo enviado, mas houve erro ao registrar no banco.", "error"); return false; }
     await addAudit(kind === "photo" ? "Foto anexada" : "Relatório anexado", `Anexou ${file.name} no card: ${author.name}.`);
-    notify(kind === "photo" ? "Foto anexada." : "Relatório anexado.");
+    if (!options.silent) notify(kind === "photo" ? "Foto anexada." : "Relatório anexado.");
     reload();
+    return true;
   }
 
   async function importTrelloBoard(board: any) {
