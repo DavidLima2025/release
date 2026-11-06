@@ -58,7 +58,7 @@ export type AuditLog = { id: string; action: string; details: string; user_name:
 
 export type AuthorCategory = { id: string; name: string; description: string; createdAt?: string };
 export type Author = {
-  id: string; name: string; alias: string; motherName: string; birthDate: string; document: string;
+  id: string; name: string; alias: string; motherName: string; fatherName: string; birthDate: string; document: string;
   address: string; neighborhood: string; city: string; crimes: string; categoryId: string;
   status: string; riskLevel: string; notes: string; createdAt: string;
 };
@@ -157,7 +157,8 @@ export function normalizeAuthor(row: any): Author {
     id: row.id,
     name: row.name || "Autor sem nome",
     alias: row.alias || "",
-    motherName: row.mother_name || "",
+    motherName: row.mother_name || row.nome_mae || "",
+    fatherName: row.father_name || row.nome_pai || "",
     birthDate: row.birth_date || "",
     document: row.document || "",
     address: row.address || "",

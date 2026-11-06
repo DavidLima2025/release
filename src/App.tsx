@@ -123,7 +123,7 @@ function AuthenticatedApp() {
               ? <InvestigationDetail key={openInvestigation.id} data={data} api={investigations} investigation={openInvestigation} onBack={() => setOpenInvestigationId("")} />
               : <InvestigationsView data={data} api={investigations} onOpen={(inv) => { setOpenInvestigationId(inv.id); window.scrollTo({ top: 0 }); }} createOpen={newInvestigationOpen} setCreateOpen={setNewInvestigationOpen} />)}
             {current === "dashboard" && <DashboardView data={data} />}
-            {current === "alvos" && <TargetsView data={data} />}
+            {current === "alvos" && <TargetsView data={data} api={data.permissions.investigations ? investigations : undefined} onOpenInvestigation={(id) => { setView("investigacoes"); setOpenInvestigationId(id); window.scrollTo({ top: 0 }); }} />}
             {current === "usuarios" && <UsersView data={data} />}
             {current === "auditoria" && <AuditView data={data} />}
           </ErrorBoundary>

@@ -22,6 +22,9 @@ workflow, banco de alvos e indicadores. React + Vite + Tailwind + Supabase, com 
 - **Relatório de inteligência**: gera **PDF no padrão ABNT** (capa no modelo PMMG, folha de
   rosto, sumário, seções numeradas, quadros, organograma, referências NBR 6023, paginação e
   grau de sigilo) e **PPTX no modelo da Apresentação Padrão PMMG**.
+- **Cadastrar alvos pelo BO**: lê a qualificação de cada envolvido (nome, nascimento, mãe, pai,
+  RG, CPF, endereço), sugere quem vira alvo, completa cards que já existem, recebe a foto, anexa
+  o PDF do BO ao card e, se quiser, vincula os alvos e o BO a uma investigação (com coautoria).
 - Menu lateral recolhível (a escolha fica salva no navegador).
 - **Dashboard**, **Banco de alvos**, **Usuários**, **Auditoria** e **Tela TV**.
 
@@ -31,7 +34,8 @@ workflow, banco de alvos e indicadores. React + Vite + Tailwind + Supabase, com 
    `supabase/00_autenticacao_admin.sql` e clique em **Run**. Pode rodar de novo sem problema.
 2. Rode em seguida `supabase/01_complementos.sql` (anexos das demandas, colunas e
    permissões do banco de alvos) e `supabase/02_investigacoes.sql` (investigações/dossiês e
-   proteção de todas as tabelas pela sessão do usuário).
+   proteção de todas as tabelas pela sessão do usuário) e `supabase/03_alvos_privados.sql`
+   (fotos e relatórios dos alvos em espaço privado).
 3. Entre com o administrador inicial e defina a senha pessoal (é obrigatório no 1º acesso):
    - **Login:** `ADM6CIA`
    - **Senha provisória:** `Pmmg@6cia2026`
@@ -93,7 +97,7 @@ Desde o `02_investigacoes.sql`, o site envia o token da sessão no cabeçalho `x
 e todas as tabelas só respondem com sessão válida — a chave pública sozinha não lê nada.
 Investigações exigem perfil Administrador, Gestor ou Analista (conferido no banco).
 Arquivos das demandas e das investigações ficam em espaços privados, abertos por link temporário.
-Ponto restante: as fotos do banco de alvos continuam em espaço público (links não listáveis).
+Fotos e relatórios do banco de alvos também ficam em espaço privado (links temporários de 12 h).
 
 Os scripts antigos `permissoes_usuarios.sql` e `complementar_auditoria.sql` foram removidos:
 eles liberavam a edição de usuários pela chave pública. Não rode versões antigas deles.

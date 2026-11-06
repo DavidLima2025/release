@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Camera, Edit3, FileText, FolderOpen, Image as ImageIcon, Paperclip, Plus, Search, Trash2, Upload, UserPlus, UserRound } from "lucide-react";
+import { Camera, Edit3, FileText, FolderLock, FolderOpen, Image as ImageIcon, Link2, Paperclip, Plus, ScanText, Search, Trash2, Upload, UserPlus, UserRound } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, EmptyState, SectionHeader } from "../components/ui/card";
 import { Field, Input, Select, Textarea } from "../components/ui/input";
@@ -8,11 +8,16 @@ import { Modal } from "../components/ui/modal";
 import { Author, formatBytes, matchesText } from "../lib/domain";
 import { formatBR } from "../lib/dates";
 import type { AppData } from "../hooks/useAppData";
+import type { InvestigationsApi } from "../hooks/useInvestigations";
+import { BoAuthorModal } from "../components/BoAuthorModal";
+import { TARGET_ROLES, stageOf } from "../lib/investigation";
 
-const EMPTY_AUTHOR = { name: "", alias: "", motherName: "", birthDate: "", document: "", address: "", neighborhood: "", city: "Belo Horizonte", crimes: "", categoryId: "", status: "Suspeito", riskLevel: "Médio", notes: "" };
+const EMPTY_AUTHOR = { name: "", alias: "", motherName: "", fatherName: "", birthDate: "", document: "", address: "", neighborhood: "", city: "Belo Horizonte", crimes: "", categoryId: "", status: "Suspeito", riskLevel: "Médio", notes: "" };
 const riskTone = (risk: string) => (risk === "Alto" ? "late" : risk === "Médio" ? "risk" : "done") as any;
 
-export function TargetsView({ data }: { data: AppData }) {
+export function TargetsView({ data, api, onOpenInvestigation }: { data: AppData; api?: InvestigationsApi; onOpenInvestigation?: (id: string) => void }) {
+  const [boOpen, setBoOpen] = useState(false);
+  const [linkInv, setLinkInv] = useState({ id: "", role: "Associado" });
   const { authorCategories: folders, authors, authorPhotos: photos, authorReports: reports } = data;
   const [folderId, setFolderId] = useState("all");
   const [query, setQuery] = useState("");
@@ -103,6 +108,7 @@ export function TargetsView({ data }: { data: AppData }) {
             <SectionHeader title={folderId === "all" ? "Todos os alvos" : folderName(folderId)} subtitle={`${visible.length} card(s)`}
               actions={<>
                 <div className="relative w-72 max-w-full"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-pm-muted" /><Input className="pl-9" placeholder="Nome, vulgo, documento, bairro…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+                <Button onClick={() => setBoOpen(true)}><ScanText />Cadastrar pelo BO</Button>
                 <Button variant="primary" onClick={openCreate} disabled={!folders.length} title={!folders.length ? "Crie uma pasta primeiro" : ""}><UserPlus />Novo alvo</Button>
               </>} />
             {!folders.length && <EmptyState icon={FolderOpen} title="Crie a primeira pasta">As pastas organizam os alvos por modalidade criminal.</EmptyState>}
@@ -153,7 +159,7 @@ export function TargetsView({ data }: { data: AppData }) {
                 <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
                   {[
                     ["Situação", selected.status], ["Risco", selected.riskLevel], ["Nascimento", selected.birthDate ? formatBR(selected.birthDate) : "—"],
-                    ["Mãe", selected.motherName], ["Documento", selected.document], ["Cidade / bairro", [selected.city, selected.neighborhood].filter(Boolean).join(" / ")],
+                    ["Mãe", selected.motherName], ["Pai", selected.fatherName], ["Documento", selected.document], ["Cidade / bairro", [selected.city, selected.neighborhood].filter(Boolean).join(" / ")],
                   ].map(([label, value]) => (
                     <div key={label} className="rounded-sm border border-pm-line bg-pm-cream/60 px-3 py-2"><p className="text-[10px] font-bold uppercase tracking-wider text-pm-muted">{label}</p><p className="font-semibold">{value || "—"}</p></div>
                   ))}
@@ -161,6 +167,30 @@ export function TargetsView({ data }: { data: AppData }) {
                   <div className="rounded-sm border border-pm-line bg-pm-cream/60 px-3 py-2 sm:col-span-3"><p className="text-[10px] font-bold uppercase tracking-wider text-pm-muted">Crimes / modus operandi</p><p className="font-semibold">{selected.crimes || "—"}</p></div>
                 </div>
                 {selected.notes && <p className="mt-3 whitespace-pre-wrap rounded-sm border border-pm-line bg-white p-3 text-sm">{selected.notes}</p>}
+                {api && data.permissions.investigations && (() => {
+                  const linked = api.targets.filter((t) => t.authorId === selected.id).map((t) => ({ t, inv: api.investigations.find((i) => i.id === t.investigationId) })).filter((x) => x.inv);
+                  const available = api.investigations.filter((i) => (i.status === "Em andamento" || i.status === "Suspensa") && !linked.some((x) => x.inv!.id === i.id));
+                  return (
+                    <div className="mt-4 rounded-sm border border-pm-line bg-white p-3">
+                      <p className="pm-label flex items-center gap-1.5"><FolderLock className="h-3.5 w-3.5 text-pm-gold-dark" />Investigações</p>
+                      {linked.length === 0 && <p className="text-sm text-pm-muted">Não está em nenhuma investigação.</p>}
+                      <div className="flex flex-wrap gap-2">
+                        {linked.map(({ t, inv }) => (
+                          <button key={t.id} type="button" onClick={() => onOpenInvestigation?.(inv!.id)} className="rounded-sm border border-pm-line bg-pm-cream px-2.5 py-1.5 text-left text-xs hover:border-pm-gold">
+                            <b className="text-pm-gold-dark">{inv!.code}</b> {inv!.title}<span className="block text-pm-muted">{t.role} · etapa {stageOf(inv!.stage).name.toLowerCase()}</span>
+                          </button>
+                        ))}
+                      </div>
+                      {available.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Select className="h-9 w-64" value={linkInv.id} onChange={(e) => setLinkInv({ ...linkInv, id: e.target.value })}><option value="">Vincular a investigação…</option>{available.map((i) => <option key={i.id} value={i.id}>{i.code} — {i.title}</option>)}</Select>
+                          <Select className="h-9 w-44" value={linkInv.role} onChange={(e) => setLinkInv({ ...linkInv, role: e.target.value })}>{TARGET_ROLES.map((r) => <option key={r}>{r}</option>)}</Select>
+                          <Button size="sm" variant="primary" className="!h-9" disabled={!linkInv.id} onClick={async () => { const inv = api.investigations.find((i) => i.id === linkInv.id); if (inv && await api.addTarget(inv, selected.id, linkInv.role)) { data.reload(); setLinkInv({ id: "", role: linkInv.role }); } }}><Link2 />Vincular</Button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
             <div className="grid gap-6 border-t border-pm-line p-5 md:p-6 lg:grid-cols-2">
@@ -182,7 +212,7 @@ export function TargetsView({ data }: { data: AppData }) {
                 <div className="space-y-1.5">
                   {reports.filter((r) => r.authorId === selected.id).map((r) => (
                     <a key={r.id} href={data.getIntelFileUrl(r.filePath)} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-2 rounded-sm border border-pm-line bg-white px-3 py-2 text-sm hover:border-pm-gold">
-                      <span className="flex min-w-0 items-center gap-2"><FileText className="h-4 w-4 shrink-0 text-pm-gold-dark" /><span className="truncate">{r.fileName}</span></span><span className="shrink-0 text-xs text-pm-muted">{formatBytes(r.fileSize)}</span>
+                      <span className="flex min-w-0 items-center gap-2"><FileText className="h-4 w-4 shrink-0 text-pm-gold-dark" /><span className="min-w-0"><span className="block truncate">{r.fileName}</span>{r.description && <span className="block truncate text-xs text-pm-muted">{r.description}</span>}</span></span><span className="shrink-0 text-xs text-pm-muted">{formatBytes(r.fileSize)}</span>
                     </a>
                   ))}
                   {!reports.some((r) => r.authorId === selected.id) && <p className="text-sm text-pm-muted">Nenhum relatório.</p>}
@@ -193,6 +223,7 @@ export function TargetsView({ data }: { data: AppData }) {
         )}
       </div>
 
+      <BoAuthorModal open={boOpen} data={data} api={api} onClose={() => setBoOpen(false)} onDone={(ids) => { if (ids[0]) { setFolderId("all"); setSelectedId(ids[0]); } }} />
       <Modal open={formOpen} onClose={() => setFormOpen(false)} eyebrow="Banco de alvos" title={editing ? `Editar ${editing.name}` : "Novo card de alvo"}
         footer={<><Button onClick={() => setFormOpen(false)}>Cancelar</Button><Button variant="primary" onClick={submit}><Plus />{editing ? "Salvar" : "Criar card"}</Button></>}>
         <form className="grid gap-3 md:grid-cols-3" onSubmit={(e) => { e.preventDefault(); submit(); }}>
@@ -200,6 +231,7 @@ export function TargetsView({ data }: { data: AppData }) {
           <Field label="Nome completo" className="md:col-span-2"><Input value={form.name} onChange={(e) => set("name", e.target.value)} autoFocus /></Field>
           <Field label="Vulgo"><Input value={form.alias} onChange={(e) => set("alias", e.target.value)} /></Field>
           <Field label="Nome da mãe"><Input value={form.motherName} onChange={(e) => set("motherName", e.target.value)} /></Field>
+          <Field label="Nome do pai"><Input value={form.fatherName} onChange={(e) => set("fatherName", e.target.value)} /></Field>
           <Field label="Nascimento"><Input type="date" value={form.birthDate} onChange={(e) => set("birthDate", e.target.value)} /></Field>
           <Field label="RG / CPF"><Input value={form.document} onChange={(e) => set("document", e.target.value)} /></Field>
           <Field label="Endereço" className="md:col-span-3"><Input value={form.address} onChange={(e) => set("address", e.target.value)} /></Field>
