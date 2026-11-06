@@ -30,6 +30,15 @@ create table if not exists public.app_users (
   status text not null default 'Ativo',
   created_at timestamptz not null default now()
 );
+-- Garante todas as colunas mesmo em tabelas antigas criadas com menos campos.
+alter table public.app_users add column if not exists war_name text;
+alter table public.app_users add column if not exists register text;
+alter table public.app_users add column if not exists unit text;
+alter table public.app_users add column if not exists role text not null default 'Colaborador';
+alter table public.app_users add column if not exists email text;
+alter table public.app_users add column if not exists phone text;
+alter table public.app_users add column if not exists status text not null default 'Ativo';
+alter table public.app_users add column if not exists created_at timestamptz not null default now();
 alter table public.app_users add column if not exists password_hash text;
 alter table public.app_users add column if not exists must_change_password boolean not null default false;
 alter table public.app_users add column if not exists last_login_at timestamptz;
@@ -96,7 +105,7 @@ begin
   foreach col in array array['password', 'senha'] loop
     if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'app_users' and column_name = col) then
       execute format(
-        'update public.app_users set password_hash = extensions.crypt(%1$I::text, extensions.gen_salt(''bf'')) where password_hash is null and %1$I is not null and %1$I::text <> ''''',
+        'update public.app_users set must_change_password = must_change_password or length(%1$I::text) < 8, password_hash = extensions.crypt(%1$I::text, extensions.gen_salt(''bf'')) where password_hash is null and %1$I is not null and %1$I::text <> ''''',
         col);
       execute format('alter table public.app_users drop column %I', col);
     end if;
@@ -105,8 +114,10 @@ end $$;
 
 -- Senhas que estavam em texto puro na coluna password_hash viram bcrypt
 -- (hashes bcrypt começam com "$2").
+-- A senha continua a mesma; quem tinha senha com menos de 8 caracteres cria outra no próximo acesso.
 update public.app_users
-set password_hash = extensions.crypt(password_hash, extensions.gen_salt('bf'))
+set must_change_password = must_change_password or length(password_hash) < 8,
+    password_hash = extensions.crypt(password_hash, extensions.gen_salt('bf'))
 where password_hash is not null and password_hash <> '' and password_hash not like '$2%';
 
 -- ---------- Funções auxiliares ----------

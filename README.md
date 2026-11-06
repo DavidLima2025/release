@@ -19,13 +19,14 @@ workflow, banco de alvos e indicadores. React + Vite + Tailwind + Supabase, com 
 
 1. No Supabase, abra **SQL Editor → New query**, cole o conteúdo de
    `supabase/00_autenticacao_admin.sql` e clique em **Run**. Pode rodar de novo sem problema.
-2. Rode também `supabase/demandas_anexos.sql` e `supabase/banco_autores_suspeitos.sql`
-   (anexos e banco de alvos), se ainda não rodou.
+2. Rode em seguida `supabase/01_complementos.sql` (anexos das demandas, colunas e
+   permissões do banco de alvos).
 3. Entre com o administrador inicial e defina a senha pessoal (é obrigatório no 1º acesso):
    - **Login:** `ADM6CIA`
    - **Senha provisória:** `Pmmg@6cia2026`
 
-Se o `ADM6CIA` já existia com uma senha, ela continua valendo. Esqueceu a senha do admin? No
+Se o `ADM6CIA` já existia com uma senha, ela continua valendo (agora criptografada); senhas
+com menos de 8 caracteres precisam ser trocadas no próximo acesso. Esqueceu a senha do admin? No
 final do script há uma linha comentada que a redefine para a provisória.
 
 ## Login, perfis e auditoria
