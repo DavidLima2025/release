@@ -2,38 +2,66 @@
 @tailwind components;
 @tailwind utilities;
 
-*{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{
-  margin:0;
-  min-height:100vh;
-  background:#f8fafc;
-  -webkit-font-smoothing:antialiased;
-  text-rendering:optimizeLegibility;
-}
-button{cursor:pointer}
-input,select,textarea,button{font:inherit}
-button,input,select,textarea{outline:none}
-::selection{background:#fed7aa;color:#111827}
+/* Tema "Apresentação Padrão PMMG": fundo creme, faixa preta com filete dourado,
+   títulos em Rawline Black caixa-alta e detalhes em paralelogramo. */
 
-::-webkit-scrollbar{width:10px;height:10px}
-::-webkit-scrollbar-track{background:#e2e8f0;border-radius:999px}
-::-webkit-scrollbar-thumb{background:#0f766e;border-radius:999px;border:2px solid #e2e8f0}
-::-webkit-scrollbar-thumb:hover{background:#ea580c}
+@layer base {
+  html { scroll-behavior: smooth; }
+  body {
+    @apply m-0 min-h-screen bg-pm-cream font-sans text-pm-ink antialiased;
+    font-weight: 400;
+    text-rendering: optimizeLegibility;
+  }
+  button { cursor: pointer; }
+  input, select, textarea, button { font: inherit; }
+  ::selection { background: #cfc29b; color: #0b0b0c; }
+  :focus-visible { outline: 2px solid #9b8a5c; outline-offset: 2px; }
 
-.glass-panel{
-  background:rgba(255,255,255,.75);
-  backdrop-filter:blur(18px);
-  border:1px solid rgba(255,255,255,.55);
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: #e9e4d6; }
+  ::-webkit-scrollbar-thumb { background: #9b8a5c; border: 2px solid #e9e4d6; border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: #7a6c45; }
 }
 
-.soft-card{
-  box-shadow:0 18px 55px rgba(15,23,42,.08);
+@layer components {
+  /* Título no estilo "TÍTULO DO SLIDE" */
+  .pm-title { @apply font-display text-2xl font-black uppercase leading-none tracking-tight text-pm-black md:text-3xl; }
+  /* Subtítulo no estilo "SUBTÍTULO DO SLIDE" */
+  .pm-subtitle { @apply mt-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-pm-muted; }
+  .pm-eyebrow { @apply text-[11px] font-bold uppercase tracking-[0.22em] text-pm-gold-dark; }
+  .pm-heading { @apply font-display text-base font-black uppercase tracking-tight text-pm-black; }
+
+  .pm-panel { @apply rounded-sm border border-pm-line bg-white/80 shadow-panel; }
+  .pm-panel-dark { @apply rounded-sm border border-white/10 bg-pm-black text-white; }
+
+  /* Filete dourado vertical (borda direita da faixa preta do modelo) */
+  .pm-stripe { box-shadow: inset -3px 0 0 #9b8a5c, inset -6px 0 0 #0b0b0c, inset -7px 0 0 #cfc29b; }
+
+  /* Linha de paralelogramos do rodapé dos slides */
+  .pm-rule { @apply relative h-3 w-full; }
+  .pm-rule::before { content: ""; @apply absolute inset-x-0 top-1/2 h-px bg-pm-ink/70; }
+  .pm-rule::after {
+    content: ""; @apply absolute right-0 top-0 h-3 w-16;
+    background: repeating-linear-gradient(115deg, transparent 0 6px, #231f20 6px 7px, transparent 7px 12px);
+  }
+
+  .pm-chip { @apply inline-flex items-center gap-1 whitespace-nowrap rounded-sm px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide; }
+
+  .pm-label { @apply mb-1 block text-[11px] font-bold uppercase tracking-[0.12em] text-pm-muted; }
+  .pm-field {
+    @apply h-10 w-full rounded-sm border border-pm-line bg-white px-3 text-sm text-pm-ink placeholder:text-pm-muted/60
+      focus:border-pm-gold focus:outline-none focus:ring-2 focus:ring-pm-gold/30 disabled:cursor-not-allowed disabled:bg-pm-sand/50 disabled:opacity-70;
+  }
+  textarea.pm-field { @apply h-auto min-h-28 py-2 leading-relaxed; }
 }
 
-.operational-bg{
-  background:
-    radial-gradient(circle at 10% 0%, rgba(234,88,12,.10), transparent 28%),
-    radial-gradient(circle at 95% 10%, rgba(6,78,59,.10), transparent 32%),
-    linear-gradient(135deg,#f8fafc,#f1f5f9 45%,#fff7ed);
+@layer utilities {
+  .skew-tab { transform: skewX(-18deg); }
+  .skew-tab > * { transform: skewX(18deg); }
+  .text-balance { text-wrap: balance; }
+}
+
+@media print {
+  aside, header, .no-print { display: none !important; }
+  body { background: white; }
 }
