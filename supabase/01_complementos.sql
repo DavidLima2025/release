@@ -19,8 +19,9 @@ drop policy if exists allow_demand_attachments_all on public.demand_attachments;
 create policy allow_demand_attachments_all on public.demand_attachments for all to anon, authenticated using (true) with check (true);
 grant select, insert, update, delete on public.demand_attachments to anon, authenticated;
 
-insert into storage.buckets (id, name, public) values ('demand-files', 'demand-files', true)
-on conflict (id) do update set public = true;
+-- Privado: PDFs de BO têm dados pessoais. O site abre cada arquivo com link temporário (5 min).
+insert into storage.buckets (id, name, public) values ('demand-files', 'demand-files', false)
+on conflict (id) do update set public = false;
 
 drop policy if exists allow_demand_files_read on storage.objects;
 create policy allow_demand_files_read on storage.objects for select to anon, authenticated using (bucket_id = 'demand-files');

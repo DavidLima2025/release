@@ -393,8 +393,18 @@ export function useAppData(notify: Notify) {
   }
 
   // ---------- Anexos ----------
-  function getAttachmentUrl(path: string) {
-    return supabase.storage.from(DEMAND_BUCKET).getPublicUrl(path).data.publicUrl;
+  /** Abre o anexo com link temporário (o espaço de arquivos das demandas é privado). */
+  async function openAttachment(file: Attachment) {
+    const popup = window.open("", "_blank");
+    const { data, error } = await supabase.storage.from(DEMAND_BUCKET).createSignedUrl(file.filePath, 300);
+    if (error || !data?.signedUrl) {
+      popup?.close();
+      notify("Não foi possível abrir o anexo.", "error");
+      return;
+    }
+    if (popup) popup.location.href = data.signedUrl;
+    else window.location.href = data.signedUrl;
+    addAudit("Anexo aberto", `Abriu o anexo ${file.fileName}.`);
   }
 
   async function uploadDemandFile(task: { id: string; title: string }, file: File, silent = false) {
@@ -609,7 +619,7 @@ export function useAppData(notify: Notify) {
     addUser, updateUser, deleteUser, toggleUserStatus, resetUserPassword,
     // demandas
     createTasks, updateTask, setTaskStatus, deleteTask, toggleChecklistItem, postponeTask, duplicateTask, setTaskWorkflow,
-    getAttachmentUrl, uploadDemandFile, deleteAttachment,
+    openAttachment, uploadDemandFile, deleteAttachment,
     // workflow
     addWorkflow, deleteWorkflow, moveWorkflow,
     // alvos

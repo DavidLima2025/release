@@ -84,9 +84,9 @@ export function TaskCard({ task, data, onEdit, onPostpone, defaultOpen = false }
             <div className="flex flex-wrap gap-2">
               {files.map((file) => (
                 <span key={file.id} className="inline-flex items-center gap-1 rounded-sm border border-pm-line bg-white text-xs font-semibold">
-                  <a href={data.getAttachmentUrl(file.filePath)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 hover:text-pm-gold-dark">
+                  <button type="button" onClick={() => data.openAttachment(file)} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 hover:text-pm-gold-dark">
                     <FileText className="h-3.5 w-3.5 text-pm-gold-dark" />{file.fileName}<span className="font-normal text-pm-muted">{formatBytes(file.fileSize)}</span>
-                  </a>
+                  </button>
                   <button type="button" title="Remover anexo" onClick={() => data.deleteAttachment(file)} className="px-1.5 py-1.5 text-pm-muted hover:text-status-late"><X className="h-3.5 w-3.5" /></button>
                 </span>
               ))}
