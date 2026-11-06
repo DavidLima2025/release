@@ -12,7 +12,17 @@ workflow, banco de alvos e indicadores. React + Vite + Tailwind + Supabase, com 
   selecionado, com o PDF anexado. Aceita vários PDFs de uma vez e avisa se o REDS já foi importado.
 - **Demandas**: lista com filtros (situação, responsável, tipo, prioridade, data) e pesquisa no histórico.
 - **Status automático**: passou do prazo → *Atrasada*; faltando 2 dias → *Risco de prazo*.
-- **Workflow**: quadro por etapa e cadastro/ordem das etapas.
+- **Workflow**: quadro por etapa e cadastro/ordem das etapas das demandas.
+- **Investigações / dossiês**: linha de investigação com as etapas da produção do conhecimento
+  (abertura, planejamento, reunião de dados, análise, formalização, difusão, encerramento) e
+  checklist por etapa; fontes e evidências (BO, reportagem, relatório, informe, entrevista,
+  fonte aberta, foto…) com avaliação de idoneidade (A–F) e veracidade (1–6) e arquivo anexo
+  privado; importação de BO em PDF com sugestão dos envolvidos como alvos; alvos com papel,
+  superior hierárquico e vínculos; **organograma**; cronologia; análise e conclusão.
+- **Relatório de inteligência**: gera **PDF no padrão ABNT** (capa no modelo PMMG, folha de
+  rosto, sumário, seções numeradas, quadros, organograma, referências NBR 6023, paginação e
+  grau de sigilo) e **PPTX no modelo da Apresentação Padrão PMMG**.
+- Menu lateral recolhível (a escolha fica salva no navegador).
 - **Dashboard**, **Banco de alvos**, **Usuários**, **Auditoria** e **Tela TV**.
 
 ## Primeira configuração do banco (obrigatório)
@@ -20,7 +30,8 @@ workflow, banco de alvos e indicadores. React + Vite + Tailwind + Supabase, com 
 1. No Supabase, abra **SQL Editor → New query**, cole o conteúdo de
    `supabase/00_autenticacao_admin.sql` e clique em **Run**. Pode rodar de novo sem problema.
 2. Rode em seguida `supabase/01_complementos.sql` (anexos das demandas, colunas e
-   permissões do banco de alvos).
+   permissões do banco de alvos) e `supabase/02_investigacoes.sql` (investigações/dossiês e
+   proteção de todas as tabelas pela sessão do usuário).
 3. Entre com o administrador inicial e defina a senha pessoal (é obrigatório no 1º acesso):
    - **Login:** `ADM6CIA`
    - **Senha provisória:** `Pmmg@6cia2026`
@@ -76,11 +87,13 @@ src/
 supabase/               scripts SQL
 ```
 
-## Segurança — o que ainda falta
+## Segurança
 
-Usuários, senhas, sessões e auditoria já estão protegidos no banco. As tabelas operacionais
-(demandas, anexos, banco de alvos) ainda aceitam leitura e escrita pela chave pública, como
-antes. O próximo passo é exigir a sessão também nessas tabelas (ou migrar para Supabase Auth).
+Desde o `02_investigacoes.sql`, o site envia o token da sessão no cabeçalho `x-session-token`
+e todas as tabelas só respondem com sessão válida — a chave pública sozinha não lê nada.
+Investigações exigem perfil Administrador, Gestor ou Analista (conferido no banco).
+Arquivos das demandas e das investigações ficam em espaços privados, abertos por link temporário.
+Ponto restante: as fotos do banco de alvos continuam em espaço público (links não listáveis).
 
 Os scripts antigos `permissoes_usuarios.sql` e `complementar_auditoria.sql` foram removidos:
 eles liberavam a edição de usuários pela chave pública. Não rode versões antigas deles.

@@ -1,7 +1,8 @@
 import { useCallback, useState } from "react";
-import { Loader2, Plus, ScanText } from "lucide-react";
+import { FolderLock, Loader2, Plus, ScanText } from "lucide-react";
 import { supabaseConfigured } from "./supabase";
 import { useAppData } from "./hooks/useAppData";
+import { useInvestigations } from "./hooks/useInvestigations";
 import { Status, Task } from "./lib/domain";
 import { formatBR, parseISODate, todayISO } from "./lib/dates";
 import { ToastStack, useToasts } from "./components/Toast";
@@ -22,11 +23,14 @@ import { UsersView } from "./views/UsersView";
 import { TargetsView } from "./views/TargetsView";
 import { AuditView } from "./views/AuditView";
 import { TVPanel } from "./views/TVPanel";
+import { InvestigationsView } from "./views/InvestigationsView";
+import { InvestigationDetail } from "./views/InvestigationDetail";
 
 const TITLES: Record<View, [string, string]> = {
   painel: ["Painel operacional", "Calendário e demandas do dia"],
   tarefas: ["Demandas", "Todas as demandas com filtros e pesquisa"],
-  workflow: ["Workflow", "Etapas do processo de inteligência"],
+  workflow: ["Workflow", "Etapas das demandas"],
+  investigacoes: ["Investigações", "Linhas de investigação e dossiês de inteligência"],
   dashboard: ["Dashboard", "Indicadores de produtividade e prazos"],
   alvos: ["Banco de alvos", "Autores e suspeitos por modalidade"],
   usuarios: ["Usuários", "Cadastro e perfis de acesso"],
@@ -41,6 +45,9 @@ export default function App() {
 function AuthenticatedApp() {
   const { toasts, notify } = useToasts();
   const data = useAppData(notify);
+  const investigations = useInvestigations(data, notify);
+  const [openInvestigationId, setOpenInvestigationId] = useState("");
+  const [newInvestigationOpen, setNewInvestigationOpen] = useState(false);
 
   const [view, setView] = useState<View>("painel");
   const [selectedDate, setSelectedDate] = useState(todayISO());
@@ -73,18 +80,21 @@ function AuthenticatedApp() {
 
   // Garante que um perfil sem permissão não fique numa tela restrita.
   const allowed: Record<View, boolean> = {
-    painel: true, tarefas: true, workflow: true, dashboard: data.permissions.dashboard, alvos: data.permissions.targets,
+    painel: true, tarefas: true, workflow: true, investigacoes: data.permissions.investigations, dashboard: data.permissions.dashboard, alvos: data.permissions.targets,
     usuarios: data.permissions.users, auditoria: data.permissions.audit,
   };
   const current: View = allowed[view] ? view : "painel";
   const [title, subtitle] = TITLES[current];
+  const openInvestigation = current === "investigacoes" ? investigations.investigations.find((i) => i.id === openInvestigationId) : undefined;
 
-  const headerActions = (current === "painel" || current === "tarefas") && (
+  const headerActions = (current === "painel" || current === "tarefas") ? (
     <>
       <Button onClick={() => setImportOpen(true)}><ScanText />Importar BO</Button>
       <Button variant="primary" onClick={() => openCreate(selectedDate)}><Plus />Nova demanda</Button>
     </>
-  );
+  ) : current === "investigacoes" && !openInvestigation ? (
+    <Button variant="primary" onClick={() => setNewInvestigationOpen(true)}><FolderLock />Nova investigação</Button>
+  ) : undefined;
 
   const submitTask = async (values: any, file?: File | null) => {
     if (taskForm.task) return data.updateTask(taskForm.task.id, values);
@@ -97,18 +107,21 @@ function AuthenticatedApp() {
 
   return (
     <>
-      <Layout view={current} setView={setView} data={data} onOpenTv={() => setTvOpen(true)} onImportBo={() => setImportOpen(true)}
-        onChangePassword={() => setPasswordOpen(true)} title={title} subtitle={current === "painel" ? `${subtitle} · hoje ${formatBR(data.today)}` : subtitle} actions={headerActions}>
+      <Layout view={current} setView={(next) => { setView(next); setOpenInvestigationId(""); }} data={data} onOpenTv={() => setTvOpen(true)} onImportBo={() => setImportOpen(true)}
+        onChangePassword={() => setPasswordOpen(true)} title={openInvestigation ? "Dossiê" : title} subtitle={current === "painel" ? `${subtitle} · hoje ${formatBR(data.today)}` : openInvestigation ? `${openInvestigation.code} · ${openInvestigation.classification}` : subtitle} actions={headerActions}>
         {data.loading ? (
           <div className="flex items-center gap-3 py-20 text-pm-muted"><Loader2 className="h-5 w-5 animate-spin" />Carregando dados…</div>
         ) : (
-          <ErrorBoundary resetKey={current}>
+          <ErrorBoundary resetKey={`${current}-${openInvestigationId}`}>
             {current === "painel" && (
               <PainelView data={data} selectedDate={selectedDate} setSelectedDate={selectDate} monthDate={monthDate} setMonthDate={setMonthDate}
                 onCreate={openCreate} onEdit={openEdit} onPostpone={setPostponing} onImportBo={() => setImportOpen(true)} onOpenStatus={openStatus} />
             )}
             {current === "tarefas" && <TarefasView data={data} statusFilter={statusFilter} setStatusFilter={setStatusFilter} onEdit={openEdit} onPostpone={setPostponing} />}
             {current === "workflow" && <WorkflowView data={data} onEdit={openEdit} />}
+            {current === "investigacoes" && (openInvestigation
+              ? <InvestigationDetail key={openInvestigation.id} data={data} api={investigations} investigation={openInvestigation} onBack={() => setOpenInvestigationId("")} />
+              : <InvestigationsView data={data} api={investigations} onOpen={(inv) => { setOpenInvestigationId(inv.id); window.scrollTo({ top: 0 }); }} createOpen={newInvestigationOpen} setCreateOpen={setNewInvestigationOpen} />)}
             {current === "dashboard" && <DashboardView data={data} />}
             {current === "alvos" && <TargetsView data={data} />}
             {current === "usuarios" && <UsersView data={data} />}

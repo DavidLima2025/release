@@ -18,14 +18,14 @@ export const MAIN_ADMIN_LOGIN = "ADM6CIA";
 
 export type Permissions = {
   users: boolean; audit: boolean; deleteDemand: boolean; deleteWorkflow: boolean;
-  manageWorkflow: boolean; dashboard: boolean; tv: boolean; targets: boolean;
+  manageWorkflow: boolean; dashboard: boolean; tv: boolean; targets: boolean; investigations: boolean;
 };
 
 const PERMISSIONS: Record<string, Permissions> = {
-  Administrador: { users: true, audit: true, deleteDemand: true, deleteWorkflow: true, manageWorkflow: true, dashboard: true, tv: true, targets: true },
-  Gestor: { users: false, audit: true, deleteDemand: true, deleteWorkflow: false, manageWorkflow: true, dashboard: true, tv: true, targets: true },
-  Analista: { users: false, audit: false, deleteDemand: false, deleteWorkflow: false, manageWorkflow: false, dashboard: true, tv: true, targets: true },
-  Colaborador: { users: false, audit: false, deleteDemand: false, deleteWorkflow: false, manageWorkflow: false, dashboard: false, tv: false, targets: true },
+  Administrador: { users: true, audit: true, deleteDemand: true, deleteWorkflow: true, manageWorkflow: true, dashboard: true, tv: true, targets: true, investigations: true },
+  Gestor: { users: false, audit: true, deleteDemand: true, deleteWorkflow: false, manageWorkflow: true, dashboard: true, tv: true, targets: true, investigations: true },
+  Analista: { users: false, audit: false, deleteDemand: false, deleteWorkflow: false, manageWorkflow: false, dashboard: true, tv: true, targets: true, investigations: true },
+  Colaborador: { users: false, audit: false, deleteDemand: false, deleteWorkflow: false, manageWorkflow: false, dashboard: false, tv: false, targets: true, investigations: false },
 };
 
 export function getPermissions(user?: AppUser | null): Permissions {
