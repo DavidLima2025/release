@@ -11,6 +11,12 @@ create table if not exists public.author_folders (
   updated_at timestamptz default now()
 );
 
+-- Tabelas criadas antes deste script podem não ter estas colunas.
+alter table public.author_folders add column if not exists description text;
+alter table public.author_folders add column if not exists created_by uuid references public.app_users(id) on delete set null;
+alter table public.author_folders add column if not exists updated_at timestamptz default now();
+create unique index if not exists author_folders_name_unique on public.author_folders (name);
+
 insert into public.author_folders (name, description) values
   ('Tráfico de drogas', 'Autores e suspeitos vinculados ao tráfico de drogas.'),
   ('Receptação', 'Autores e suspeitos vinculados à receptação.'),
