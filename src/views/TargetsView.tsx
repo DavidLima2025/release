@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Camera, Edit3, FileText, FolderLock, FolderOpen, Image as ImageIcon, Link2, Paperclip, Plus, ScanText, Search, Trash2, Upload, UserPlus, UserRound } from "lucide-react";
+import { Camera, Edit3, Images, FileText, FolderLock, FolderOpen, Image as ImageIcon, Link2, Paperclip, Plus, ScanText, Search, Trash2, Upload, UserPlus, UserRound } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, EmptyState, SectionHeader } from "../components/ui/card";
 import { Field, Input, Select, Textarea } from "../components/ui/input";
@@ -10,6 +10,7 @@ import { formatBR } from "../lib/dates";
 import type { AppData } from "../hooks/useAppData";
 import type { InvestigationsApi } from "../hooks/useInvestigations";
 import { BoAuthorModal } from "../components/BoAuthorModal";
+import { PhotoBatchModal } from "../components/PhotoBatchModal";
 import { TARGET_ROLES, stageOf } from "../lib/investigation";
 
 const EMPTY_AUTHOR = { name: "", alias: "", motherName: "", fatherName: "", birthDate: "", document: "", address: "", neighborhood: "", city: "Belo Horizonte", crimes: "", categoryId: "", status: "Suspeito", riskLevel: "Médio", notes: "" };
@@ -17,6 +18,7 @@ const riskTone = (risk: string) => (risk === "Alto" ? "late" : risk === "Médio"
 
 export function TargetsView({ data, api, onOpenInvestigation }: { data: AppData; api?: InvestigationsApi; onOpenInvestigation?: (id: string) => void }) {
   const [boOpen, setBoOpen] = useState(false);
+  const [photosOpen, setPhotosOpen] = useState(false);
   const [linkInv, setLinkInv] = useState({ id: "", role: "Associado" });
   const { authorCategories: folders, authors, authorPhotos: photos, authorReports: reports } = data;
   const [folderId, setFolderId] = useState("all");
@@ -109,6 +111,7 @@ export function TargetsView({ data, api, onOpenInvestigation }: { data: AppData;
               actions={<>
                 <div className="relative w-72 max-w-full"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-pm-muted" /><Input className="pl-9" placeholder="Nome, vulgo, documento, bairro…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
                 <Button onClick={() => setBoOpen(true)}><ScanText />Cadastrar pelo BO</Button>
+                <Button onClick={() => setPhotosOpen(true)}><Images />Importar fotos</Button>
                 <Button variant="primary" onClick={openCreate} disabled={!folders.length} title={!folders.length ? "Crie uma pasta primeiro" : ""}><UserPlus />Novo alvo</Button>
               </>} />
             {!folders.length && <EmptyState icon={FolderOpen} title="Crie a primeira pasta">As pastas organizam os alvos por modalidade criminal.</EmptyState>}
@@ -223,6 +226,7 @@ export function TargetsView({ data, api, onOpenInvestigation }: { data: AppData;
         )}
       </div>
 
+      <PhotoBatchModal open={photosOpen} data={data} onClose={() => setPhotosOpen(false)} onDone={(ids) => { if (ids.length === 1) { setFolderId("all"); setSelectedId(ids[0]); } }} />
       <BoAuthorModal open={boOpen} data={data} api={api} onClose={() => setBoOpen(false)} onDone={(ids) => { if (ids[0]) { setFolderId("all"); setSelectedId(ids[0]); } }} />
       <Modal open={formOpen} onClose={() => setFormOpen(false)} eyebrow="Banco de alvos" title={editing ? `Editar ${editing.name}` : "Novo card de alvo"}
         footer={<><Button onClick={() => setFormOpen(false)}>Cancelar</Button><Button variant="primary" onClick={submit}><Plus />{editing ? "Salvar" : "Criar card"}</Button></>}>

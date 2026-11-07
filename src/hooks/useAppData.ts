@@ -554,7 +554,7 @@ export function useAppData(notify: Notify) {
     reload();
   }
 
-  async function uploadAuthorFile(author: { id: string; name: string }, file: File | undefined | null, kind: "photo" | "report" = "report", options: { silent?: boolean; description?: string } = {}) {
+  async function uploadAuthorFile(author: { id: string; name: string }, file: File | undefined | null, kind: "photo" | "report" = "report", options: { silent?: boolean; description?: string; noAudit?: boolean } = {}) {
     if (!file || !author?.id) return false;
     const table = kind === "photo" ? "author_photos" : "author_reports";
     const path = `${author.id}/${kind === "photo" ? "fotos" : "relatorios"}/${Date.now()}-${safeFileName(file.name)}`;
@@ -565,8 +565,18 @@ export function useAppData(notify: Notify) {
       description: options.description || null,
     });
     if (error) { notify("Arquivo enviado, mas houve erro ao registrar no banco.", "error"); return false; }
-    await addAudit(kind === "photo" ? "Foto anexada" : "Relatório anexado", `Anexou ${file.name} no card: ${author.name}.`);
+    if (!options.noAudit) await addAudit(kind === "photo" ? "Foto anexada" : "Relatório anexado", `Anexou ${file.name} no card: ${author.name}.`);
     if (!options.silent) notify(kind === "photo" ? "Foto anexada." : "Relatório anexado.");
+    reload();
+    return true;
+  }
+
+  /** Remove uma foto do card (arquivo privado + registro). */
+  async function deleteAuthorPhoto(photo: AuthorFile, options: { silent?: boolean } = {}) {
+    const { error } = await supabase.from("author_photos").delete().eq("id", photo.id);
+    if (error) { notify("Erro ao remover a foto.", "error"); return false; }
+    await supabase.storage.from(INTEL_BUCKET).remove([photo.filePath]);
+    if (!options.silent) notify("Foto removida.");
     reload();
     return true;
   }
@@ -637,7 +647,7 @@ export function useAppData(notify: Notify) {
     // estado
     currentUser, checkingSession, loading, today, users, workflows, tasks, auditLogs, attachments, authorCategories, authors, authorPhotos, authorReports, permissions,
     // sessão
-    login, logout, reload, changeOwnPassword, fetchAuditLogs,
+    login, logout, reload, changeOwnPassword, fetchAuditLogs, addAudit,
     // usuários
     addUser, updateUser, deleteUser, toggleUserStatus, resetUserPassword,
     // demandas
@@ -646,7 +656,7 @@ export function useAppData(notify: Notify) {
     // workflow
     addWorkflow, deleteWorkflow, moveWorkflow,
     // alvos
-    getIntelFileUrl, addAuthorCategory, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, uploadAuthorFile, importTrelloBoard,
+    getIntelFileUrl, addAuthorCategory, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, uploadAuthorFile, deleteAuthorPhoto, importTrelloBoard,
   };
 }
 
