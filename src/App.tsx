@@ -75,7 +75,7 @@ function AuthenticatedApp() {
   if (data.checkingSession) return <div className="grid min-h-screen place-items-center bg-pm-black text-pm-gold-light"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!data.currentUser) return <><LoginView onLogin={data.login} /><ToastStack toasts={toasts} /></>;
   if (data.currentUser.mustChangePassword) {
-    return <><ForcePasswordChange name={data.currentUser.warName || data.currentUser.name} onSubmit={data.changeOwnPassword} onLogout={() => data.logout()} /><ToastStack toasts={toasts} /></>;
+    return <><ForcePasswordChange name={data.currentUser.warName || data.currentUser.name} login={data.currentUser.login} onSubmit={data.changeOwnPassword} onLogout={() => data.logout()} /><ToastStack toasts={toasts} /></>;
   }
 
   // Garante que um perfil sem permissão não fique numa tela restrita.
@@ -135,7 +135,7 @@ function AuthenticatedApp() {
       <PostponeModal task={postponing} today={data.today} onClose={() => setPostponing(null)} onConfirm={data.postponeTask} />
       <BoImportModal open={importOpen} selectedDate={selectedDate} data={data} onClose={() => setImportOpen(false)}
         onCreated={(date) => { notify("Demanda(s) criada(s) a partir do BO, com o PDF anexado."); if (date) { selectDate(date); setView("painel"); } }} />
-      <ChangePasswordModal open={passwordOpen} onClose={() => setPasswordOpen(false)} onSubmit={data.changeOwnPassword} />
+      <ChangePasswordModal login={data.currentUser.login} open={passwordOpen} onClose={() => setPasswordOpen(false)} onSubmit={data.changeOwnPassword} />
       {tvOpen && <TVPanel data={data} onClose={closeTv} />}
       <ToastStack toasts={toasts} />
     </>

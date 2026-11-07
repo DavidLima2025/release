@@ -212,7 +212,7 @@ export function useAppData(notify: Notify) {
   async function login(loginName: string, password: string): Promise<string | null> {
     const { data, error } = await supabase.rpc("login_user", { p_login: loginName, p_password: password, p_user_agent: navigator.userAgent });
     if (error) return serverMessage(error, "Não foi possível conectar ao servidor.");
-    if (!data?.length) return "Usuário ou senha inválidos, usuário inativo ou bloqueado por 15 minutos após 5 tentativas.";
+    if (!data?.length) return "Usuário ou senha inválidos. Confira no olho se o navegador não preencheu uma senha antiga. Após 5 erros seguidos o acesso fica bloqueado por 15 minutos.";
     const next = applyServerUser(data[0], data[0].session_token);
     userRef.current = next.user;
     tokenRef.current = next.token;

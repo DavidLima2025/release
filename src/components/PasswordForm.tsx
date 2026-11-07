@@ -22,11 +22,11 @@ export function generateTempPassword() {
   return `${base}${pick(digits)}${pick(digits)}@`;
 }
 
-function PasswordInput({ value, onChange, autoFocus, autoComplete }: { value: string; onChange: (v: string) => void; autoFocus?: boolean; autoComplete?: string }) {
+export function PasswordInput({ value, onChange, autoFocus, autoComplete, name, className = "h-11" }: { value: string; onChange: (v: string) => void; autoFocus?: boolean; autoComplete?: string; name?: string; className?: string }) {
   const [show, setShow] = useState(false);
   return (
     <div className="relative">
-      <Input type={show ? "text" : "password"} value={value} onChange={(e) => onChange(e.target.value)} autoFocus={autoFocus} autoComplete={autoComplete} className="h-11 pr-11" />
+      <Input type={show ? "text" : "password"} name={name} value={value} onChange={(e) => onChange(e.target.value)} autoFocus={autoFocus} autoComplete={autoComplete} className={`${className} pr-11`} />
       <button type="button" onClick={() => setShow((v) => !v)} className="absolute right-1 top-1 grid h-9 w-9 place-items-center text-pm-muted hover:text-pm-ink" aria-label={show ? "Ocultar senha" : "Mostrar senha"}>
         {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
       </button>
@@ -34,9 +34,9 @@ function PasswordInput({ value, onChange, autoFocus, autoComplete }: { value: st
   );
 }
 
-type FormProps = { onSubmit: (current: string, next: string) => Promise<string | null>; submitLabel: string; onCancel?: () => void };
+type FormProps = { onSubmit: (current: string, next: string) => Promise<string | null>; submitLabel: string; onCancel?: () => void; username?: string };
 
-export function ChangePasswordForm({ onSubmit, submitLabel, onCancel }: FormProps) {
+export function ChangePasswordForm({ onSubmit, submitLabel, onCancel, username = "" }: FormProps) {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -56,10 +56,12 @@ export function ChangePasswordForm({ onSubmit, submitLabel, onCancel }: FormProp
   };
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      <Field label="Senha atual"><PasswordInput value={current} onChange={setCurrent} autoFocus autoComplete="current-password" /></Field>
-      <Field label="Nova senha" hint="Mínimo de 8 caracteres, com letras e números."><PasswordInput value={next} onChange={setNext} autoComplete="new-password" /></Field>
-      <Field label="Confirme a nova senha"><PasswordInput value={confirm} onChange={setConfirm} autoComplete="new-password" /></Field>
+    <form onSubmit={submit} className="space-y-4" autoComplete="on">
+      {/* Campo de usuário (oculto) para o navegador ATUALIZAR a senha salva em vez de continuar preenchendo a antiga. */}
+      <input type="text" name="username" autoComplete="username" value={username} readOnly tabIndex={-1} aria-hidden="true" className="sr-only" />
+      <Field label="Senha atual"><PasswordInput name="current-password" value={current} onChange={setCurrent} autoFocus autoComplete="current-password" /></Field>
+      <Field label="Nova senha" hint="Mínimo de 8 caracteres, com letras e números."><PasswordInput name="new-password" value={next} onChange={setNext} autoComplete="new-password" /></Field>
+      <Field label="Confirme a nova senha"><PasswordInput name="confirm-password" value={confirm} onChange={setConfirm} autoComplete="new-password" /></Field>
       {next && (
         <ul className="space-y-0.5 text-xs">
           {["pelo menos 8 caracteres", "letras e números"].map((rule) => (
@@ -78,7 +80,7 @@ export function ChangePasswordForm({ onSubmit, submitLabel, onCancel }: FormProp
 }
 
 /** Tela cheia exibida no primeiro acesso ou após a senha ser redefinida pelo administrador. */
-export function ForcePasswordChange({ name, onSubmit, onLogout }: { name: string; onSubmit: FormProps["onSubmit"]; onLogout: () => void }) {
+export function ForcePasswordChange({ name, login = "", onSubmit, onLogout }: { name: string; login?: string; onSubmit: FormProps["onSubmit"]; onLogout: () => void }) {
   return (
     <main className="grid min-h-screen place-items-center bg-pm-black p-4">
       <div className="w-full max-w-md overflow-hidden rounded-sm bg-pm-cream shadow-2xl">
@@ -92,7 +94,8 @@ export function ForcePasswordChange({ name, onSubmit, onLogout }: { name: string
         </div>
         <div className="p-6">
           <p className="mb-5 text-sm text-pm-ink">Olá, <b>{name}</b>. Sua senha atual é provisória. Crie uma senha pessoal para continuar — só você deve conhecê-la.</p>
-          <ChangePasswordForm onSubmit={onSubmit} submitLabel="Salvar e entrar" />
+          <ChangePasswordForm onSubmit={onSubmit} submitLabel="Salvar e entrar" username={login} />
+          <p className="mt-3 text-xs text-pm-muted">Quando o navegador perguntar, escolha <b>atualizar/salvar a senha</b>. Se ele continuar preenchendo a senha antiga, apague o campo e digite a nova.</p>
           <button type="button" onClick={onLogout} className="mt-4 w-full text-center text-xs font-bold uppercase tracking-wider text-pm-muted hover:text-pm-ink">Sair</button>
         </div>
       </div>
@@ -100,11 +103,11 @@ export function ForcePasswordChange({ name, onSubmit, onLogout }: { name: string
   );
 }
 
-export function ChangePasswordModal({ open, onClose, onSubmit }: { open: boolean; onClose: () => void; onSubmit: FormProps["onSubmit"] }) {
+export function ChangePasswordModal({ open, onClose, onSubmit, login = "" }: { open: boolean; onClose: () => void; onSubmit: FormProps["onSubmit"]; login?: string }) {
   return (
     <Modal open={open} onClose={onClose} size="md" eyebrow="Minha conta" title={<span className="inline-flex items-center gap-2"><KeyRound className="h-5 w-5 text-pm-gold-light" />Alterar senha</span>}>
       <p className="mb-4 text-sm text-pm-muted">Ao trocar a senha, as suas sessões abertas em outros computadores são encerradas.</p>
-      {open && <ChangePasswordForm submitLabel="Alterar senha" onCancel={onClose} onSubmit={async (c, n) => { const err = await onSubmit(c, n); if (!err) onClose(); return err; }} />}
+      {open && <ChangePasswordForm username={login} submitLabel="Alterar senha" onCancel={onClose} onSubmit={async (c, n) => { const err = await onSubmit(c, n); if (!err) onClose(); return err; }} />}
     </Modal>
   );
 }
