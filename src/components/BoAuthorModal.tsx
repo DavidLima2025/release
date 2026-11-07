@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, CheckCircle2, FileText, FolderLock, Link2, Loader2, MapPin, ScanText, UserRound } from "lucide-react";
+import { Camera, CheckCircle2, FileText, FolderLock, Link2, Loader2, MapPin, ScanText, SkipForward, UserRound } from "lucide-react";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import { Field, Input, Select, Textarea } from "./ui/input";
@@ -88,29 +88,76 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
   const [invId, setInvId] = useState(investigationId);
   const [coauthor, setCoauthor] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Vários BOs: fila lida um por vez; o que já foi salvo nesta rodada conta para os próximos (evita card duplicado).
+  const [queue, setQueue] = useState<File[]>([]);
+  const [queueIndex, setQueueIndex] = useState(0);
+  const summary = useRef({ saved: 0, skipped: 0, people: 0 });
+  const sessionAuthors = useRef<Map<string, Author>>(new Map());
+  const sessionReports = useRef<Set<string>>(new Set());
   const canInvestigate = Boolean(api && data.permissions.investigations);
   const openInvestigations = (api?.investigations || []).filter((i) => i.status === "Em andamento" || i.status === "Suspensa" || i.id === investigationId);
 
   useEffect(() => {
     if (!open) return;
     setFile(null); setBo(null); setPeople([]); setSaving(""); setAttachBo(true); setInvId(investigationId); setCoauthor(true);
+    setQueue([]); setQueueIndex(0); summary.current = { saved: 0, skipped: 0, people: 0 };
+    sessionAuthors.current = new Map(); sessionReports.current = new Set();
   }, [open, investigationId]);
-  useEffect(() => () => people.forEach((p) => p.preview && URL.revokeObjectURL(p.preview)), [people]);
 
-  async function read(pdf: File) {
+  /** Alvos do banco + os criados/atualizados nesta rodada (o recarregamento do banco pode ainda não ter chegado). */
+  const knownAuthors = () => {
+    const map = new Map(data.authors.map((a) => [a.id, a]));
+    sessionAuthors.current.forEach((a, id) => map.set(id, a));
+    return [...map.values()];
+  };
+  const boOnCard = (authorId: string, numero: string) => Boolean(numero) && (sessionReports.current.has(`${authorId}|${numero}`)
+    || data.authorReports.some((r) => r.authorId === authorId && (r.description || r.fileName).includes(numero)));
+
+  function startQueue(files: File[]) {
+    const pdfs = files.filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    if (!pdfs.length) return;
+    setQueue(pdfs);
+    setQueueIndex(0);
+    read(pdfs[0], pdfs, 0);
+  }
+
+  /** Passa para o próximo BO da fila (ou fecha, se acabou). */
+  function next(list = queue, index = queueIndex, result: { saved?: number; skipped?: number; people?: number } = {}) {
+    const s0 = summary.current;
+    const total = { saved: s0.saved + (result.saved || 0), skipped: s0.skipped + (result.skipped || 0), people: s0.people + (result.people || 0) };
+    summary.current = total;
+    setPeople((current) => { current.forEach((p) => p.preview && URL.revokeObjectURL(p.preview)); return []; });
+    setBo(null); setFile(null);
+    if (index + 1 < list.length) {
+      setQueueIndex(index + 1);
+      read(list[index + 1], list, index + 1);
+      return true;
+    }
+    if (list.length > 1) window.setTimeout(() => window.alert(`${total.saved} BO(s) salvo(s), ${total.people} alvo(s) cadastrado(s)/atualizado(s)${total.skipped ? `, ${total.skipped} BO(s) pulado(s)` : ""}.`), 50);
+    return false;
+  }
+
+  async function read(pdf: File, list: File[] = [pdf], index = 0) {
     setFile(pdf);
     setReading(true);
     try {
       const [{ extractPdfItems }, lib] = await Promise.all([import("../lib/pdf"), import("../lib/boletim")]);
       const parsed = lib.parseBoletim(await extractPdfItems(pdf));
-      if (!lib.isBoletim(parsed)) { window.alert("Não reconheci um BO do REDS neste PDF (ele precisa ter texto selecionável)."); setFile(null); return; }
+      if (!lib.isBoletim(parsed) || !parsed.envolvidos.some((e) => e.nome)) {
+        window.alert(lib.isBoletim(parsed)
+          ? `Não encontrei envolvidos qualificados em "${pdf.name}".${list.length > 1 ? " Ele será pulado." : ""}`
+          : `Não reconheci um BO do REDS em "${pdf.name}" (o PDF precisa ter texto selecionável).${list.length > 1 ? " Ele será pulado." : ""}`);
+        setFile(null);
+        if (list.length > 1) { setReading(false); next(list, index, { skipped: 1 }); }
+        return;
+      }
       setBo(parsed);
       const natureza = lib.naturezaCurta(parsed.natureza);
       const folder = data.authorCategories.find((f) => norm(natureza).includes(norm(f.name)) || norm(f.name).includes(norm(natureza)));
       setPeople(parsed.envolvidos.filter((e) => e.nome).map((e) => {
-        const { author: existing, match } = findExisting(data.authors, e);
+        const { author: existing, match } = findExisting(knownAuthors(), e);
         const address = [e.endereco, e.numeroEndereco].filter(Boolean).join(", ");
-        const boAttached = Boolean(existing && parsed.numero && data.authorReports.some((r) => r.authorId === existing.id && (r.description || r.fileName).includes(parsed.numero)));
+        const boAttached = Boolean(existing && boOnCard(existing.id, parsed.numero));
         return {
           key: e.numero, include: SUSPECT.test(e.tipo) && !/JURIDICA|LTDA|ME$|EIRELI|S\/A/i.test(e.nome), tipo: e.tipo, existing, match, mode: "merge" as const, conflicts: [] as Conflict[], boAttached,
           role: /AUTOR|INFRATOR|PRESO|CONDUZIDO/i.test(e.tipo) ? "Executor" : "Associado",
@@ -132,8 +179,9 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
       }));
     } catch (error) {
       console.error(error);
-      window.alert("Não foi possível ler este PDF.");
+      window.alert(`Não foi possível ler "${pdf.name}".`);
       setFile(null);
+      if (list.length > 1) { setReading(false); next(list, index, { skipped: 1 }); return; }
     } finally { setReading(false); }
   }
 
@@ -181,12 +229,14 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
         merged.notes = [e.notes, boNote, ...extraNotes].filter(Boolean).join("\n\n");
         merged.crimes = e.crimes && !norm(e.crimes).includes(norm(p.form.crimes.split(" — ")[0])) ? `${e.crimes}; ${p.form.crimes}` : e.crimes || p.form.crimes;
         if (p.form.alias && p.form.alias !== e.alias) merged.alias = p.form.alias;
-        if (await data.updateAuthor(e.id, merged, { silent: true })) author = { id: e.id, name: e.name };
+        if (await data.updateAuthor(e.id, merged, { silent: true })) { author = { id: e.id, name: e.name }; sessionAuthors.current.set(e.id, { ...e, ...merged }); }
       } else {
-        author = await data.addAuthor(p.form, { silent: true });
+        const made = await data.addAuthor(p.form, { silent: true });
+        if (made) { author = made; sessionAuthors.current.set(made.id, made); }
       }
       if (!author) continue;
       authorIds.push(author.id);
+      if (attachBo && bo.numero) sessionReports.current.add(`${author.id}|${bo.numero}`);
       if (p.photo) await data.uploadAuthorFile(author, p.photo, "photo", { silent: true, description: `Foto cadastrada pelo ${ref}` });
       // Mesmo BO já anexado a este card: não duplica o arquivo.
       if (attachBo && !(p.boAttached && p.mode === "merge")) await data.uploadAuthorFile(author, file, "report", { silent: true, description: `${ref} — ${p.tipo.toLowerCase()}` });
@@ -225,7 +275,7 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
     setSaving("");
     data.reload();
     onDone?.(authorIds);
-    onClose();
+    if (!next(queue, queueIndex, { saved: 1, people: authorIds.length })) onClose();
   }
 
   const activeFolders = data.authorCategories;
@@ -233,21 +283,23 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
     <Modal open={open} onClose={() => !saving && onClose()} size="xl" eyebrow="Banco de alvos" title="Cadastrar alvos pelo BO"
       footer={<>
         <span className="mr-auto self-center text-xs text-pm-muted">{selected.length ? `${selected.length} envolvido(s) selecionado(s)` : "Marque quem deve virar alvo."}</span>
-        <Button onClick={onClose} disabled={Boolean(saving)}>Cancelar</Button>
-        <Button variant="primary" onClick={save} disabled={!selected.length || Boolean(saving) || reading}>{saving ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}{saving || "Salvar alvos"}</Button>
+        <Button onClick={onClose} disabled={Boolean(saving)}>{queue.length > 1 ? "Parar" : "Cancelar"}</Button>
+        {queue.length > 1 && bo && <Button onClick={() => { if (!next(queue, queueIndex, { skipped: 1 })) onClose(); }} disabled={Boolean(saving) || reading}><SkipForward />Pular este BO</Button>}
+        <Button variant="primary" onClick={save} disabled={!selected.length || Boolean(saving) || reading}>{saving ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}{saving || (queue.length > 1 && queueIndex + 1 < queue.length ? "Salvar e ir para o próximo" : "Salvar alvos")}</Button>
       </>}>
       {!bo ? (
-        <div onClick={() => inputRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) read(f); }}
+        <div onClick={() => inputRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (!reading) startQueue(Array.from(e.dataTransfer.files || [])); }}
           className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-sm border-2 border-dashed border-pm-line bg-white px-6 py-14 text-center hover:border-pm-gold">
           {reading ? <Loader2 className="h-10 w-10 animate-spin text-pm-gold-dark" /> : <ScanText className="h-10 w-10 text-pm-gold-dark" />}
-          <p className="font-black uppercase tracking-wide">{reading ? "Lendo o BO…" : "Arraste o PDF do BO aqui ou clique para escolher"}</p>
-          <p className="max-w-lg text-sm text-pm-muted">O sistema lê a qualificação de cada envolvido (nome, nascimento, mãe, pai, RG, CPF, endereço), sugere quem vira alvo, e você acrescenta a foto antes de salvar.</p>
-          <input ref={inputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) read(f); e.target.value = ""; }} />
+          <p className="font-black uppercase tracking-wide">{reading ? `Lendo o BO${queue.length > 1 ? ` ${queueIndex + 1} de ${queue.length}` : ""}…` : "Arraste os PDFs dos BOs aqui ou clique para escolher"}</p>
+          <p className="max-w-lg text-sm text-pm-muted">O sistema lê a qualificação de cada envolvido (nome, nascimento, mãe, pai, RG, CPF, endereço), sugere quem vira alvo, e você acrescenta a foto antes de salvar. Pode escolher vários PDFs de uma vez: eles são conferidos um por vez, e quem já foi cadastrado num BO é reconhecido nos seguintes.</p>
+          <input ref={inputRef} type="file" multiple accept="application/pdf,.pdf" className="hidden" onChange={(e) => { startQueue(Array.from(e.target.files || [])); e.target.value = ""; }} />
         </div>
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2 rounded-sm bg-pm-black px-4 py-3 text-white">
             <FileText className="h-5 w-5 text-pm-gold-light" />
+            {queue.length > 1 && <span className="pm-chip bg-white text-pm-black">BO {queueIndex + 1} de {queue.length}</span>}
             <span className="font-black">{bo.numero ? `REDS ${bo.numero}` : file?.name}</span>
             {bo.natureza && <span className="pm-chip bg-pm-gold text-pm-black">{bo.natureza}</span>}
             {bo.dataFato && <span className="text-sm text-white/70">Fato em {formatBR(bo.dataFato)} {bo.horaFato}</span>}
