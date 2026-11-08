@@ -87,8 +87,12 @@ export function IntakePublicView({ token }: { token: string }) {
       const file = item.kind === "photo" ? await shrinkImage(item.file) : item.file;
       const path = `externo/${info.link_id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeFileName(file.name)}`;
       const type = file.type || (item.kind === "doc" ? "application/pdf" : "image/jpeg");
-      let up = await supabase.storage.from(INTEL_BUCKET).upload(path, file, { upsert: false, contentType: type });
-      if (up.error) up = await supabase.storage.from(INTEL_BUCKET).upload(path, file, { upsert: false, contentType: type });
+      let body: Blob;
+      try { body = new Blob([await file.arrayBuffer()], { type }); } catch {
+        setSending(""); return setError(`Não foi possível ler ${file.name} no aparelho. Se for do Google Fotos, baixe a foto para o celular e escolha de novo.`);
+      }
+      let up = await supabase.storage.from(INTEL_BUCKET).upload(path, body, { upsert: false, contentType: type });
+      if (up.error) up = await supabase.storage.from(INTEL_BUCKET).upload(path, body, { upsert: false, contentType: type });
       if (up.error) { setSending(""); return setError(`Não foi possível enviar ${file.name}. Confira a internet e tente de novo.`); }
       uploaded.push({ path, name: file.name, size: file.size, type, kind: item.kind });
     }

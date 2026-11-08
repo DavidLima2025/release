@@ -15,6 +15,9 @@ export function setSessionToken(token: string) {
 
 const fetchWithSession: typeof fetch = (input, init = {}) => {
   if (!sessionToken) return fetch(input, init);
+  // O Storage não usa a sessão (as regras dele não leem esse cabeçalho); mandar só no banco evita bloqueio de CORS no envio de arquivos.
+  const target = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  if (target.includes("/storage/v1/")) return fetch(input, init);
   const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
   headers.set("x-session-token", sessionToken);
   return fetch(input, { ...init, headers });

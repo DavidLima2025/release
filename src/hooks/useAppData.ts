@@ -31,10 +31,18 @@ export function fileContentType(file: File) {
 /** Envia para o Storage; uma nova tentativa em falha de rede (comum no 4G). */
 async function uploadWithRetry(bucket: string, path: string, file: File) {
   const options = { upsert: false, contentType: fileContentType(file), cacheControl: "3600" };
-  let result = await supabase.storage.from(bucket).upload(path, file, options);
+  // Lê o arquivo antes de enviar: foto do Google Fotos/nuvem que não está no aparelho falha aqui, com aviso claro.
+  let body: Blob;
+  try {
+    body = new Blob([await file.arrayBuffer()], { type: options.contentType });
+  } catch (error) {
+    console.error("leitura", file.name, error);
+    return { data: null, error: { message: "não foi possível ler o arquivo no aparelho (se for do Google Fotos, baixe a foto para o aparelho e tente de novo)" } } as any;
+  }
+  let result = await supabase.storage.from(bucket).upload(path, body, options);
   if (result.error && !/exist|duplicate|policy|row-level|mime|size|large/i.test(result.error.message || "")) {
     await new Promise((r) => setTimeout(r, 1200));
-    result = await supabase.storage.from(bucket).upload(path, file, options);
+    result = await supabase.storage.from(bucket).upload(path, body, options);
   }
   if (result.error) console.error("upload", bucket, path, result.error);
   return result;
@@ -42,8 +50,8 @@ async function uploadWithRetry(bucket: string, path: string, file: File) {
 
 function storageErrorText(error: any) {
   const msg = String(error?.message || error || "");
-  if (/row-level|policy|unauthorized|403/i.test(msg)) return "sem permissão no armazenamento (rode o script 04_correcoes_armazenamento.sql no Supabase).";
-  if (/mime|content type|not supported/i.test(msg)) return "tipo de arquivo bloqueado no armazenamento (rode o script 04 no Supabase).";
+  if (/row-level|policy|unauthorized|403/i.test(msg)) return "sem permissão no armazenamento.";
+  if (/mime|content type|not supported/i.test(msg)) return "tipo de arquivo bloqueado no armazenamento.";
   if (/size|large|413/i.test(msg)) return "arquivo grande demais.";
   if (/bucket not found/i.test(msg)) return "espaço de arquivos não encontrado (rode os scripts do Supabase).";
   if (/fetch|network|failed/i.test(msg)) return "falha de conexão. Tente de novo.";
