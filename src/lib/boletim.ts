@@ -1,3 +1,4 @@
+import { coordsFromRedsText } from "./geo";
 // Leitura de Boletim de Ocorrência (REDS / SIDS - PMMG) a partir dos itens de texto
 // posicionados que o pdf.js entrega. O layout do BO é sempre "rótulo pequeno em cima,
 // valor embaixo, alinhado na mesma coluna" — o parser explora exatamente isso.
@@ -25,7 +26,7 @@ export type Boletim = {
   alvoEvento: string;
   unidade: string;
   municipio: string;
-  local: { logradouro: string; numero: string; bairro: string; municipio: string; uf: string; descricao: string };
+  local: { logradouro: string; numero: string; bairro: string; municipio: string; uf: string; descricao: string; lat?: number; lng?: number };
   meioUtilizado: string;
   causaPresumida: string;
   envolvidos: BoEnvolvido[];
@@ -274,6 +275,9 @@ export function parseBoletim(items: PdfTextItem[]): Boletim {
   })).filter((m) => m.nome);
 
   const historico = parseHistorico(rows, sectionRange(rows, /^HIST.RICO DA OCORR/i));
+  const textoCompleto = rows.map((row) => row.text).join("\n");
+  // Coordenadas do local do fato (campos LATITUDE/LONGITUDE do REDS, em graus/min/seg).
+  const coords = coordsFromRedsText(textoCompleto);
 
   return {
     numero,
@@ -293,6 +297,7 @@ export function parseBoletim(items: PdfTextItem[]): Boletim {
       municipio: field(rows, /^MUNIC.PIO/i, findRowIndex(rows, /^LOCAL \(AV/i, dFrom, dTo), dTo),
       uf: field(rows, /^UF$/i, findRowIndex(rows, /^LOCAL \(AV/i, dFrom, dTo), dTo),
       descricao: field(rows, /^DESCRI.{1,3}O DO LUGAR/i, dFrom, dTo),
+      ...(coords ? { lat: coords.lat, lng: coords.lng } : {}),
     },
     meioUtilizado: field(rows, /^DESCRI.{1,3}O OUTRO MEIO/i, dFrom, dTo) || field(rows, /^MEIO UTILIZADO/i, dFrom, dTo),
     causaPresumida: field(rows, /^CAUSA PRESUMIDA/i, dFrom, dTo),
@@ -300,7 +305,17 @@ export function parseBoletim(items: PdfTextItem[]): Boletim {
     materiais,
     militares,
     historico,
-    textoCompleto: rows.map((row) => row.text).join("\n"),
+    textoCompleto,
+  };
+}
+
+/** Dados do fato para o mapa criminal (coordenadas do REDS, endereço, hora e natureza). */
+export function boletimGeo(bo: Boletim) {
+  const place = [[bo.local.logradouro, bo.local.numero].filter(Boolean).join(", "), bo.local.bairro, [bo.local.municipio || bo.municipio, bo.local.uf].filter(Boolean).join("/")].filter(Boolean).join(" — ");
+  const has = typeof bo.local.lat === "number" && typeof bo.local.lng === "number";
+  return {
+    lat: has ? bo.local.lat! : null, lng: has ? bo.local.lng! : null, geoSource: has ? "REDS" : "",
+    place, eventTime: bo.horaFato || "", crime: naturezaCurta(bo.natureza),
   };
 }
 

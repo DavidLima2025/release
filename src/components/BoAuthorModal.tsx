@@ -259,8 +259,8 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
           kind: "Boletim de ocorrência", title: `${lib.naturezaCurta(bo.natureza)}${bo.local.logradouro ? ` — ${bo.local.logradouro}${bo.local.bairro ? `, ${bo.local.bairro}` : ""}` : ""}`,
           itemDate: bo.dataFato || bo.dataRegistro, source: "PMMG / REDS", reference: bo.numero, sourceRating: "A", infoRating: "2",
           summary: [`Envolvidos: ${bo.envolvidos.map((e) => `${e.nome} (${e.tipo.toLowerCase()})`).join("; ")}.`, bo.historico].join("\n\n"),
-          authorIds, includeInReport: true,
-        }, file);
+          authorIds, includeInReport: true, ...lib.boletimGeo(bo),
+        } as any, file);
       }
       if (coauthor && targetIds.length > 1) {
         const invLinks = api.links.filter((l) => l.investigationId === inv.id);
