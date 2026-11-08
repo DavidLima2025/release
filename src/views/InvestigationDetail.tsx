@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, Check, ChevronRight, Download, Edit3, ExternalLink, FileSearch, FileText, GitFork, History, Link2, Loader2,
-  Paperclip, Plus, Presentation, Save, ScanText, Trash2, UserPlus, Users,
+  Map as MapIcon, Paperclip, Plus, Presentation, Save, ScanText, Trash2, UserPlus, Users,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, EmptyState, SectionHeader } from "../components/ui/card";
@@ -10,6 +10,8 @@ import { Badge } from "../components/ui/badge";
 import { Modal } from "../components/ui/modal";
 import { LinkChart, Organogram } from "../components/Organogram";
 import { BoAuthorModal } from "../components/BoAuthorModal";
+
+const CrimeMap = lazy(() => import("./CrimeMap"));
 import {
   CLASSIFICATIONS, INFO_RATINGS, INVESTIGATION_STATUSES, ITEM_KINDS, Investigation, InvestigationItem, InvestigationLink, InvestigationTarget,
   RELATIONS, ROLE_COLOR, SOURCE_RATINGS, STAGES, TARGET_ROLES, overallProgress, ratingLabel, stageIndex, stageProgress,
@@ -19,9 +21,9 @@ import { formatBR } from "../lib/dates";
 import type { AppData } from "../hooks/useAppData";
 import type { InvestigationsApi } from "../hooks/useInvestigations";
 
-type Tab = "dossie" | "fontes" | "alvos" | "cronologia" | "analise" | "relatorio";
+type Tab = "dossie" | "fontes" | "alvos" | "mapa" | "cronologia" | "analise" | "relatorio";
 const TABS: [Tab, string, any][] = [
-  ["dossie", "Dossiê", FileText], ["fontes", "Fontes e evidências", FileSearch], ["alvos", "Alvos e organograma", GitFork],
+  ["dossie", "Dossiê", FileText], ["fontes", "Fontes e evidências", FileSearch], ["alvos", "Alvos e organograma", GitFork], ["mapa", "Mapa", MapIcon],
   ["cronologia", "Cronologia", History], ["analise", "Análise e conclusão", Edit3], ["relatorio", "Relatório", Download],
 ];
 
@@ -79,6 +81,11 @@ export function InvestigationDetail({ data, api, investigation: inv, onBack }: P
       {tab === "dossie" && <DossierTab data={data} api={api} inv={inv} canDelete={canDelete} onDeleted={onBack} />}
       {tab === "fontes" && <SourcesTab data={data} api={api} inv={inv} items={items} targets={targets} />}
       {tab === "alvos" && <TargetsTab data={data} api={api} inv={inv} targets={targets} links={links} />}
+      {tab === "mapa" && (
+        <Suspense fallback={<div className="flex items-center gap-2 py-16 text-pm-muted"><Loader2 className="h-5 w-5 animate-spin" />Carregando o mapa…</div>}>
+          <CrimeMap data={data} api={api} items={items} />
+        </Suspense>
+      )}
       {tab === "cronologia" && <TimelineTab inv={inv} items={items} />}
       {tab === "analise" && <AnalysisTab api={api} inv={inv} />}
       {tab === "relatorio" && <ReportTab inv={inv} items={items} targets={targets} links={links} generating={generating} onGenerate={generate} onTab={setTab} />}
@@ -270,6 +277,7 @@ function ItemModal({ open, boMode, data, api, inv, item, targets, onClose }: {
         ...f, kind: "Boletim de ocorrência", title: `${bo.naturezaCurta(parsed.natureza)}${fato ? ` — ${fato}${parsed.local.bairro ? `, ${parsed.local.bairro}` : ""}` : ""}`,
         itemDate: parsed.dataFato || parsed.dataRegistro, source: "PMMG / REDS", reference: parsed.numero, sourceRating: f.sourceRating || "A", infoRating: f.infoRating || "2",
         summary: [parsed.envolvidos.length ? `Envolvidos: ${parsed.envolvidos.map((e) => `${e.nome} (${e.tipo.toLowerCase()})`).join("; ")}.` : "", parsed.historico].filter(Boolean).join("\n\n"),
+        ...bo.boletimGeo(parsed),
       }));
       setSuggested(parsed.envolvidos.filter((e) => e.nome && /AUTOR|SUSPEITO|INFRATOR|CONDUZIDO|PRESO/i.test(e.tipo)).map((e) => ({ name: e.nome, tipo: e.tipo, add: true })));
     } catch (e) {

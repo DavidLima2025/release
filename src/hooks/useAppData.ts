@@ -559,6 +559,8 @@ export function useAppData(notify: Notify) {
       name: form.name.trim(), alias: form.alias, mother_name: form.motherName, father_name: form.fatherName || null, birth_date: form.birthDate || null, document: form.document,
       address: form.address, neighborhood: form.neighborhood, city: form.city, crimes: form.crimes, folder_id: form.categoryId || null,
       status: form.status, risk_level: form.riskLevel, notes: form.notes,
+      // Residência no mapa: só grava quando o formulário traz o campo (não apaga ao editar por outra tela).
+      ...("homeLat" in form ? { home_lat: form.homeLat ?? null, home_lng: form.homeLng ?? null } : {}),
     };
   }
 
@@ -579,6 +581,16 @@ export function useAppData(notify: Notify) {
     await addAudit("Alvo atualizado", `Atualizou dados de: ${form.name}.`);
     if (!options.silent) notify("Card atualizado.");
     reload();
+    return true;
+  }
+
+  /** Residência do alvo no mapa (null apaga). */
+  async function setAuthorHome(author: Author, point: { lat: number; lng: number } | null) {
+    const { error } = await supabase.from("crime_authors").update({ home_lat: point?.lat ?? null, home_lng: point?.lng ?? null }).eq("id", author.id);
+    if (error) { notify("Erro ao gravar a residência no mapa.", "error"); return false; }
+    setAuthors((list) => list.map((a) => (a.id === author.id ? { ...a, homeLat: point?.lat ?? null, homeLng: point?.lng ?? null } : a)));
+    await addAudit("Residência marcada no mapa", `${point ? "Marcou" : "Removeu"} a residência de ${author.name}.`);
+    notify(point ? "Residência gravada no mapa." : "Residência removida do mapa.");
     return true;
   }
 
@@ -693,7 +705,7 @@ export function useAppData(notify: Notify) {
     // workflow
     addWorkflow, deleteWorkflow, moveWorkflow,
     // alvos
-    getIntelFileUrl, addAuthorCategory, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, uploadAuthorFile, deleteAuthorPhoto, importTrelloBoard,
+    getIntelFileUrl, addAuthorCategory, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, setAuthorHome, uploadAuthorFile, deleteAuthorPhoto, importTrelloBoard,
   };
 }
 

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { Suspense, lazy, useCallback, useState } from "react";
 import { FolderLock, Gavel, Loader2, Plus, ScanText } from "lucide-react";
 import { supabaseConfigured } from "./supabase";
 import { useAppData } from "./hooks/useAppData";
@@ -29,11 +29,14 @@ import { InvestigationsView } from "./views/InvestigationsView";
 import { InvestigationDetail } from "./views/InvestigationDetail";
 import { IntakePublicView } from "./views/IntakePublicView";
 
+const CrimeMap = lazy(() => import("./views/CrimeMap"));
+
 const TITLES: Record<View, [string, string]> = {
   painel: ["Painel operacional", "Calendário e demandas do dia"],
   tarefas: ["Demandas", "Todas as demandas com filtros e pesquisa"],
   workflow: ["Workflow", "Etapas das demandas"],
   investigacoes: ["Investigações", "Linhas de investigação e dossiês de inteligência"],
+  mapa: ["Mapa criminal", "Fatos de todas as investigações, com filtros e análises espaciais"],
   dashboard: ["Dashboard", "Indicadores de produtividade e prazos"],
   alvos: ["Banco de alvos", "Autores e suspeitos por modalidade"],
   usuarios: ["Usuários", "Cadastro e perfis de acesso"],
@@ -88,7 +91,7 @@ function AuthenticatedApp() {
 
   // Garante que um perfil sem permissão não fique numa tela restrita.
   const allowed: Record<View, boolean> = {
-    painel: true, tarefas: true, workflow: true, investigacoes: data.permissions.investigations, dashboard: data.permissions.dashboard, alvos: data.permissions.targets,
+    painel: true, tarefas: true, workflow: true, investigacoes: data.permissions.investigations, mapa: data.permissions.investigations, dashboard: data.permissions.dashboard, alvos: data.permissions.targets,
     usuarios: data.permissions.users, auditoria: data.permissions.audit,
   };
   const current: View = allowed[view] ? view : "painel";
@@ -132,6 +135,11 @@ function AuthenticatedApp() {
             {current === "investigacoes" && (openInvestigation
               ? <InvestigationDetail key={openInvestigation.id} data={data} api={investigations} investigation={openInvestigation} onBack={() => setOpenInvestigationId("")} />
               : <InvestigationsView data={data} api={investigations} onOpen={(inv) => { setOpenInvestigationId(inv.id); window.scrollTo({ top: 0 }); }} createOpen={newInvestigationOpen} setCreateOpen={setNewInvestigationOpen} />)}
+            {current === "mapa" && (
+              <Suspense fallback={<div className="flex items-center gap-3 py-20 text-pm-muted"><Loader2 className="h-5 w-5 animate-spin" />Carregando o mapa…</div>}>
+                <CrimeMap data={data} api={investigations} items={investigations.items} investigations={investigations.investigations} height="72vh" />
+              </Suspense>
+            )}
             {current === "dashboard" && <DashboardView data={data} />}
             {current === "alvos" && <TargetsView notify={notify} data={data} api={data.permissions.investigations ? investigations : undefined} onOpenInvestigation={(id) => { setView("investigacoes"); setOpenInvestigationId(id); window.scrollTo({ top: 0 }); }} />}
             {current === "usuarios" && <UsersView data={data} />}

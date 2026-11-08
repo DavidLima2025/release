@@ -85,6 +85,8 @@ export type InvestigationItem = {
   id: string; investigationId: string; kind: string; title: string; itemDate: string; source: string; reference: string; url: string;
   sourceRating: string; infoRating: string; summary: string; authorIds: string[]; filePath: string; fileName: string; fileSize: number;
   mimeType: string; includeInReport: boolean; createdAt: string;
+  /** Local do fato no mapa (null = ainda não localizado). */
+  lat: number | null; lng: number | null; geoSource: string; place: string; eventTime: string; crime: string;
 };
 
 export type InvestigationTarget = { id: string; investigationId: string; authorId: string; role: string; parentId: string; notes: string; position: number };
@@ -108,6 +110,7 @@ export function normalizeItem(row: any): InvestigationItem {
     source: row.source || "", reference: row.reference || "", url: row.url || "", sourceRating: row.source_rating || "", infoRating: row.info_rating || "",
     summary: row.summary || "", authorIds: Array.isArray(row.author_ids) ? row.author_ids : [], filePath: row.file_path || "", fileName: row.file_name || "",
     fileSize: Number(row.file_size) || 0, mimeType: row.mime_type || "", includeInReport: row.include_in_report !== false, createdAt: row.created_at || "",
+    lat: row.lat ?? null, lng: row.lng ?? null, geoSource: row.geo_source || "", place: row.place || "", eventTime: row.event_time || "", crime: row.crime || "",
   };
 }
 

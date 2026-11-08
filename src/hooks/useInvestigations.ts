@@ -17,6 +17,7 @@ const INV_FIELDS: Record<string, string> = {
 const ITEM_FIELDS: Record<string, string> = {
   kind: "kind", title: "title", itemDate: "item_date", source: "source", reference: "reference", url: "url", sourceRating: "source_rating",
   infoRating: "info_rating", summary: "summary", authorIds: "author_ids", includeInReport: "include_in_report",
+  lat: "lat", lng: "lng", geoSource: "geo_source", place: "place", eventTime: "event_time", crime: "crime",
 };
 
 function toRow(values: Record<string, any>, map: Record<string, string>) {
@@ -198,6 +199,24 @@ export function useInvestigations(data: AppData, notify: Notify) {
     return item;
   }
 
+  /** Grava o local do fato (mapa) sem mexer no resto da fonte. */
+  async function setItemLocation(item: InvestigationItem, geo: { lat: number | null; lng: number | null; geoSource?: string; place?: string; eventTime?: string; crime?: string }, silent = false) {
+    const row = toRow(geo, ITEM_FIELDS);
+    const { data: saved, error } = await supabase.from("investigation_items").update(row).eq("id", item.id).select("*").single();
+    if (error) { fail(error, "Erro ao gravar o local no mapa."); return null; }
+    const updated = normalizeItem(saved);
+    setItems((list) => list.map((i) => (i.id === updated.id ? updated : i)));
+    if (!silent) notify(geo.lat === null ? "Local removido do mapa." : "Local gravado no mapa.");
+    return updated;
+  }
+
+  /** Link temporário do arquivo da fonte (para reler o PDF do REDS). */
+  async function itemFileUrl(item: InvestigationItem) {
+    if (!item.filePath) return "";
+    const { data: signed } = await supabase.storage.from(INVESTIGATION_BUCKET).createSignedUrl(item.filePath, 300);
+    return signed?.signedUrl || "";
+  }
+
   async function deleteItem(item: InvestigationItem) {
     if (!window.confirm(`Remover "${item.title}" do dossiê?`)) return;
     const { error } = await supabase.from("investigation_items").delete().eq("id", item.id);
@@ -319,7 +338,7 @@ export function useInvestigations(data: AppData, notify: Notify) {
   return {
     investigations, items, targets, links, loaded, reload: load,
     createInvestigation, updateInvestigation, toggleStageItem, setStage, deleteInvestigation,
-    saveItem, deleteItem, openItemFile, addTarget, createAndAddTarget, updateTarget, removeTarget, addLink, deleteLink, generateReport,
+    saveItem, deleteItem, openItemFile, setItemLocation, itemFileUrl, addTarget, createAndAddTarget, updateTarget, removeTarget, addLink, deleteLink, generateReport,
   };
 }
 

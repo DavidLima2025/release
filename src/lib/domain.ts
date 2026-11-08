@@ -61,6 +61,8 @@ export type Author = {
   id: string; name: string; alias: string; motherName: string; fatherName: string; birthDate: string; document: string;
   address: string; neighborhood: string; city: string; crimes: string; categoryId: string;
   status: string; riskLevel: string; notes: string; createdAt: string;
+  /** Residência no mapa (opcional). */
+  homeLat: number | null; homeLng: number | null;
 };
 export type AuthorFile = {
   id: string; authorId: string; fileName: string; filePath: string; fileSize: number;
@@ -170,6 +172,8 @@ export function normalizeAuthor(row: any): Author {
     riskLevel: row.risk_level || "Médio",
     notes: row.notes || "",
     createdAt: row.created_at,
+    homeLat: row.home_lat ?? null,
+    homeLng: row.home_lng ?? null,
   };
 }
 
