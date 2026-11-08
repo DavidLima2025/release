@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { FolderLock, Loader2, Plus, ScanText } from "lucide-react";
+import { FolderLock, Gavel, Loader2, Plus, ScanText } from "lucide-react";
 import { supabaseConfigured } from "./supabase";
 import { useAppData } from "./hooks/useAppData";
 import { useInvestigations } from "./hooks/useInvestigations";
@@ -11,6 +11,8 @@ import { Button } from "./components/ui/button";
 import { TaskFormModal } from "./components/TaskFormModal";
 import { PostponeModal } from "./components/PostponeModal";
 import { BoImportModal } from "./components/BoImportModal";
+import { AudienciaModal } from "./components/AudienciaModal";
+import { AudienciaBanner } from "./components/AudienciaPanel";
 import { ChangePasswordModal, ForcePasswordChange } from "./components/PasswordForm";
 import { Layout, View } from "./views/Layout";
 import { LoginView } from "./views/LoginView";
@@ -25,6 +27,7 @@ import { AuditView } from "./views/AuditView";
 import { TVPanel } from "./views/TVPanel";
 import { InvestigationsView } from "./views/InvestigationsView";
 import { InvestigationDetail } from "./views/InvestigationDetail";
+import { IntakePublicView } from "./views/IntakePublicView";
 
 const TITLES: Record<View, [string, string]> = {
   painel: ["Painel operacional", "Calendário e demandas do dia"],
@@ -37,8 +40,12 @@ const TITLES: Record<View, [string, string]> = {
   auditoria: ["Auditoria", "Histórico de ações no sistema"],
 };
 
+/** Link de cadastro externo: /cadastro/<token> abre a página pública (sem login). */
+const intakeToken = typeof window !== "undefined" ? window.location.pathname.match(/^\/cadastro\/([a-f0-9]{16,64})\/?$/i)?.[1] || "" : "";
+
 export default function App() {
   if (!supabaseConfigured) return <SetupView />;
+  if (intakeToken) return <IntakePublicView token={intakeToken} />;
   return <AuthenticatedApp />;
 }
 
@@ -58,6 +65,7 @@ function AuthenticatedApp() {
   const [importOpen, setImportOpen] = useState(false);
   const [tvOpen, setTvOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [audienciaOpen, setAudienciaOpen] = useState(false);
 
   const openCreate = useCallback((date: string) => setTaskForm({ open: true, task: null, date }), []);
   const openEdit = useCallback((task: Task) => setTaskForm({ open: true, task, date: task.date }), []);
@@ -90,6 +98,7 @@ function AuthenticatedApp() {
   const headerActions = (current === "painel" || current === "tarefas") ? (
     <>
       <Button onClick={() => setImportOpen(true)}><ScanText />Importar BO</Button>
+      <Button onClick={() => setAudienciaOpen(true)}><Gavel />Audiência</Button>
       <Button variant="primary" onClick={() => openCreate(selectedDate)}><Plus />Nova demanda</Button>
     </>
   ) : current === "investigacoes" && !openInvestigation ? (
@@ -109,6 +118,7 @@ function AuthenticatedApp() {
     <>
       <Layout view={current} setView={(next) => { setView(next); setOpenInvestigationId(""); }} data={data} onOpenTv={() => setTvOpen(true)} onImportBo={() => setImportOpen(true)}
         onChangePassword={() => setPasswordOpen(true)} title={openInvestigation ? "Dossiê" : title} subtitle={current === "painel" ? `${subtitle} · hoje ${formatBR(data.today)}` : openInvestigation ? `${openInvestigation.code} · ${openInvestigation.classification}` : subtitle} actions={headerActions}>
+        {!data.loading && <AudienciaBanner tasks={data.tasks} today={data.today} onOpen={(date) => { selectDate(date); setView("painel"); setOpenInvestigationId(""); }} />}
         {data.loading ? (
           <div className="flex items-center gap-3 py-20 text-pm-muted"><Loader2 className="h-5 w-5 animate-spin" />Carregando dados…</div>
         ) : (
@@ -123,7 +133,7 @@ function AuthenticatedApp() {
               ? <InvestigationDetail key={openInvestigation.id} data={data} api={investigations} investigation={openInvestigation} onBack={() => setOpenInvestigationId("")} />
               : <InvestigationsView data={data} api={investigations} onOpen={(inv) => { setOpenInvestigationId(inv.id); window.scrollTo({ top: 0 }); }} createOpen={newInvestigationOpen} setCreateOpen={setNewInvestigationOpen} />)}
             {current === "dashboard" && <DashboardView data={data} />}
-            {current === "alvos" && <TargetsView data={data} api={data.permissions.investigations ? investigations : undefined} onOpenInvestigation={(id) => { setView("investigacoes"); setOpenInvestigationId(id); window.scrollTo({ top: 0 }); }} />}
+            {current === "alvos" && <TargetsView notify={notify} data={data} api={data.permissions.investigations ? investigations : undefined} onOpenInvestigation={(id) => { setView("investigacoes"); setOpenInvestigationId(id); window.scrollTo({ top: 0 }); }} />}
             {current === "usuarios" && <UsersView data={data} />}
             {current === "auditoria" && <AuditView data={data} />}
           </ErrorBoundary>
@@ -135,6 +145,7 @@ function AuthenticatedApp() {
       <PostponeModal task={postponing} today={data.today} onClose={() => setPostponing(null)} onConfirm={data.postponeTask} />
       <BoImportModal open={importOpen} selectedDate={selectedDate} data={data} onClose={() => setImportOpen(false)}
         onCreated={(date) => { notify("Demanda(s) criada(s) a partir do BO, com o PDF anexado."); if (date) { selectDate(date); setView("painel"); } }} />
+      <AudienciaModal open={audienciaOpen} data={data} onClose={() => setAudienciaOpen(false)} onCreated={(date) => { notify("Audiência cadastrada. O lembrete aparece no topo nos dias anteriores."); selectDate(date); setView("painel"); }} />
       <ChangePasswordModal login={data.currentUser.login} open={passwordOpen} onClose={() => setPasswordOpen(false)} onSubmit={data.changeOwnPassword} />
       {tvOpen && <TVPanel data={data} onClose={closeTv} />}
       <ToastStack toasts={toasts} />

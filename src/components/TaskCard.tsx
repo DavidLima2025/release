@@ -5,6 +5,7 @@ import { Badge, PriorityBadge, STATUS_COLOR, StatusBadge } from "./ui/badge";
 import { Attachment, Task, checklistProgress, formatBytes } from "../lib/domain";
 import { daysBetween, formatBR } from "../lib/dates";
 import type { AppData } from "../hooks/useAppData";
+import { notesForDisplay, parseAudiencia, whenText } from "../lib/audiencia";
 
 type Props = {
   task: Task;
@@ -29,6 +30,8 @@ export function TaskCard({ task, data, onEdit, onPostpone, defaultOpen = false }
   const files: Attachment[] = data.attachments.filter((file) => file.demandId === task.id);
   const progress = checklistProgress(task);
   const done = task.status === "Concluída";
+  const audiencia = parseAudiencia(task);
+  const audDays = audiencia ? daysBetween(audiencia.date, data.today) : null;
 
   return (
     <article className="relative overflow-hidden rounded-sm border border-pm-line bg-white shadow-panel">
@@ -39,6 +42,7 @@ export function TaskCard({ task, data, onEdit, onPostpone, defaultOpen = false }
             <StatusBadge status={task.status} />
             <PriorityBadge priority={task.priority} />
             <Badge>{task.type}</Badge>
+            {audiencia && <Badge tone={audDays !== null && audDays >= 0 && audDays <= 1 ? "high" : "dark"}>⚖ {formatBR(audiencia.date)}{audiencia.time ? ` ${audiencia.time}` : ""}{audDays !== null && audDays >= 0 && !done ? ` · ${whenText(audDays, "")}` : ""}</Badge>}
             {files.length > 0 && <Badge tone="gold"><Paperclip className="h-3 w-3" />{files.length}</Badge>}
           </div>
           <h3 className={`mt-1.5 font-bold leading-snug text-pm-black ${done ? "text-pm-muted line-through decoration-pm-gold/60" : ""}`}>{task.title}</h3>
@@ -58,7 +62,7 @@ export function TaskCard({ task, data, onEdit, onPostpone, defaultOpen = false }
 
       {open && (
         <div className="space-y-4 border-t border-pm-line bg-pm-cream/40 px-5 py-4">
-          {task.notes && <p className="max-h-72 overflow-auto whitespace-pre-wrap text-sm leading-relaxed text-pm-ink">{task.notes}</p>}
+          {notesForDisplay(task.notes) && <p className="max-h-72 overflow-auto whitespace-pre-wrap text-sm leading-relaxed text-pm-ink">{notesForDisplay(task.notes)}</p>}
 
           <div className="grid gap-2 text-xs sm:grid-cols-4">
             <Info label="Gestor" value={task.manager} />

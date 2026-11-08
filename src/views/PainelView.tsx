@@ -6,6 +6,8 @@ import { TaskCard } from "../components/TaskCard";
 import { STATUSES, Status, Task, countByStatus } from "../lib/domain";
 import { buildCalendarDays, formatBR, monthLabel, parseISODate, weekdayLabel } from "../lib/dates";
 import type { AppData } from "../hooks/useAppData";
+import { UpcomingAudiencias } from "../components/AudienciaPanel";
+import { parseAudiencia } from "../lib/audiencia";
 
 const STAT_META: Record<Status, { label: string; icon: any }> = {
   "A fazer": { label: "A fazer", icon: ListChecks },
@@ -55,6 +57,8 @@ export function PainelView({ data, selectedDate, setSelectedDate, monthDate, set
   const dayTasks = data.tasks.filter((task) => task.date === selectedDate);
   const dueTasks = data.tasks.filter((task) => task.overdueDate === selectedDate && task.date !== selectedDate && task.status !== "Concluída");
 
+  // Audiência aparece também no dia em que acontece (a demanda fica no dia do recebimento).
+  const audiencias = data.tasks.filter((t) => t.status !== "Concluída").map((t) => ({ t, info: parseAudiencia(t) })).filter((x) => x.info);
   const shiftMonth = (delta: number) => setMonthDate(new Date(monthDate.getFullYear(), monthDate.getMonth() + delta, 1));
   const goToday = () => { setSelectedDate(data.today); setMonthDate(parseISODate(data.today)); };
 
@@ -82,6 +86,7 @@ export function PainelView({ data, selectedDate, setSelectedDate, monthDate, set
               {days.map((date, index) => {
                 if (!date) return <div key={`blank-${index}`} />;
                 const list = data.tasks.filter((task) => task.date === date);
+                const hearings = audiencias.filter((x) => x.info!.date === date);
                 const selected = date === selectedDate;
                 const isToday = date === data.today;
                 const weekend = [0, 6].includes(parseISODate(date).getDay());
@@ -93,12 +98,16 @@ export function PainelView({ data, selectedDate, setSelectedDate, monthDate, set
                       {list.length > 0 && <span className={`text-[10px] font-black ${selected ? "text-pm-gold-light" : "text-pm-muted"}`}>{list.length}</span>}
                     </div>
                     <div className="mt-1 hidden flex-1 space-y-0.5 sm:block">
+                      {hearings.map(({ t, info }) => (
+                        <div key={`a-${t.id}`} className={`truncate rounded-[2px] px-1 py-0.5 text-[10px] font-black uppercase leading-tight ${selected ? "bg-pm-gold text-pm-black" : "bg-pm-black text-pm-gold-light"}`}>⚖ {info!.time || "Audiência"}</div>
+                      ))}
                       {list.slice(0, 3).map((task) => (
                         <div key={task.id} className={`truncate rounded-[2px] border-l-[3px] px-1 py-0.5 text-[10px] font-semibold leading-tight ${selected ? "bg-white/10" : "bg-pm-cream"} ${task.status === "Concluída" ? "line-through opacity-60" : ""}`} style={{ borderColor: STATUS_COLOR[task.status] }}>{task.title}</div>
                       ))}
                       {list.length > 3 && <p className={`px-1 text-[10px] font-bold ${selected ? "text-pm-gold-light" : "text-pm-gold-dark"}`}>+{list.length - 3} mais</p>}
                     </div>
                     <div className="mt-auto flex gap-0.5 sm:hidden">
+                      {hearings.length > 0 && <span className="h-1.5 w-1.5 rounded-full bg-pm-black ring-1 ring-pm-gold" />}
                       {list.slice(0, 4).map((task) => <span key={task.id} className="h-1.5 flex-1 rounded-full" style={{ background: STATUS_COLOR[task.status] }} />)}
                     </div>
                   </button>
@@ -123,6 +132,8 @@ export function PainelView({ data, selectedDate, setSelectedDate, monthDate, set
               <Button variant="light" onClick={onImportBo}><ScanText />Importar BO</Button>
             </div>
           </div>
+
+          <UpcomingAudiencias tasks={data.tasks} today={data.today} onOpen={setSelectedDate} />
 
           <div className="space-y-2">
             {dayTasks.length === 0 && <EmptyState icon={CalendarDays} title="Nenhuma demanda neste dia">Cadastre uma nova demanda ou importe um BO em PDF.</EmptyState>}

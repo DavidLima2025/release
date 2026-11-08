@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, FileText, Loader2, MapPin, ScanText, Trash2, Upload, Users } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, FileText, Gavel, Loader2, MapPin, ScanText, Trash2, Upload, Users } from "lucide-react";
+import { AudienciaModal } from "./AudienciaModal";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import { Field, Input, Select } from "./ui/input";
@@ -44,11 +45,14 @@ export function BoImportModal({ open, selectedDate, data, onClose, onCreated }: 
   const [saving, setSaving] = useState(false);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [audiencia, setAudiencia] = useState<Item | null>(null);
+  const [audienciaDone, setAudienciaDone] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
     setItems([]);
     setSaving(false);
+    setAudienciaDone([]);
     const me = data.users.find((u) => u.id === data.currentUser?.id && u.status === "Ativo");
     setResponsibleId(me?.id || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -195,6 +199,10 @@ export function BoImportModal({ open, selectedDate, data, onClose, onCreated }: 
                         {item.bo.local.bairro && <span className="inline-flex items-center gap-1 text-pm-muted"><MapPin className="h-3 w-3" />{[item.bo.local.logradouro, item.bo.local.numero].filter(Boolean).join(", ")} · {item.bo.local.bairro}</span>}
                         {item.bo.envolvidos.length > 0 && <span className="inline-flex items-center gap-1 text-pm-muted"><Users className="h-3 w-3" />{item.bo.envolvidos.length} envolvido(s)</span>}
                       </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button size="sm" variant={audienciaDone.includes(item.key) ? "outline" : "gold"} onClick={() => setAudiencia(item)}><Gavel />{audienciaDone.includes(item.key) ? "Outra audiência deste fato" : "Cadastrar audiência deste fato"}</Button>
+                        {audienciaDone.includes(item.key) && <Badge tone="done">Audiência cadastrada</Badge>}
+                      </div>
                     </>
                   )}
                 </div>
@@ -230,6 +238,8 @@ export function BoImportModal({ open, selectedDate, data, onClose, onCreated }: 
           )}
         </div>
       </div>
+      <AudienciaModal open={Boolean(audiencia)} data={data} bo={audiencia?.bo} boFile={audiencia?.file} onClose={() => setAudiencia(null)}
+        onCreated={() => { if (audiencia) setAudienciaDone((list) => [...list, audiencia.key]); }} />
     </Modal>
   );
 }

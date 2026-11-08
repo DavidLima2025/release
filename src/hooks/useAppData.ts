@@ -21,6 +21,35 @@ export type TaskInput = {
   workflowId?: string; checklist?: string[]; status?: string;
 };
 
+const EXT_TYPES: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif", heic: "image/heic", heif: "image/heif", pdf: "application/pdf", mp4: "video/mp4", mov: "video/quicktime" };
+
+/** Tipo do arquivo: celulares (Google Fotos, galeria) às vezes entregam a foto sem tipo. */
+export function fileContentType(file: File) {
+  return file.type || EXT_TYPES[file.name.split(".").pop()?.toLowerCase() || ""] || "application/octet-stream";
+}
+
+/** Envia para o Storage; uma nova tentativa em falha de rede (comum no 4G). */
+async function uploadWithRetry(bucket: string, path: string, file: File) {
+  const options = { upsert: false, contentType: fileContentType(file), cacheControl: "3600" };
+  let result = await supabase.storage.from(bucket).upload(path, file, options);
+  if (result.error && !/exist|duplicate|policy|row-level|mime|size|large/i.test(result.error.message || "")) {
+    await new Promise((r) => setTimeout(r, 1200));
+    result = await supabase.storage.from(bucket).upload(path, file, options);
+  }
+  if (result.error) console.error("upload", bucket, path, result.error);
+  return result;
+}
+
+function storageErrorText(error: any) {
+  const msg = String(error?.message || error || "");
+  if (/row-level|policy|unauthorized|403/i.test(msg)) return "sem permissão no armazenamento (rode o script 04_correcoes_armazenamento.sql no Supabase).";
+  if (/mime|content type|not supported/i.test(msg)) return "tipo de arquivo bloqueado no armazenamento (rode o script 04 no Supabase).";
+  if (/size|large|413/i.test(msg)) return "arquivo grande demais.";
+  if (/bucket not found/i.test(msg)) return "espaço de arquivos não encontrado (rode os scripts do Supabase).";
+  if (/fetch|network|failed/i.test(msg)) return "falha de conexão. Tente de novo.";
+  return msg || "erro desconhecido.";
+}
+
 function readSession(): Session | null {
   try {
     localStorage.removeItem(LEGACY_SESSION_KEY); // sessão antiga (sem token) não vale mais
@@ -430,8 +459,8 @@ export function useAppData(notify: Notify) {
   async function uploadDemandFile(task: { id: string; title: string }, file: File, silent = false) {
     if (!file) return false;
     const path = `${task.id}/${Date.now()}-${safeFileName(file.name)}`;
-    const upload = await supabase.storage.from(DEMAND_BUCKET).upload(path, file, { upsert: false, contentType: file.type || undefined });
-    if (upload.error) { notify("Erro ao subir arquivo. Verifique se o bucket demand-files existe.", "error"); return false; }
+    const upload = await uploadWithRetry(DEMAND_BUCKET, path, file);
+    if (upload.error) { notify(`Erro ao subir ${file.name}: ${storageErrorText(upload.error)}`, "error"); return false; }
     const { error } = await supabase.from("demand_attachments").insert({
       demand_id: task.id, file_name: file.name, file_path: path, file_size: file.size, mime_type: file.type, uploaded_by: currentUser?.id || null,
     });
@@ -558,8 +587,8 @@ export function useAppData(notify: Notify) {
     if (!file || !author?.id) return false;
     const table = kind === "photo" ? "author_photos" : "author_reports";
     const path = `${author.id}/${kind === "photo" ? "fotos" : "relatorios"}/${Date.now()}-${safeFileName(file.name)}`;
-    const upload = await supabase.storage.from(INTEL_BUCKET).upload(path, file, { upsert: false, contentType: file.type || undefined });
-    if (upload.error) { notify("Erro ao subir arquivo. Verifique se o bucket intelligence-files existe.", "error"); return false; }
+    const upload = await uploadWithRetry(INTEL_BUCKET, path, file);
+    if (upload.error) { notify(`Erro ao subir ${file.name}: ${storageErrorText(upload.error)}`, "error"); return false; }
     const { error } = await supabase.from(table).insert({
       author_id: author.id, file_name: file.name, file_path: path, file_size: file.size, mime_type: file.type, uploaded_by: currentUser?.id || null,
       description: options.description || null,
