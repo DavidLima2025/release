@@ -12,16 +12,21 @@ type ModalProps = {
   children: React.ReactNode;
 };
 
+const STACK: symbol[] = [];
 const widths = { md: "max-w-xl", lg: "max-w-3xl", xl: "max-w-5xl" };
 
 export function Modal({ open, onClose, title, eyebrow, size = "lg", actions, footer, children }: ModalProps) {
+  const id = React.useRef(Symbol("modal"));
   React.useEffect(() => {
     if (!open) return undefined;
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    const me = id.current;
+    STACK.push(me);
+    // Esc fecha só a janela de cima (quando uma abre por cima da outra).
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && STACK[STACK.length - 1] === me && onClose();
     window.addEventListener("keydown", onKey);
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = overflow; };
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = overflow; STACK.splice(STACK.indexOf(me), 1); };
   }, [open, onClose]);
 
   if (!open) return null;

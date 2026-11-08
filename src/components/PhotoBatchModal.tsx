@@ -6,6 +6,7 @@ import { Input, Select } from "./ui/input";
 import { Badge } from "./ui/badge";
 import type { AppData } from "../hooks/useAppData";
 import { matchFile, normName, type Candidate, type ParsedFileName } from "../lib/photoMatch";
+import { shrinkImage as shrink } from "../lib/image";
 
 const IMAGE = /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i;
 const UNSUPPORTED = /\.(heic|heif)$/i;
@@ -60,25 +61,6 @@ async function filesFromDrop(items: DataTransferItemList): Promise<File[]> {
   return out;
 }
 
-/** Fotos grandes são reduzidas (lado maior 1600 px, JPEG) para economizar espaço e acelerar os relatórios. */
-async function shrink(file: File): Promise<File> {
-  if (file.size < 1.5 * 1024 * 1024 || !/^image\/(jpeg|png|webp|bmp)$/.test(file.type)) return file;
-  try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close?.();
-    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.88));
-    if (!blob || blob.size >= file.size) return file;
-    return new File([blob], file.name.replace(/\.[a-z0-9]+$/i, ".jpg"), { type: "image/jpeg" });
-  } catch {
-    return file;
-  }
-}
-
 type Props = { open: boolean; data: AppData; onClose: () => void; onDone?: (authorIds: string[]) => void };
 
 export function PhotoBatchModal({ open, data, onClose, onDone }: Props) {
@@ -86,6 +68,8 @@ export function PhotoBatchModal({ open, data, onClose, onDone }: Props) {
   const [loading, setLoading] = useState("");
   const [saving, setSaving] = useState("");
   const [finished, setFinished] = useState(false);
+  /** Cards criados nesta importação (para reaproveitar numa nova tentativa). */
+  const createdRef = useRef<Map<string, { id: string; name: string }>>(new Map());
   const [filter, setFilter] = useState<Filter>("all");
   const [existingMode, setExistingMode] = useState<ExistingMode>("add");
   const [folderId, setFolderId] = useState("");
@@ -99,7 +83,7 @@ export function PhotoBatchModal({ open, data, onClose, onDone }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    setRows([]); setLoading(""); setSaving(""); setFinished(false); setFilter("all"); setExistingMode("add");
+    setRows([]); setLoading(""); setSaving(""); setFinished(false); createdRef.current = new Map(); setFilter("all"); setExistingMode("add");
     setFolderId(data.authorCategories[0]?.id || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -149,7 +133,8 @@ export function PhotoBatchModal({ open, data, onClose, onDone }: Props) {
     || (filter === "found" && r.status === "found")
     || (filter === "check" && r.status === "ambiguous")
     || (filter === "none" && (r.status === "none" || r.status === "unsupported" || r.status === "duplicate")));
-  const toSend = rows.filter((r) => !r.result && (r.target === "new" ? r.newName.trim() : r.target));
+  const toSend = rows.filter((r) => r.result !== "ok" && r.result !== "skipped" && (r.target === "new" ? r.newName.trim() : r.target));
+  const failed = rows.some((r) => r.result === "error");
   const willSkipExisting = existingMode === "skip" ? toSend.filter((r) => r.target !== "new" && photosOf(r.target).length).length : 0;
 
   async function send() {
@@ -171,11 +156,11 @@ export function PhotoBatchModal({ open, data, onClose, onDone }: Props) {
             name: row.newName.trim(), alias: row.newAlias.trim(), motherName: "", fatherName: "", birthDate: "", document: "", address: "", neighborhood: "",
             city: "", crimes: "", categoryId: folderId, status: "Suspeito", riskLevel: "Médio", notes: `Card criado pela importação de fotos (${row.file.name}).`,
           }, { silent: true });
-          if (made) { author = made; created.set(key, made); }
+          if (made) { author = made; created.set(key, made); createdRef.current.set(made.id, made); }
         }
       } else {
         const a = data.authors.find((x) => x.id === row.target);
-        if (a) author = { id: a.id, name: a.name };
+        author = a ? { id: a.id, name: a.name } : createdRef.current.get(row.target) || null;
       }
       if (!author) { fail += 1; update(row.key, { result: "error" }); continue; }
 
@@ -184,7 +169,7 @@ export function PhotoBatchModal({ open, data, onClose, onDone }: Props) {
 
       const file = await shrink(row.file);
       const saved = await data.uploadAuthorFile(author, file, "photo", { silent: true, noAudit: true, description: `Importada em lote (${row.file.name})` });
-      if (!saved) { fail += 1; update(row.key, { result: "error" }); continue; }
+      if (!saved) { fail += 1; update(row.key, { result: "error", target: author.id }); continue; }
       if (existingMode === "replace" && oldPhotos.length && !replaced.has(author.id)) {
         replaced.add(author.id);
         for (const old of oldPhotos) await data.deleteAuthorPhoto(old, { silent: true });
@@ -198,7 +183,7 @@ export function PhotoBatchModal({ open, data, onClose, onDone }: Props) {
     setFinished(true);
     data.reload();
     onDone?.([...new Set(done)]);
-    window.setTimeout(() => window.alert(`${ok} foto(s) enviada(s).${created.size ? ` ${created.size} alvo(s) novo(s) cadastrado(s).` : ""}${skipped ? ` ${skipped} pulada(s) porque o alvo já tinha foto.` : ""}${fail ? ` ${fail} com erro.` : ""}`), 50);
+    window.setTimeout(() => window.alert(`${ok} foto(s) enviada(s).${created.size ? ` ${created.size} alvo(s) novo(s) cadastrado(s).` : ""}${skipped ? ` ${skipped} pulada(s) porque o alvo já tinha foto.` : ""}${fail ? ` ${fail} com erro — veja o motivo no aviso vermelho e tente de novo (os cards novos já criados são reaproveitados).` : ""}`), 50);
   }
 
   const busy = Boolean(saving || loading);
@@ -209,7 +194,7 @@ export function PhotoBatchModal({ open, data, onClose, onDone }: Props) {
           {finished ? "Importação concluída." : `${toSend.length} foto(s) serão enviadas${willSkipExisting ? ` (${willSkipExisting} serão puladas: alvo já tem foto)` : ""}.`}
         </span>
         <Button onClick={onClose} disabled={Boolean(saving)}>{finished ? "Fechar" : "Cancelar"}</Button>
-        {!finished && <Button variant="primary" onClick={send} disabled={!toSend.length || busy}>{saving ? <Loader2 className="animate-spin" /> : <Upload />}{saving || "Enviar fotos"}</Button>}
+        {(!finished || toSend.length > 0) && <Button variant="primary" onClick={send} disabled={!toSend.length || busy}>{saving ? <Loader2 className="animate-spin" /> : <Upload />}{saving || (failed ? `Tentar de novo (${toSend.length})` : "Enviar fotos")}</Button>}
       </> : undefined}>
       <input ref={filesRef} type="file" multiple accept="image/*,.heic,.zip,application/zip" className="hidden" onChange={(e) => { addFiles(Array.from(e.target.files || [])); e.target.value = ""; }} />
       <input ref={folderRef} type="file" multiple className="hidden" {...({ webkitdirectory: "", directory: "" } as any)} onChange={(e) => { addFiles(Array.from(e.target.files || [])); e.target.value = ""; }} />
@@ -283,7 +268,7 @@ export function PhotoBatchModal({ open, data, onClose, onDone }: Props) {
                     </div>
                   </div>
                   <div className="flex w-full flex-col gap-1.5 sm:w-[380px]">
-                    <Select className="h-9 text-sm" value={row.target} disabled={busy || Boolean(row.result) || row.status === "unsupported"}
+                    <Select className="h-9 text-sm" value={row.target} disabled={busy || row.result === "ok" || row.result === "skipped" || row.status === "unsupported"}
                       onChange={(e) => update(row.key, { target: e.target.value })}>
                       <option value="">— Ignorar esta foto —</option>
                       <option value="new">+ Cadastrar alvo novo com este nome</option>

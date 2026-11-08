@@ -5,7 +5,7 @@ export type Status = (typeof STATUSES)[number];
 /** Status que a pessoa escolhe; "Atrasada" e "Risco de prazo" são calculados pelo prazo. */
 export const MANUAL_STATUSES: Status[] = ["A fazer", "Paralisada", "Concluída"];
 
-export const TASK_TYPES = ["Inteligência", "Análise de BO", "Dossiê", "Operacional", "Relatório", "Gestão"];
+export const TASK_TYPES = ["Inteligência", "Análise de BO", "Audiência", "Dossiê", "Operacional", "Relatório", "Gestão"];
 export const PRIORITIES = ["Baixa", "Média", "Alta", "Crítica"];
 export const USER_ROLES = ["Administrador", "Gestor", "Analista", "Colaborador"];
 export const DEFAULT_CHECKLIST = ["Triar demanda", "Executar atividade", "Registrar conclusão"];
