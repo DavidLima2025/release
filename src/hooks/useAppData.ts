@@ -620,6 +620,15 @@ export function useAppData(notify: Notify) {
     return true;
   }
 
+  /** Une cadastros repetidos: o principal recebe os dados escolhidos, fotos, relatórios e vínculos; os demais são apagados. */
+  async function mergeAuthors(keepId: string, removeIds: string[], fields: Record<string, any>) {
+    const { data: result, error } = await supabase.rpc("merge_authors", { p_keep: keepId, p_remove: removeIds, p_fields: fields });
+    if (error) { notify(`Não foi possível unir: ${error.message}`, "error"); return false; }
+    notify(`${(result as any)?.removed ?? removeIds.length} cadastro(s) unido(s) ao principal.`);
+    reload();
+    return true;
+  }
+
   async function deleteAuthor(author: Author) {
     if (!window.confirm(`Excluir o card de ${author.name} e seus anexos?`)) return false;
     const { error } = await supabase.from("crime_authors").delete().eq("id", author.id);
@@ -732,7 +741,7 @@ export function useAppData(notify: Notify) {
     // workflow
     addWorkflow, deleteWorkflow, moveWorkflow,
     // alvos
-    getIntelFileUrl, addAuthorCategory, updateAuthorCategory, moveAuthors, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, setAuthorHome, uploadAuthorFile, deleteAuthorPhoto, importTrelloBoard,
+    getIntelFileUrl, addAuthorCategory, updateAuthorCategory, moveAuthors, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, setAuthorHome, mergeAuthors, uploadAuthorFile, deleteAuthorPhoto, importTrelloBoard,
   };
 }
 

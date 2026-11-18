@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type * as React from "react";
-import { Camera, Check, CheckSquare, Edit3, Eye, FolderInput, FolderOpen, Images, Inbox, Link2, MessageCircle, MoreVertical, Plus, ScanText, Search, Trash2, Upload, UserPlus, UserRound, X } from "lucide-react";
+import { Camera, Check, CheckSquare, Combine, Edit3, Eye, FolderInput, FolderOpen, Images, Inbox, Link2, MessageCircle, MoreVertical, Plus, ScanText, Search, Trash2, Upload, UserPlus, UserRound, X } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, EmptyState, SectionHeader } from "../components/ui/card";
 import { Field, Input, Select, Textarea } from "../components/ui/input";
@@ -16,6 +16,7 @@ import { ShareTargetModal } from "../components/ShareTargetModal";
 import { useIntake } from "../hooks/useIntake";
 import { ContextMenu, FolderModal, MenuItem, MoveModal } from "../components/TargetParts";
 import { TargetFichaModal } from "../components/TargetFichaModal";
+import { DuplicatesModal, MergeModal, MergePicker, findDuplicates } from "../components/MergeAuthors";
 
 const EMPTY_AUTHOR = { name: "", alias: "", motherName: "", fatherName: "", birthDate: "", document: "", address: "", neighborhood: "", city: "Belo Horizonte", crimes: "", categoryId: "", status: "Suspeito", riskLevel: "Médio", notes: "" };
 const riskTone = (risk: string) => (risk === "Alto" ? "late" : risk === "Médio" ? "risk" : "done") as any;
@@ -37,6 +38,10 @@ export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: 
   const closeMenu = useCallback(() => setMenu(null), []);
   const [folderModal, setFolderModal] = useState<{ open: boolean; folder: AuthorCategory | null }>({ open: false, folder: null });
   const [dragOver, setDragOver] = useState("");
+  const [merging, setMerging] = useState<Author[]>([]);
+  const [dupOpen, setDupOpen] = useState(false);
+  const [mergeWith, setMergeWith] = useState<Author | null>(null);
+  const dupCount = useMemo(() => findDuplicates(authors).length, [authors]);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Author | null>(null);
   const [form, setForm] = useState(EMPTY_AUTHOR);
@@ -100,6 +105,7 @@ export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: 
     { label: "Editar", icon: Edit3, onClick: () => openEdit(menu.author) },
     { label: "Mover para outra pasta", icon: FolderInput, onClick: () => setMoving([menu.author.id]) },
     { label: "Compartilhar no WhatsApp", icon: MessageCircle, onClick: () => setSharing(menu.author) },
+    { label: "Unir com outro cadastro…", icon: Combine, onClick: () => setMergeWith(menu.author) },
     { label: sel.has(menu.author.id) ? "Desmarcar" : "Selecionar (vários)", icon: CheckSquare, onClick: () => toggleSel(menu.author.id) },
     "sep",
     { label: "Apagar", icon: Trash2, danger: true, onClick: () => data.deleteAuthor(menu.author) },
@@ -156,6 +162,7 @@ export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: 
               <Button onClick={() => setPhotosOpen(true)}><Images />Importar fotos</Button>
               <Button onClick={() => setLinksOpen(true)}><Link2 />Link externo</Button>
               <Button variant={intake.pending.length ? "gold" : "outline"} onClick={() => setInboxOpen(true)}><Inbox />Recebidos{intake.pending.length ? ` (${intake.pending.length})` : ""}</Button>
+              <Button variant={dupCount ? "gold" : "outline"} onClick={() => setDupOpen(true)} title="Cadastros com o mesmo nome ou RG/CPF"><Combine />Repetidos{dupCount ? ` (${dupCount})` : ""}</Button>
               <Button variant="primary" onClick={openCreate}><UserPlus />Novo alvo</Button>
             </>} />
 
@@ -163,6 +170,7 @@ export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: 
             <div className="sticky top-2 z-20 mb-3 flex flex-wrap items-center gap-2 rounded-sm bg-pm-black px-3 py-2 text-sm text-white shadow-lg">
               <CheckSquare className="h-4 w-4 text-pm-gold-light" /><b>{sel.size} selecionado(s)</b>
               <Button size="sm" variant="gold" onClick={() => setMoving([...sel])}><FolderInput />Mover para…</Button>
+              {sel.size >= 2 && <Button size="sm" variant="light" onClick={() => setMerging(authors.filter((a) => sel.has(a.id)))}><Combine />Unir selecionados</Button>}
               <button type="button" className="text-xs font-bold uppercase text-white/70 hover:text-white" onClick={() => setSel(allVisibleSelected ? new Set() : new Set(visible.map((a) => a.id)))}>{allVisibleSelected ? "Desmarcar todos" : `Marcar os ${visible.length} desta lista`}</button>
               <button type="button" className="ml-auto text-white/70 hover:text-white" onClick={() => setSel(new Set())} aria-label="Limpar seleção"><X className="h-4 w-4" /></button>
             </div>
@@ -205,6 +213,9 @@ export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: 
       </Card>
 
       <TargetFichaModal author={ficha} data={data} api={api} onClose={() => setFicha(null)} onEdit={openEdit} onMove={(a) => setMoving([a.id])} onShareMessage={(a) => setSharing(a)} onOpenInvestigation={onOpenInvestigation} />
+      <DuplicatesModal open={dupOpen} data={data} onClose={() => setDupOpen(false)} onMerge={(list) => setMerging(list)} />
+      <MergePicker author={mergeWith} data={data} onClose={() => setMergeWith(null)} onPick={(other) => { const a = mergeWith!; setMergeWith(null); setMerging([a, other]); }} />
+      <MergeModal open={merging.length > 1} authors={merging} data={data} onClose={() => setMerging([])} onDone={() => setSel(new Set())} />
       <ContextMenu at={menu?.at || null} title={menu?.kind === "card" ? menu.author.name : menu?.kind === "folder" ? `Pasta ${menu.folder.name}` : ""} items={menuItems} onClose={closeMenu} />
       <FolderModal open={folderModal.open} folder={folderModal.folder} onClose={() => setFolderModal({ open: false, folder: null })} onSave={saveFolder} />
       <MoveModal open={moving.length > 0} count={moving.length} names={moveTargets.map((a) => a.name)} folders={folders}
