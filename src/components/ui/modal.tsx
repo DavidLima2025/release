@@ -17,21 +17,29 @@ const widths = { md: "max-w-xl", lg: "max-w-3xl", xl: "max-w-5xl" };
 
 export function Modal({ open, onClose, title, eyebrow, size = "lg", actions, footer, children }: ModalProps) {
   const id = React.useRef(Symbol("modal"));
+  // onClose muda a cada render; guardar em ref evita reabrir o efeito (o que embaralhava a pilha e travava a rolagem da página).
+  const closeRef = React.useRef(onClose);
+  closeRef.current = onClose;
   React.useEffect(() => {
     if (!open) return undefined;
     const me = id.current;
     STACK.push(me);
-    // Esc fecha só a janela de cima (quando uma abre por cima da outra).
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && STACK[STACK.length - 1] === me && onClose();
-    window.addEventListener("keydown", onKey);
-    const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = overflow; STACK.splice(STACK.indexOf(me), 1); };
-  }, [open, onClose]);
+    // Esc fecha só a janela de cima (quando uma abre por cima da outra).
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && STACK[STACK.length - 1] === me && closeRef.current();
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      const at = STACK.indexOf(me);
+      if (at >= 0) STACK.splice(at, 1);
+      // A página volta a rolar quando não sobra nenhuma janela aberta.
+      if (!STACK.length) document.body.style.overflow = "";
+    };
+  }, [open]);
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-pm-black/70 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-pm-black/70 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && closeRef.current()}>
       <div role="dialog" aria-modal="true" className={`flex max-h-[94vh] w-full ${widths[size]} flex-col overflow-hidden rounded-t-md bg-pm-cream shadow-2xl sm:rounded-sm`}>
         <div className="relative flex items-start justify-between gap-3 bg-pm-black px-5 py-4 text-white">
           <div className="absolute inset-x-0 bottom-0 h-[3px] bg-pm-gold" />

@@ -9,37 +9,76 @@ export const normName = (t: string) =>
 
 const tokens = (t: string) => normName(t).split(" ").filter((w) => w && !STOP.has(w) && !/^\d+$/.test(w));
 
-export type ParsedFileName = { name: string; alias: string; digits: string; display: string; displayAlias: string };
+export type ParsedFileName = {
+  name: string; alias: string; digits: string; display: string; displayAlias: string;
+  /** Dados extras escritos no nome do arquivo (para preencher o card novo). */
+  document: string; address: string; extra: string;
+};
+
+const DOC_WORD = /\b(RG|R\.G\.?|CPF|C\.P\.F\.?|CNH|SSP(?:\s*MG)?|IDENTIDADE|DOC(?:UMENTO)?|MG)\b/i;
+const ADDRESS_WORD = /\b(RUA|R\.|AV|AV\.|AVENIDA|ALAMEDA|TRAVESSA|TV\.|PRA[ÇC]A|RODOVIA|ESTRADA|BECO|BAIRRO|VILA|CONDOM[IÍ]NIO)\b/i;
+const JUNK = /\b(foto|fotos|img|image|imagem|whatsapp|wa\d*|screenshot|captura|perfil|alvo|autor|copia|cópia|copy|final|frente|rosto|nome)\b/gi;
+
+const cpfMask = (d: string) => `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+const upper = (t: string) => t.replace(/[^\p{L}\p{N} ,.\-/º°]+/gu, " ").replace(/\s+/g, " ").trim().toLocaleUpperCase("pt-BR");
 
 /**
- * "joao_da_silva vulgo Pezão (2).jpg" → nome "JOAO DA SILVA", vulgo "PEZAO".
- * Aceita "_", "-", "." como espaço, vulgo entre aspas/parênteses ou após "vulgo"/"vlg",
- * e ignora numeração de cópia, "foto", "img", datas etc.
+ * Lê o nome do arquivo da foto. Exemplos:
+ *  "(BIJU) Bruno Davi Silva dos Anjos RG 17839053.jpeg" → nome BRUNO DAVI SILVA DOS ANJOS, vulgo BIJU, RG 17839053
+ *  "Fulano CPF 08745484627 RG 14426650 Rua X, 213, Bairro Y.jpg" → nome FULANO, documentos e endereço separados
+ *  "joao_da_silva vulgo Pezão (2).jpg" → nome JOAO DA SILVA, vulgo PEZAO
+ * O nome termina no primeiro RG/CPF/MG, número ou palavra de endereço; o que sobra vira observação.
  */
 export function parseFileName(fileName: string): ParsedFileName {
   let base = fileName.split(/[\\/]/).pop() || fileName;
-  base = base.replace(/\.[a-z0-9]{2,5}$/i, "");
-  const digitRuns = (base.match(/\d[\d.\-/]{5,}\d/g) || []).map((d) => d.replace(/\D/g, "")).filter((d) => d.length >= 6);
+  base = base.replace(/\.[a-z0-9]{2,5}$/i, "").replace(/_/g, " ").replace(/\s+/g, " ").trim();
+  base = base.replace(/\(\d+\)/g, " ");   // "(2)" de cópia
+  base = base.replace(/^\s*nome\s*[:\-]?\s*/i, "");
 
+  // Vulgo: (APELIDO), "APELIDO", vulgo APELIDO
   let alias = "";
-  const quoted = base.match(/["“”'‘’]([^"“”'‘’]+)["“”'‘’]/);
-  const vulgo = base.match(/\b(?:vulgo|vulg|vlg|vg|v\.)\s*[:\-_. ]?\s*(.+)$/i);
-  if (vulgo) { alias = vulgo[1]; base = base.slice(0, vulgo.index); }
-  else if (quoted) { alias = quoted[1]; base = base.replace(quoted[0], " "); }
+  const vulgo = base.match(/\b(?:vulgo|vulg|vlg|vg)\b\.?\s*[:\-]?\s*([^\d,()]+?)(?=\s*(?:\b(?:RG|CPF|CNH|MG)\b|\d|\(|,|$))/i);
+  if (vulgo) { alias = vulgo[1]; base = base.replace(vulgo[0], " "); }
   else {
+    const quoted = base.match(/["“”'‘’]([^"“”'‘’]+)["“”'‘’]/);
     const paren = base.match(/\(([^)]*[A-Za-zÀ-ú][^)]*)\)/);
-    if (paren) { alias = paren[1]; base = base.replace(paren[0], " "); }
+    if (quoted) { alias = quoted[1]; base = base.replace(quoted[0], " "); }
+    else if (paren) { alias = paren[1]; base = base.replace(paren[0], " "); }
   }
 
-  let name = base
-    .replace(/\(\d+\)/g, " ")
-    .replace(/[_.\-–—+]+/g, " ")
-    .replace(/\b(foto|fotos|img|image|imagem|whatsapp|wa\d*|screenshot|captura|perfil|alvo|autor|copia|cópia|copy|final|frente|rosto)\b/gi, " ")
-    .replace(/\d+/g, " ");
-  const clean = (t: string) => t.replace(/[^\p{L}\p{N} ]+/gu, " ").replace(/\s+/g, " ").trim().toLocaleUpperCase("pt-BR");
-  const display = clean(name);
-  const displayAlias = clean(alias.replace(/[_.\-–—]+/g, " ").replace(/\d+/g, " "));
-  return { name: normName(display), alias: normName(displayAlias), digits: digitRuns.join(" "), display, displayAlias };
+  // Nome = trecho antes do primeiro rótulo de documento, número, vírgula ou palavra de endereço.
+  const cut = [base.search(DOC_WORD), base.search(/\d/), base.search(ADDRESS_WORD), base.search(/,/)].filter((n) => n > 0);
+  const end = cut.length ? Math.min(...cut) : base.length;
+  const rawName = base.slice(0, end);
+  let tail = base.slice(end);
+
+  // Documentos (no restante do nome do arquivo).
+  const docs: string[] = [];
+  const cpf = tail.match(/\bC\.?P\.?F\.?\s*[:\-nº°]*\s*([\d.\-]{6,15}\d)/i);
+  if (cpf) { const d = cpf[1].replace(/\D/g, ""); docs.push(`CPF ${d.length === 11 ? cpfMask(d) : d}`); tail = tail.replace(cpf[0], " "); }
+  const rg = tail.match(/\b(?:R\.?G\.?|IDENTIDADE)\s*[:\-nº°]*\s*(?:(MG|SP|RJ|ES|BA|GO|DF)\s*[:\-]?\s*)?([A-Z]{0,2}\s*-?\s*[\d.\-]{5,14}[\dXx])/i)
+    || tail.match(/\b(MG)\s*[:\-]?\s*([\d.\-]{6,13}\d)/i);
+  if (rg) { docs.push(`RG ${rg[1] ? `${rg[1].toUpperCase()}-` : ""}${rg[2].replace(/[^\dA-Za-z]/g, "").toUpperCase()}`); tail = tail.replace(rg[0], " "); }
+  // Números soltos (podem vir separados por espaço): 11 dígitos = CPF; 7 a 10 = RG.
+  for (const m of tail.match(/\d[\d.\- ]{5,16}\d/g) || []) {
+    const d = m.replace(/\D/g, "");
+    if (d.length === 11 && !docs.some((x) => x.startsWith("CPF"))) { docs.push(`CPF ${cpfMask(d)}`); tail = tail.replace(m, " "); }
+    else if (d.length >= 7 && d.length <= 10 && !docs.some((x) => x.startsWith("RG"))) { docs.push(`RG ${d}`); tail = tail.replace(m, " "); }
+  }
+  const digitRuns = docs.map((x) => x.replace(/\D/g, "")).filter((d) => d.length >= 6);
+
+  // Endereço: da palavra-chave até o fim.
+  let address = "";
+  const addrAt = tail.search(ADDRESS_WORD);
+  if (addrAt >= 0) { address = tail.slice(addrAt); tail = tail.slice(0, addrAt); }
+  const extra = upper(tail.replace(new RegExp(DOC_WORD.source, "gi"), " ").replace(/[-:,.]+/g, " ").replace(/\d+/g, " ").replace(/(^|\s)\p{L}(?=\s|$)/gu, " "));
+
+  const display = upper(rawName.replace(/[.\-–—+]+/g, " ").replace(JUNK, " ").replace(/\d+/g, " ")).replace(/[,.\-/º°]/g, " ").replace(/\s+/g, " ").trim();
+  const displayAlias = upper(alias.replace(/[_.\-–—]+/g, " ").replace(/\d+/g, " ")).replace(/[,./º°]/g, " ").replace(/\s+/g, " ").trim();
+  return {
+    name: normName(display), alias: normName(displayAlias), digits: digitRuns.join(" "), display, displayAlias,
+    document: docs.join(" · "), address: upper(address).replace(/\s+,/g, ","), extra: extra.length > 2 ? extra : "",
+  };
 }
 
 export type Candidate = { author: Author; score: number; why: string };
