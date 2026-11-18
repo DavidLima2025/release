@@ -119,7 +119,7 @@ export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: 
         onDrop={(e) => id !== "all" && dropOn(e, id === "none" ? null : id)}
         onContextMenu={(e) => folder && openFolderMenu(e, folder)}
         className={`flex shrink-0 items-center rounded-sm border transition ${active ? "border-pm-black bg-pm-black text-white" : "border-pm-line bg-white text-pm-ink hover:border-pm-gold"} ${dragOver === dropKey ? "ring-2 ring-pm-gold" : ""}`}>
-        <button type="button" onClick={() => { setFolderId(id); setSel(new Set()); }} className="flex items-center gap-2 py-2 pl-3 pr-2 text-sm font-bold" title={folder?.description || label}>
+        <button type="button" onClick={() => { setFolderId(id); setSel(new Set()); setQuery(""); }} className="flex items-center gap-2 py-2 pl-3 pr-2 text-sm font-bold" title={folder?.description || label}>
           <FolderOpen className={`h-4 w-4 ${active ? "text-pm-gold-light" : "text-pm-gold-dark"}`} />
           <span className="max-w-[220px] truncate uppercase">{label}</span>
           <span className={`rounded-sm px-1.5 text-[11px] ${active ? "bg-white/15 text-pm-gold-light" : "bg-pm-sand text-pm-muted"}`}>{total}</span>
@@ -133,7 +133,8 @@ export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: 
     <div className="space-y-4">
       {/* Barra de pastas */}
       <div className="rounded-sm border border-pm-line bg-white p-2 shadow-panel">
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1"
+          onWheel={(e) => { const el = e.currentTarget; if (el.scrollWidth > el.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { el.scrollLeft += e.deltaY; } }}>
           {chip("all", "Todas", authors.length)}
           {folders.map((f) => chip(f.id, f.name, authors.filter((a) => a.categoryId === f.id).length, f))}
           {authors.some((a) => !a.categoryId || !folders.some((f) => f.id === a.categoryId)) && chip("none", "Sem pasta", authors.filter((a) => !a.categoryId || !folders.some((f) => f.id === a.categoryId)).length)}

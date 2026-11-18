@@ -153,8 +153,9 @@ export function PhotoBatchModal({ open, data, onClose, onDone }: Props) {
         author = created.get(key) || null;
         if (!author) {
           const made = await data.addAuthor({
-            name: row.newName.trim(), alias: row.newAlias.trim(), motherName: "", fatherName: "", birthDate: "", document: "", address: "", neighborhood: "",
-            city: "", crimes: "", categoryId: folderId, status: "Suspeito", riskLevel: "Médio", notes: `Card criado pela importação de fotos (${row.file.name}).`,
+            name: row.newName.trim(), alias: row.newAlias.trim(), motherName: "", fatherName: "", birthDate: "", document: row.parsed.document, address: row.parsed.address, neighborhood: "",
+            city: "", crimes: "", categoryId: folderId, status: "Suspeito", riskLevel: "Médio",
+            notes: [row.parsed.extra && `Anotação no arquivo: ${row.parsed.extra}.`, `Card criado pela importação de fotos (${row.file.name}).`].filter(Boolean).join("\n"),
           }, { silent: true });
           if (made) { author = made; created.set(key, made); createdRef.current.set(made.id, made); }
         }
@@ -287,7 +288,7 @@ export function PhotoBatchModal({ open, data, onClose, onDone }: Props) {
                         <Input className="h-9 w-28 text-sm" placeholder="Vulgo" value={row.newAlias} onChange={(e) => update(row.key, { newAlias: e.target.value })} disabled={busy || Boolean(row.result)} />
                       </div>
                     )}
-                    {row.target === "new" && <span className="flex items-center gap-1 text-[11px] text-pm-muted"><UserPlus className="h-3 w-3" />Cria o card só com nome e foto — complete depois (ou cadastre pelo BO).</span>}
+                    {row.target === "new" && <span className="flex items-center gap-1 text-[11px] text-pm-muted"><UserPlus className="h-3 w-3" />{[row.parsed.document, row.parsed.address, row.parsed.extra].filter(Boolean).join(" · ") || "Cria o card só com nome e foto — complete depois (ou cadastre pelo BO)."}</span>}
                   </div>
                 </div>
               );
