@@ -30,7 +30,7 @@ function toRow(values: Record<string, any>, map: Record<string, string>) {
 }
 
 /** Converte qualquer imagem (inclusive webp) em JPEG/PNG para embutir no PDF/PPTX. */
-async function loadImage(url: string, keepPng = false): Promise<ReportImage | undefined> {
+export async function loadImage(url: string, keepPng = false): Promise<ReportImage | undefined> {
   if (!url) return undefined;
   try {
     const response = await fetch(url, { mode: "cors" });

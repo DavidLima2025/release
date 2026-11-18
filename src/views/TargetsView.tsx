@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
-import { Camera, Edit3, Images, Inbox, MessageCircle, FileText, FolderLock, FolderOpen, Image as ImageIcon, Link2, Paperclip, Plus, ScanText, Search, Trash2, Upload, UserPlus, UserRound } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import type * as React from "react";
+import { Camera, Check, CheckSquare, Edit3, Eye, FolderInput, FolderOpen, Images, Inbox, Link2, MessageCircle, MoreVertical, Plus, ScanText, Search, Trash2, Upload, UserPlus, UserRound, X } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, EmptyState, SectionHeader } from "../components/ui/card";
 import { Field, Input, Select, Textarea } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Modal } from "../components/ui/modal";
-import { Author, formatBytes, matchesText } from "../lib/domain";
-import { formatBR } from "../lib/dates";
+import { Author, AuthorCategory, matchesText } from "../lib/domain";
 import type { AppData } from "../hooks/useAppData";
 import type { InvestigationsApi } from "../hooks/useInvestigations";
 import { BoAuthorModal } from "../components/BoAuthorModal";
@@ -14,7 +14,8 @@ import { PhotoBatchModal } from "../components/PhotoBatchModal";
 import { IntakeInboxModal, IntakeLinksModal } from "../components/IntakeModals";
 import { ShareTargetModal } from "../components/ShareTargetModal";
 import { useIntake } from "../hooks/useIntake";
-import { TARGET_ROLES, stageOf } from "../lib/investigation";
+import { ContextMenu, FolderModal, MenuItem, MoveModal } from "../components/TargetParts";
+import { TargetFichaModal } from "../components/TargetFichaModal";
 
 const EMPTY_AUTHOR = { name: "", alias: "", motherName: "", fatherName: "", birthDate: "", document: "", address: "", neighborhood: "", city: "Belo Horizonte", crimes: "", categoryId: "", status: "Suspeito", riskLevel: "Médio", notes: "" };
 const riskTone = (risk: string) => (risk === "Alto" ? "late" : risk === "Médio" ? "risk" : "done") as any;
@@ -26,26 +27,30 @@ export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: 
   const [sharing, setSharing] = useState<Author | null>(null);
   const [boOpen, setBoOpen] = useState(false);
   const [photosOpen, setPhotosOpen] = useState(false);
-  const [linkInv, setLinkInv] = useState({ id: "", role: "Associado" });
-  const { authorCategories: folders, authors, authorPhotos: photos, authorReports: reports } = data;
+  const { authorCategories: folders, authors, authorPhotos: photos } = data;
   const [folderId, setFolderId] = useState("all");
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [ficha, setFicha] = useState<Author | null>(null);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [moving, setMoving] = useState<string[]>([]);
+  const [menu, setMenu] = useState<{ kind: "card"; author: Author; at: { x: number; y: number } } | { kind: "folder"; folder: AuthorCategory; at: { x: number; y: number } } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const [folderModal, setFolderModal] = useState<{ open: boolean; folder: AuthorCategory | null }>({ open: false, folder: null });
+  const [dragOver, setDragOver] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Author | null>(null);
   const [form, setForm] = useState(EMPTY_AUTHOR);
   const [photo, setPhoto] = useState<File | null>(null);
-  const [newFolder, setNewFolder] = useState({ name: "", description: "" });
   const [importing, setImporting] = useState(false);
 
-  useEffect(() => { if (folderId !== "all" && !folders.some((f) => f.id === folderId)) setFolderId("all"); }, [folders, folderId]);
+  useEffect(() => { if (folderId !== "all" && folderId !== "none" && !folders.some((f) => f.id === folderId)) setFolderId("all"); }, [folders, folderId]);
 
-  const inFolder = authors.filter((a) => folderId === "all" || a.categoryId === folderId);
+  const orphan = (a: Author) => !a.categoryId || !folders.some((f) => f.id === a.categoryId);
+  const inFolder = authors.filter((a) => folderId === "all" || (folderId === "none" ? orphan(a) : a.categoryId === folderId));
   const visible = inFolder.filter((a) => matchesText([a.name, a.alias, a.motherName, a.document, a.address, a.neighborhood, a.city, a.crimes, a.notes], query));
-  const selected = visible.find((a) => a.id === selectedId) || null;
   const folderName = (id: string) => folders.find((f) => f.id === id)?.name || "Sem pasta";
 
-  const openCreate = () => { setEditing(null); setForm({ ...EMPTY_AUTHOR, categoryId: folderId !== "all" ? folderId : folders[0]?.id || "" }); setPhoto(null); setFormOpen(true); };
+  const openCreate = () => { setEditing(null); setForm({ ...EMPTY_AUTHOR, categoryId: folderId !== "all" && folderId !== "none" ? folderId : folders[0]?.id || "" }); setPhoto(null); setFormOpen(true); };
   const openEdit = (a: Author) => { setEditing(a); setForm({ ...EMPTY_AUTHOR, ...a }); setPhoto(null); setFormOpen(true); };
   const set = (key: string, value: string) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -57,14 +62,16 @@ export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: 
       const created = await data.addAuthor(form);
       if (!created) return;
       if (photo) await data.uploadAuthorFile(created, photo, "photo");
-      setSelectedId(created.id);
+      setFicha(created);
     }
     setFormOpen(false);
   };
 
-  const createFolder = async () => {
-    const created = await data.addAuthorCategory(newFolder);
-    if (created) { setFolderId(created.id); setNewFolder({ name: "", description: "" }); }
+  const saveFolder = async (v: { name: string; description: string }) => {
+    if (folderModal.folder) return data.updateAuthorCategory(folderModal.folder.id, v);
+    const created = await data.addAuthorCategory(v);
+    if (created) setFolderId(created.id);
+    return Boolean(created);
   };
 
   const importTrello = async (file?: File) => {
@@ -77,170 +84,136 @@ export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: 
     finally { setImporting(false); }
   };
 
+  const toggleSel = (id: string) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const openCardMenu = (e: React.MouseEvent, a: Author) => { e.preventDefault(); setMenu({ kind: "card", author: a, at: { x: e.clientX, y: e.clientY } }); };
+  const openFolderMenu = (e: React.MouseEvent, f: AuthorCategory) => { e.preventDefault(); e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenu({ kind: "folder", folder: f, at: e.type === "contextmenu" ? { x: e.clientX, y: e.clientY } : { x: r.left, y: r.bottom + 4 } }); };
+  const dropOn = async (e: React.DragEvent, folder: string | null) => {
+    e.preventDefault(); setDragOver("");
+    const ids = (e.dataTransfer.getData("text/x-alvos") || "").split(",").filter(Boolean);
+    if (ids.length && await data.moveAuthors(ids, folder)) setSel(new Set());
+  };
+  const moveTargets = moving.length ? authors.filter((a) => moving.includes(a.id)) : [];
+  const allVisibleSelected = visible.length > 0 && visible.every((a) => sel.has(a.id));
+
+  const menuItems: MenuItem[] = menu?.kind === "card" ? [
+    { label: "Ver detalhes (ficha)", icon: Eye, onClick: () => setFicha(menu.author) },
+    { label: "Editar", icon: Edit3, onClick: () => openEdit(menu.author) },
+    { label: "Mover para outra pasta", icon: FolderInput, onClick: () => setMoving([menu.author.id]) },
+    { label: "Compartilhar no WhatsApp", icon: MessageCircle, onClick: () => setSharing(menu.author) },
+    { label: sel.has(menu.author.id) ? "Desmarcar" : "Selecionar (vários)", icon: CheckSquare, onClick: () => toggleSel(menu.author.id) },
+    "sep",
+    { label: "Apagar", icon: Trash2, danger: true, onClick: () => data.deleteAuthor(menu.author) },
+  ] : menu?.kind === "folder" ? [
+    { label: "Abrir", icon: FolderOpen, onClick: () => { setFolderId(menu.folder.id); setSel(new Set()); } },
+    { label: "Renomear", icon: Edit3, onClick: () => setFolderModal({ open: true, folder: menu.folder }) },
+    "sep",
+    { label: "Excluir pasta", icon: Trash2, danger: true, disabled: authors.some((a) => a.categoryId === menu.folder.id), hint: authors.some((a) => a.categoryId === menu.folder.id) ? "só vazia" : "", onClick: () => data.deleteAuthorCategory(menu.folder.id) },
+  ] : [];
+
+  const chip = (id: string, label: string, total: number, folder?: AuthorCategory) => {
+    const active = folderId === id;
+    const dropKey = id;
+    return (
+      <div key={id}
+        onDragOver={(e) => { if (id !== "all") { e.preventDefault(); setDragOver(dropKey); } }} onDragLeave={() => setDragOver("")}
+        onDrop={(e) => id !== "all" && dropOn(e, id === "none" ? null : id)}
+        onContextMenu={(e) => folder && openFolderMenu(e, folder)}
+        className={`flex shrink-0 items-center rounded-sm border transition ${active ? "border-pm-black bg-pm-black text-white" : "border-pm-line bg-white text-pm-ink hover:border-pm-gold"} ${dragOver === dropKey ? "ring-2 ring-pm-gold" : ""}`}>
+        <button type="button" onClick={() => { setFolderId(id); setSel(new Set()); }} className="flex items-center gap-2 py-2 pl-3 pr-2 text-sm font-bold" title={folder?.description || label}>
+          <FolderOpen className={`h-4 w-4 ${active ? "text-pm-gold-light" : "text-pm-gold-dark"}`} />
+          <span className="max-w-[220px] truncate uppercase">{label}</span>
+          <span className={`rounded-sm px-1.5 text-[11px] ${active ? "bg-white/15 text-pm-gold-light" : "bg-pm-sand text-pm-muted"}`}>{total}</span>
+        </button>
+        {folder && <button type="button" aria-label={`Opções da pasta ${label}`} onClick={(e) => openFolderMenu(e, folder)} className={`mr-1 grid h-7 w-6 place-items-center rounded-sm ${active ? "hover:bg-white/15" : "hover:bg-pm-sand"}`}><MoreVertical className="h-4 w-4" /></button>}
+      </div>
+    );
+  };
+
   return (
-    <div className="grid items-start gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
-      <aside className="space-y-4">
-        <Card>
-          <CardContent className="!p-4">
-            <p className="pm-eyebrow mb-3">Pastas</p>
-            <div className="space-y-1">
-              {[{ id: "all", name: "Todas as pastas", description: "" }, ...folders].map((folder) => {
-                const total = folder.id === "all" ? authors.length : authors.filter((a) => a.categoryId === folder.id).length;
-                const active = folderId === folder.id;
-                return (
-                  <div key={folder.id} className={`group flex items-center gap-2 rounded-sm px-3 py-2 ${active ? "bg-pm-black text-white" : "hover:bg-pm-sand"}`}>
-                    <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm font-bold" onClick={() => { setFolderId(folder.id); setSelectedId(null); }}>
-                      <FolderOpen className={`h-4 w-4 shrink-0 ${active ? "text-pm-gold-light" : "text-pm-gold-dark"}`} /><span className="truncate">{folder.name}</span>
-                    </button>
-                    <span className={`text-xs font-bold ${active ? "text-pm-gold-light" : "text-pm-muted"}`}>{total}</span>
-                    {folder.id !== "all" && total === 0 && <button type="button" title="Excluir pasta vazia" onClick={() => data.deleteAuthorCategory(folder.id)} className="opacity-0 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5 text-status-late" /></button>}
-                  </div>
-                );
-              })}
-            </div>
-            <form className="mt-4 space-y-2 border-t border-pm-line pt-4" onSubmit={(e) => { e.preventDefault(); createFolder(); }}>
-              <Input placeholder="Nova pasta (ex.: Tráfico de drogas)" value={newFolder.name} onChange={(e) => setNewFolder({ ...newFolder, name: e.target.value })} />
-              <Input placeholder="Observação" value={newFolder.description} onChange={(e) => setNewFolder({ ...newFolder, description: e.target.value })} />
-              <Button type="submit" variant="primary" size="sm" className="w-full"><Plus />Criar pasta</Button>
-            </form>
-            <label className={`mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-sm border border-dashed border-pm-gold px-3 py-2 text-xs font-bold uppercase tracking-wide text-pm-gold-dark hover:bg-pm-cream ${importing ? "pointer-events-none opacity-60" : ""}`}>
-              <Upload className="h-4 w-4" />{importing ? "Importando…" : "Importar JSON do Trello"}
-              <input type="file" accept="application/json,.json" className="hidden" onChange={(e) => { importTrello(e.target.files?.[0]); e.target.value = ""; }} />
-            </label>
-          </CardContent>
-        </Card>
-      </aside>
-
-      <div className="space-y-6">
-        <Card>
-          <CardContent>
-            <SectionHeader title={folderId === "all" ? "Todos os alvos" : folderName(folderId)} subtitle={`${visible.length} card(s)`}
-              actions={<>
-                <div className="relative w-72 max-w-full"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-pm-muted" /><Input className="pl-9" placeholder="Nome, vulgo, documento, bairro…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
-                <Button onClick={() => setBoOpen(true)}><ScanText />Cadastrar pelo BO</Button>
-                <Button onClick={() => setPhotosOpen(true)}><Images />Importar fotos</Button>
-                <Button onClick={() => setLinksOpen(true)}><Link2 />Link externo</Button>
-                <Button variant={intake.pending.length ? "gold" : "outline"} onClick={() => setInboxOpen(true)}><Inbox />Recebidos{intake.pending.length ? ` (${intake.pending.length})` : ""}</Button>
-                <Button variant="primary" onClick={openCreate} disabled={!folders.length} title={!folders.length ? "Crie uma pasta primeiro" : ""}><UserPlus />Novo alvo</Button>
-              </>} />
-            {!folders.length && <EmptyState icon={FolderOpen} title="Crie a primeira pasta">As pastas organizam os alvos por modalidade criminal.</EmptyState>}
-            {folders.length > 0 && visible.length === 0 && <EmptyState icon={UserRound} title="Nenhum card nesta pasta" />}
-            <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-              {visible.map((author) => {
-                const cover = photos.find((p) => p.authorId === author.id);
-                const active = selected?.id === author.id;
-                return (
-                  <button key={author.id} type="button" onClick={() => setSelectedId(active ? null : author.id)}
-                    className={`flex gap-3 rounded-sm border bg-white p-2.5 text-left transition hover:border-pm-gold ${active ? "border-pm-black ring-2 ring-pm-gold" : "border-pm-line"}`}>
-                    <div className="grid h-24 w-20 shrink-0 place-items-center overflow-hidden rounded-sm bg-pm-sand">
-                      {cover ? <img src={data.getIntelFileUrl(cover.filePath)} alt="" loading="lazy" className="h-full w-full object-cover" /> : <UserRound className="h-8 w-8 text-pm-muted" />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap gap-1"><Badge>{author.status}</Badge><Badge tone={riskTone(author.riskLevel)}>{author.riskLevel}</Badge></div>
-                      <p className="mt-1 truncate font-black uppercase">{author.name}</p>
-                      <p className="truncate text-sm text-pm-muted">Vulgo: {author.alias || "—"}</p>
-                      <p className="mt-1 line-clamp-2 text-xs text-pm-muted">{author.crimes || folderName(author.categoryId)}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
-        {selected && (
-          <Card className="overflow-hidden">
-            <div className="grid md:grid-cols-[240px_1fr]">
-              <div className="relative min-h-64 bg-pm-black">
-                {photos.find((p) => p.authorId === selected.id)
-                  ? <img src={data.getIntelFileUrl(photos.find((p) => p.authorId === selected.id)!.filePath)} alt={selected.name} className="h-full w-full object-cover" />
-                  : <div className="grid h-full place-items-center"><UserRound className="h-16 w-16 text-white/30" /></div>}
-              </div>
-              <div className="p-5 md:p-6">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <p className="pm-eyebrow">{folderName(selected.categoryId)}</p>
-                    <h2 className="font-display text-3xl font-black uppercase leading-tight">{selected.name}</h2>
-                    <p className="text-sm text-pm-muted">Vulgo: <b className="text-pm-ink">{selected.alias || "não informado"}</b></p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="gold" onClick={() => setSharing(selected)}><MessageCircle />WhatsApp</Button>
-                    <Button size="sm" onClick={() => openEdit(selected)}><Edit3 />Editar</Button>
-                    <Button size="sm" variant="danger" onClick={() => data.deleteAuthor(selected)}><Trash2 />Excluir</Button>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
-                  {[
-                    ["Situação", selected.status], ["Risco", selected.riskLevel], ["Nascimento", selected.birthDate ? formatBR(selected.birthDate) : "—"],
-                    ["Mãe", selected.motherName], ["Pai", selected.fatherName], ["Documento", selected.document], ["Cidade / bairro", [selected.city, selected.neighborhood].filter(Boolean).join(" / ")],
-                  ].map(([label, value]) => (
-                    <div key={label} className="rounded-sm border border-pm-line bg-pm-cream/60 px-3 py-2"><p className="text-[10px] font-bold uppercase tracking-wider text-pm-muted">{label}</p><p className="font-semibold">{value || "—"}</p></div>
-                  ))}
-                  <div className="rounded-sm border border-pm-line bg-pm-cream/60 px-3 py-2 sm:col-span-3"><p className="text-[10px] font-bold uppercase tracking-wider text-pm-muted">Endereço</p><p className="font-semibold">{selected.address || "—"}</p></div>
-                  <div className="rounded-sm border border-pm-line bg-pm-cream/60 px-3 py-2 sm:col-span-3"><p className="text-[10px] font-bold uppercase tracking-wider text-pm-muted">Crimes / modus operandi</p><p className="font-semibold">{selected.crimes || "—"}</p></div>
-                </div>
-                {selected.notes && <p className="mt-3 whitespace-pre-wrap rounded-sm border border-pm-line bg-white p-3 text-sm">{selected.notes}</p>}
-                {api && data.permissions.investigations && (() => {
-                  const linked = api.targets.filter((t) => t.authorId === selected.id).map((t) => ({ t, inv: api.investigations.find((i) => i.id === t.investigationId) })).filter((x) => x.inv);
-                  const available = api.investigations.filter((i) => (i.status === "Em andamento" || i.status === "Suspensa") && !linked.some((x) => x.inv!.id === i.id));
-                  return (
-                    <div className="mt-4 rounded-sm border border-pm-line bg-white p-3">
-                      <p className="pm-label flex items-center gap-1.5"><FolderLock className="h-3.5 w-3.5 text-pm-gold-dark" />Investigações</p>
-                      {linked.length === 0 && <p className="text-sm text-pm-muted">Não está em nenhuma investigação.</p>}
-                      <div className="flex flex-wrap gap-2">
-                        {linked.map(({ t, inv }) => (
-                          <button key={t.id} type="button" onClick={() => onOpenInvestigation?.(inv!.id)} className="rounded-sm border border-pm-line bg-pm-cream px-2.5 py-1.5 text-left text-xs hover:border-pm-gold">
-                            <b className="text-pm-gold-dark">{inv!.code}</b> {inv!.title}<span className="block text-pm-muted">{t.role} · etapa {stageOf(inv!.stage).name.toLowerCase()}</span>
-                          </button>
-                        ))}
-                      </div>
-                      {available.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <Select className="h-9 w-64" value={linkInv.id} onChange={(e) => setLinkInv({ ...linkInv, id: e.target.value })}><option value="">Vincular a investigação…</option>{available.map((i) => <option key={i.id} value={i.id}>{i.code} — {i.title}</option>)}</Select>
-                          <Select className="h-9 w-44" value={linkInv.role} onChange={(e) => setLinkInv({ ...linkInv, role: e.target.value })}>{TARGET_ROLES.map((r) => <option key={r}>{r}</option>)}</Select>
-                          <Button size="sm" variant="primary" className="!h-9" disabled={!linkInv.id} onClick={async () => { const inv = api.investigations.find((i) => i.id === linkInv.id); if (inv && await api.addTarget(inv, selected.id, linkInv.role)) { data.reload(); setLinkInv({ id: "", role: linkInv.role }); } }}><Link2 />Vincular</Button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-            <div className="grid gap-6 border-t border-pm-line p-5 md:p-6 lg:grid-cols-2">
-              <div>
-                <div className="mb-3 flex items-center justify-between"><p className="pm-heading flex items-center gap-2"><ImageIcon className="h-4 w-4 text-pm-gold-dark" />Fotos</p>
-                  <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-sm bg-pm-black px-3 text-xs font-bold uppercase text-white hover:bg-pm-ink"><Camera className="h-3.5 w-3.5" />Subir foto<input type="file" accept="image/*" className="hidden" onChange={(e) => { data.uploadAuthorFile(selected, e.target.files?.[0], "photo"); e.target.value = ""; }} /></label>
-                </div>
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                  {photos.filter((p) => p.authorId === selected.id).map((p) => (
-                    <a key={p.id} href={data.getIntelFileUrl(p.filePath)} target="_blank" rel="noreferrer" className="aspect-[3/4] overflow-hidden rounded-sm bg-pm-sand"><img src={data.getIntelFileUrl(p.filePath)} alt={p.fileName} loading="lazy" className="h-full w-full object-cover transition hover:scale-105" /></a>
-                  ))}
-                  {!photos.some((p) => p.authorId === selected.id) && <p className="col-span-full text-sm text-pm-muted">Nenhuma foto.</p>}
-                </div>
-              </div>
-              <div>
-                <div className="mb-3 flex items-center justify-between"><p className="pm-heading flex items-center gap-2"><Paperclip className="h-4 w-4 text-pm-gold-dark" />Relatórios</p>
-                  <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-sm border border-pm-line bg-white px-3 text-xs font-bold uppercase hover:border-pm-gold"><Upload className="h-3.5 w-3.5" />Subir relatório<input type="file" className="hidden" onChange={(e) => { data.uploadAuthorFile(selected, e.target.files?.[0], "report"); e.target.value = ""; }} /></label>
-                </div>
-                <div className="space-y-1.5">
-                  {reports.filter((r) => r.authorId === selected.id).map((r) => (
-                    <a key={r.id} href={data.getIntelFileUrl(r.filePath)} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-2 rounded-sm border border-pm-line bg-white px-3 py-2 text-sm hover:border-pm-gold">
-                      <span className="flex min-w-0 items-center gap-2"><FileText className="h-4 w-4 shrink-0 text-pm-gold-dark" /><span className="min-w-0"><span className="block truncate">{r.fileName}</span>{r.description && <span className="block truncate text-xs text-pm-muted">{r.description}</span>}</span></span><span className="shrink-0 text-xs text-pm-muted">{formatBytes(r.fileSize)}</span>
-                    </a>
-                  ))}
-                  {!reports.some((r) => r.authorId === selected.id) && <p className="text-sm text-pm-muted">Nenhum relatório.</p>}
-                </div>
-              </div>
-            </div>
-          </Card>
-        )}
+    <div className="space-y-4">
+      {/* Barra de pastas */}
+      <div className="rounded-sm border border-pm-line bg-white p-2 shadow-panel">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          {chip("all", "Todas", authors.length)}
+          {folders.map((f) => chip(f.id, f.name, authors.filter((a) => a.categoryId === f.id).length, f))}
+          {authors.some((a) => !a.categoryId || !folders.some((f) => f.id === a.categoryId)) && chip("none", "Sem pasta", authors.filter((a) => !a.categoryId || !folders.some((f) => f.id === a.categoryId)).length)}
+          <button type="button" onClick={() => setFolderModal({ open: true, folder: null })} className="flex shrink-0 items-center gap-1.5 rounded-sm border border-dashed border-pm-gold px-3 py-2 text-xs font-bold uppercase text-pm-gold-dark hover:bg-pm-cream"><Plus className="h-4 w-4" />Nova pasta</button>
+          <label className={`flex shrink-0 cursor-pointer items-center gap-1.5 rounded-sm px-2 py-2 text-xs font-bold uppercase text-pm-muted hover:bg-pm-cream ${importing ? "pointer-events-none opacity-60" : ""}`} title="Importar JSON do Trello">
+            <Upload className="h-4 w-4" />{importing ? "Importando…" : "Trello"}
+            <input type="file" accept="application/json,.json" className="hidden" onChange={(e) => { importTrello(e.target.files?.[0]); e.target.value = ""; }} />
+          </label>
+        </div>
+        <p className="px-1 text-[11px] text-pm-muted">Clique num card para as opções (ver ficha, editar, mover, apagar). Arraste cards até uma pasta para mover. Botão direito na pasta: renomear ou excluir.</p>
       </div>
 
+      <Card>
+        <CardContent>
+          <SectionHeader title={folderId === "all" ? "Todos os alvos" : folderId === "none" ? "Sem pasta" : folderName(folderId)} subtitle={`${visible.length} card(s)`}
+            actions={<>
+              <div className="relative w-72 max-w-full"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-pm-muted" /><Input className="pl-9" placeholder="Nome, vulgo, documento, bairro…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+              <Button onClick={() => setBoOpen(true)}><ScanText />Cadastrar pelo BO</Button>
+              <Button onClick={() => setPhotosOpen(true)}><Images />Importar fotos</Button>
+              <Button onClick={() => setLinksOpen(true)}><Link2 />Link externo</Button>
+              <Button variant={intake.pending.length ? "gold" : "outline"} onClick={() => setInboxOpen(true)}><Inbox />Recebidos{intake.pending.length ? ` (${intake.pending.length})` : ""}</Button>
+              <Button variant="primary" onClick={openCreate}><UserPlus />Novo alvo</Button>
+            </>} />
+
+          {sel.size > 0 && (
+            <div className="sticky top-2 z-20 mb-3 flex flex-wrap items-center gap-2 rounded-sm bg-pm-black px-3 py-2 text-sm text-white shadow-lg">
+              <CheckSquare className="h-4 w-4 text-pm-gold-light" /><b>{sel.size} selecionado(s)</b>
+              <Button size="sm" variant="gold" onClick={() => setMoving([...sel])}><FolderInput />Mover para…</Button>
+              <button type="button" className="text-xs font-bold uppercase text-white/70 hover:text-white" onClick={() => setSel(allVisibleSelected ? new Set() : new Set(visible.map((a) => a.id)))}>{allVisibleSelected ? "Desmarcar todos" : `Marcar os ${visible.length} desta lista`}</button>
+              <button type="button" className="ml-auto text-white/70 hover:text-white" onClick={() => setSel(new Set())} aria-label="Limpar seleção"><X className="h-4 w-4" /></button>
+            </div>
+          )}
+
+          {!folders.length && <EmptyState icon={FolderOpen} title="Crie a primeira pasta">As pastas organizam os alvos por modalidade criminal.</EmptyState>}
+          {folders.length > 0 && visible.length === 0 && <EmptyState icon={UserRound} title="Nenhum card nesta pasta" />}
+          <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+            {visible.map((author) => {
+              const cover = photos.find((p) => p.authorId === author.id);
+              const checked = sel.has(author.id);
+              const menuOpen = menu?.kind === "card" && menu.author.id === author.id;
+              return (
+                <div key={author.id} role="button" tabIndex={0} draggable
+                  onDragStart={(e) => { const ids = checked ? [...sel] : [author.id]; e.dataTransfer.setData("text/x-alvos", ids.join(",")); e.dataTransfer.effectAllowed = "move"; }}
+                  onClick={(e) => (sel.size ? toggleSel(author.id) : openCardMenu(e, author))}
+                  onContextMenu={(e) => openCardMenu(e, author)}
+                  onDoubleClick={() => { setMenu(null); setFicha(author); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") setFicha(author); }}
+                  className={`group relative flex cursor-pointer select-none gap-3 rounded-sm border bg-white p-2.5 text-left transition hover:border-pm-gold ${checked ? "border-pm-gold ring-2 ring-pm-gold" : menuOpen ? "border-pm-black" : "border-pm-line"}`}>
+                  <button type="button" aria-label={checked ? "Desmarcar" : "Selecionar"} onClick={(e) => { e.stopPropagation(); toggleSel(author.id); }}
+                    className={`absolute left-1.5 top-1.5 z-10 grid h-6 w-6 place-items-center rounded-sm border-2 ${checked ? "border-pm-gold bg-pm-gold text-pm-black" : "border-white bg-pm-black/40 text-transparent opacity-0 group-hover:opacity-100"} ${sel.size ? "opacity-100" : ""}`}>
+                    <Check className="h-3.5 w-3.5" />
+                  </button>
+                  <div className="grid h-24 w-20 shrink-0 place-items-center overflow-hidden rounded-sm bg-pm-sand">
+                    {cover ? <img src={data.getIntelFileUrl(cover.filePath)} alt="" loading="lazy" draggable={false} className="h-full w-full object-cover" /> : <UserRound className="h-8 w-8 text-pm-muted" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap gap-1"><Badge>{author.status}</Badge><Badge tone={riskTone(author.riskLevel)}>{author.riskLevel}</Badge></div>
+                    <p className="mt-1 truncate font-black uppercase">{author.name}</p>
+                    <p className="truncate text-sm text-pm-muted">Vulgo: {author.alias || "—"}</p>
+                    <p className="mt-1 line-clamp-2 text-xs text-pm-muted">{folderId === "all" ? folderName(author.categoryId) : author.crimes || folderName(author.categoryId)}</p>
+                  </div>
+                  <MoreVertical className="h-4 w-4 shrink-0 text-pm-muted" />
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      <TargetFichaModal author={ficha} data={data} api={api} onClose={() => setFicha(null)} onEdit={openEdit} onMove={(a) => setMoving([a.id])} onShareMessage={(a) => setSharing(a)} onOpenInvestigation={onOpenInvestigation} />
+      <ContextMenu at={menu?.at || null} title={menu?.kind === "card" ? menu.author.name : menu?.kind === "folder" ? `Pasta ${menu.folder.name}` : ""} items={menuItems} onClose={closeMenu} />
+      <FolderModal open={folderModal.open} folder={folderModal.folder} onClose={() => setFolderModal({ open: false, folder: null })} onSave={saveFolder} />
+      <MoveModal open={moving.length > 0} count={moving.length} names={moveTargets.map((a) => a.name)} folders={folders}
+        currentId={moveTargets.length === 1 ? moveTargets[0].categoryId : undefined}
+        onClose={() => setMoving([])} onMove={async (id) => { const ok = await data.moveAuthors(moving, id); if (ok) setSel(new Set()); return ok; }} />
       <IntakeLinksModal open={linksOpen} onClose={() => setLinksOpen(false)} data={data} intake={intake} />
-      <IntakeInboxModal open={inboxOpen} onClose={() => setInboxOpen(false)} data={data} intake={intake} onApproved={(id) => { setFolderId("all"); setSelectedId(id); }} />
+      <IntakeInboxModal open={inboxOpen} onClose={() => setInboxOpen(false)} data={data} intake={intake} onApproved={(id) => { setFolderId("all"); const a = data.authors.find((x) => x.id === id); if (a) setFicha(a); }} />
       <ShareTargetModal author={sharing} data={data} onClose={() => setSharing(null)} />
-      <PhotoBatchModal open={photosOpen} data={data} onClose={() => setPhotosOpen(false)} onDone={(ids) => { if (ids.length === 1) { setFolderId("all"); setSelectedId(ids[0]); } }} />
-      <BoAuthorModal open={boOpen} data={data} api={api} onClose={() => setBoOpen(false)} onDone={(ids) => { if (ids[0]) { setFolderId("all"); setSelectedId(ids[0]); } }} />
+      <PhotoBatchModal open={photosOpen} data={data} onClose={() => setPhotosOpen(false)} onDone={() => setFolderId("all")} />
+      <BoAuthorModal open={boOpen} data={data} api={api} onClose={() => setBoOpen(false)} onDone={() => setFolderId("all")} />
       <Modal open={formOpen} onClose={() => setFormOpen(false)} eyebrow="Banco de alvos" title={editing ? `Editar ${editing.name}` : "Novo card de alvo"}
         footer={<><Button onClick={() => setFormOpen(false)}>Cancelar</Button><Button variant="primary" onClick={submit}><Plus />{editing ? "Salvar" : "Criar card"}</Button></>}>
         <form className="grid gap-3 md:grid-cols-3" onSubmit={(e) => { e.preventDefault(); submit(); }}>

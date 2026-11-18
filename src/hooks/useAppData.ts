@@ -544,6 +544,32 @@ export function useAppData(notify: Notify) {
     return normalizeAuthorCategory(data);
   }
 
+  async function updateAuthorCategory(id: string, category: { name: string; description?: string }) {
+    const name = category.name?.trim();
+    if (!name) { notify("Informe o nome da pasta.", "error"); return false; }
+    const old = authorCategories.find((f) => f.id === id);
+    const { error } = await supabase.from("author_folders").update({ name, description: category.description ?? old?.description ?? "" }).eq("id", id);
+    if (error) { notify("Erro ao renomear (já existe pasta com esse nome?).", "error"); return false; }
+    await addAudit("Pasta criminal renomeada", `"${old?.name || ""}" passou a se chamar "${name}".`);
+    notify("Pasta atualizada.");
+    reload();
+    return true;
+  }
+
+  /** Move um ou vários alvos para outra pasta (null = sem pasta). */
+  async function moveAuthors(ids: string[], folderId: string | null) {
+    if (!ids.length) return false;
+    const { error } = await supabase.from("crime_authors").update({ folder_id: folderId }).in("id", ids);
+    if (error) { notify("Erro ao mover os alvos.", "error"); return false; }
+    setAuthors((list) => list.map((a) => (ids.includes(a.id) ? { ...a, categoryId: folderId || "" } : a)));
+    const folder = authorCategories.find((f) => f.id === folderId)?.name || "Sem pasta";
+    const names = authors.filter((a) => ids.includes(a.id)).map((a) => a.name);
+    await addAudit("Alvos movidos", `Moveu ${ids.length} alvo(s) para "${folder}": ${names.slice(0, 10).join(", ")}${names.length > 10 ? "…" : ""}.`);
+    notify(`${ids.length} alvo(s) movido(s) para ${folder}.`);
+    reload();
+    return true;
+  }
+
   async function deleteAuthorCategory(id: string) {
     if (authors.some((author) => author.categoryId === id)) return notify("A pasta possui cards e não pode ser excluída.", "error");
     if (!window.confirm("Excluir esta pasta vazia?")) return;
@@ -595,12 +621,13 @@ export function useAppData(notify: Notify) {
   }
 
   async function deleteAuthor(author: Author) {
-    if (!window.confirm(`Excluir o card de ${author.name} e seus anexos?`)) return;
+    if (!window.confirm(`Excluir o card de ${author.name} e seus anexos?`)) return false;
     const { error } = await supabase.from("crime_authors").delete().eq("id", author.id);
-    if (error) return notify("Erro ao excluir card.", "error");
+    if (error) { notify("Erro ao excluir card.", "error"); return false; }
     await addAudit("Alvo excluído", `Excluiu o card de: ${author.name}.`);
     notify("Card excluído.");
     reload();
+    return true;
   }
 
   async function uploadAuthorFile(author: { id: string; name: string }, file: File | undefined | null, kind: "photo" | "report" = "report", options: { silent?: boolean; description?: string; noAudit?: boolean } = {}) {
@@ -705,7 +732,7 @@ export function useAppData(notify: Notify) {
     // workflow
     addWorkflow, deleteWorkflow, moveWorkflow,
     // alvos
-    getIntelFileUrl, addAuthorCategory, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, setAuthorHome, uploadAuthorFile, deleteAuthorPhoto, importTrelloBoard,
+    getIntelFileUrl, addAuthorCategory, updateAuthorCategory, moveAuthors, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, setAuthorHome, uploadAuthorFile, deleteAuthorPhoto, importTrelloBoard,
   };
 }
 
