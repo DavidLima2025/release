@@ -697,6 +697,18 @@ export function useAppData(notify: Notify) {
     return true;
   }
 
+  /** Remove um relatório/BO do card (arquivo privado + registro). */
+  async function deleteAuthorReport(report: AuthorFile, options: { silent?: boolean } = {}) {
+    const { error } = await supabase.from("author_reports").delete().eq("id", report.id);
+    if (error) { notify("Erro ao excluir o arquivo.", "error"); return false; }
+    await supabase.storage.from(INTEL_BUCKET).remove([report.filePath]);
+    setAuthorReports((list) => list.filter((r) => r.id !== report.id));
+    const author = authors.find((a) => a.id === report.authorId);
+    await addAudit("Arquivo do alvo excluído", `Excluiu ${report.fileName} do card de ${author?.name || "alvo"}.`);
+    if (!options.silent) notify("Arquivo excluído.");
+    return true;
+  }
+
   /** Define a foto de capa do card (a que aparece nos cards, ficha, organograma e relatórios). */
   async function setCoverPhoto(photo: AuthorFile) {
     const off = await supabase.from("author_photos").update({ is_cover: false }).eq("author_id", photo.authorId);
@@ -795,7 +807,7 @@ export function useAppData(notify: Notify) {
     // workflow
     addWorkflow, deleteWorkflow, moveWorkflow,
     // alvos
-    getIntelFileUrl, addAuthorCategory, updateAuthorCategory, moveAuthors, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, setAuthorHome, setReportGeo, mergeAuthors, uploadAuthorFile, deleteAuthorPhoto, setCoverPhoto, importTrelloBoard,
+    getIntelFileUrl, addAuthorCategory, updateAuthorCategory, moveAuthors, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, setAuthorHome, setReportGeo, mergeAuthors, uploadAuthorFile, deleteAuthorPhoto, deleteAuthorReport, setCoverPhoto, importTrelloBoard,
   };
 }
 
