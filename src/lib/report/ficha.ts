@@ -11,6 +11,9 @@ export type FichaInput = {
   investigations: { code: string; title: string; role: string }[];
   occurrences: { date: string; time: string; crime: string; reference: string; place: string; inv: string }[];
   attachments: string[];
+  extra?: { label: string; value: string }[];
+  occurrencePhotos?: { img: ReportImage; caption: string }[];
+  surveyPhotos?: { img: ReportImage; caption: string }[];
   companions?: { name: string; alias: string; together: string; reds: string }[];
   generatedBy: string; generatedAt: string;
 };
@@ -166,6 +169,10 @@ export async function renderFicha(input: FichaInput): Promise<Uint8Array> {
   section("Crimes / modus operandi");
   paragraph(input.crimes || "Não informado.");
 
+  if (input.extra?.length) {
+    section("Dados adicionais");
+    for (const e of input.extra) { paragraph(e.label.toUpperCase(), 7.5, bold, MUTED); paragraph(e.value); y -= 3; }
+  }
   if (input.notes.trim()) { section("Observações e vínculos"); paragraph(input.notes); }
 
   if (input.investigations.length) {
@@ -206,7 +213,7 @@ export async function renderFicha(input: FichaInput): Promise<Uint8Array> {
   }
 
   if (extras.length) {
-    section("Outras fotos");
+    section("Outras fotos do alvo");
     const tw = (CW - 3 * 10) / 4; const th = tw * 1.3;
     ensure(th + 8);
     extras.forEach((img, i) => {
@@ -217,6 +224,28 @@ export async function renderFicha(input: FichaInput): Promise<Uint8Array> {
       page.drawImage(img, { x: x + (tw - w) / 2, y: y - th + (th - h) / 2, width: w, height: h });
     });
     y -= th + 10;
+  }
+
+  // Galerias: fotos de ocorrências e de levantamentos de inteligência (com legenda).
+  for (const [title, list] of [["Fotos de ocorrências", input.occurrencePhotos], ["Levantamentos de inteligência", input.surveyPhotos]] as const) {
+    if (!list?.length) continue;
+    section(`${title} (${list.length})`);
+    const embedded: { img: PDFImage; caption: string }[] = [];
+    for (const p of list) embedded.push({ img: p.img.type === "png" ? await doc.embedPng(p.img.bytes) : await doc.embedJpg(p.img.bytes), caption: p.caption });
+    const cols = 3; const gap = 10; const tw = (CW - gap * (cols - 1)) / cols; const th = tw * 0.75;
+    for (let i = 0; i < embedded.length; i += cols) {
+      const row = embedded.slice(i, i + cols);
+      const capLines = Math.max(...row.map((r) => Math.min(2, wrap(r.caption, regular, 7.5, tw).length)));
+      ensure(th + capLines * 9 + 10);
+      row.forEach(({ img, caption }, j) => {
+        const x = M + j * (tw + gap);
+        const s = Math.min(tw / img.width, th / img.height);
+        page.drawRectangle({ x, y: y - th, width: tw, height: th, color: CREAM });
+        page.drawImage(img, { x: x + (tw - img.width * s) / 2, y: y - th + (th - img.height * s) / 2, width: img.width * s, height: img.height * s });
+        wrap(caption, regular, 7.5, tw).slice(0, 2).forEach((l, k) => text(l, x, y - th - 9 - k * 9, 7.5, regular, MUTED));
+      });
+      y -= th + capLines * 9 + 14;
+    }
   }
 
   if (input.attachments.length) {

@@ -6,7 +6,7 @@ import { Card, CardContent, EmptyState, SectionHeader } from "../components/ui/c
 import { Field, Input, Select, Textarea } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Modal } from "../components/ui/modal";
-import { Author, AuthorCategory, matchesText } from "../lib/domain";
+import { Author, AuthorCategory, EXTRA_FIELDS, matchesText } from "../lib/domain";
 import type { AppData } from "../hooks/useAppData";
 import type { InvestigationsApi } from "../hooks/useInvestigations";
 import { BoAuthorModal } from "../components/BoAuthorModal";
@@ -19,7 +19,7 @@ import { TargetFichaModal } from "../components/TargetFichaModal";
 import { indexReds } from "../lib/companions";
 import { DuplicatesModal, MergeModal, MergePicker, findDuplicates } from "../components/MergeAuthors";
 
-const EMPTY_AUTHOR = { name: "", alias: "", motherName: "", fatherName: "", birthDate: "", document: "", address: "", neighborhood: "", city: "Belo Horizonte", crimes: "", categoryId: "", status: "Suspeito", riskLevel: "Médio", notes: "" };
+const EMPTY_AUTHOR = { name: "", alias: "", motherName: "", fatherName: "", birthDate: "", document: "", address: "", neighborhood: "", city: "Belo Horizonte", crimes: "", categoryId: "", status: "Suspeito", riskLevel: "Médio", notes: "", extra: {} as Record<string, string> };
 const riskTone = (risk: string) => (risk === "Alto" ? "late" : risk === "Médio" ? "risk" : "done") as any;
 
 export function TargetsView({ data, api, onOpenInvestigation, notify, focusId, onFocusDone }: { data: AppData; api?: InvestigationsApi; onOpenInvestigation?: (id: string) => void; notify: (text: string, tone?: any) => void; focusId?: string; onFocusDone?: () => void }) {
@@ -77,6 +77,7 @@ export function TargetsView({ data, api, onOpenInvestigation, notify, focusId, o
   const openCreate = () => { setEditing(null); setForm({ ...EMPTY_AUTHOR, categoryId: folderId !== "all" && folderId !== "none" ? folderId : folders[0]?.id || "" }); setPhoto(null); setFormOpen(true); };
   const openEdit = (a: Author) => { setEditing(a); setForm({ ...EMPTY_AUTHOR, ...a }); setPhoto(null); setFormOpen(true); };
   const set = (key: string, value: string) => setForm((f) => ({ ...f, [key]: value }));
+  const setExtra = (key: string, value: string) => setForm((f) => ({ ...f, extra: { ...(f.extra || {}), [key]: value } }));
 
   const submit = async () => {
     if (editing) {
@@ -207,7 +208,7 @@ export function TargetsView({ data, api, onOpenInvestigation, notify, focusId, o
           {folders.length > 0 && visible.length === 0 && <EmptyState icon={UserRound} title="Nenhum card nesta pasta" />}
           <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
             {visible.map((author) => {
-              const cover = photos.find((p) => p.authorId === author.id);
+              const cover = photos.find((p) => p.authorId === author.id && (p.category || "perfil") === "perfil");
               const checked = sel.has(author.id);
               const menuOpen = menu?.kind === "card" && menu.author.id === author.id;
               return (
@@ -279,6 +280,16 @@ export function TargetsView({ data, api, onOpenInvestigation, notify, focusId, o
               <input type="file" accept="image/*" className="hidden" onChange={(e) => setPhoto(e.target.files?.[0] || null)} />
             </label>
           </Field>
+          <details className="rounded-sm border border-pm-line bg-white px-3 py-2 md:col-span-3" open={EXTRA_FIELDS.some(([k]) => String(form.extra?.[k] || "").trim())}>
+            <summary className="cursor-pointer text-xs font-black uppercase tracking-wider text-pm-gold-dark">Dados adicionais do autor</summary>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              {EXTRA_FIELDS.map(([k, label, hint]) => (
+                <Field key={k} label={label} className={k === "outros" || k === "frequenta" ? "md:col-span-2" : ""}>
+                  <Textarea rows={k === "outros" || k === "frequenta" ? 3 : 2} value={form.extra?.[k] || ""} placeholder={hint} onChange={(e) => setExtra(k, e.target.value)} />
+                </Field>
+              ))}
+            </div>
+          </details>
           <button type="submit" className="hidden" />
         </form>
       </Modal>

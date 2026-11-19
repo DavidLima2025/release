@@ -63,11 +63,32 @@ export type Author = {
   status: string; riskLevel: string; notes: string; createdAt: string;
   /** Residência no mapa (opcional). */
   homeLat: number | null; homeLng: number | null;
+  /** Dados adicionais (características, tatuagens, telefones, veículos…). */
+  extra: Record<string, string>;
 };
+
+/** Campos de "Dados adicionais do autor". */
+export const EXTRA_FIELDS: [string, string, string][] = [
+  ["fisico", "Características físicas", "Altura, porte, cor da pele, cabelo, olhos"],
+  ["sinais", "Tatuagens, cicatrizes e sinais", "Descrição e local no corpo"],
+  ["telefones", "Telefones", "Números e operadoras"],
+  ["redes", "Redes sociais", "Perfis (Instagram, Facebook, TikTok…)"],
+  ["veiculos", "Veículos", "Placa, modelo, cor"],
+  ["faccao", "Facção / grupo", "Grupo criminoso, função"],
+  ["frequenta", "Locais que frequenta / área de atuação", "Bairros, pontos, endereços alternativos"],
+  ["profissao", "Profissão / escolaridade", ""],
+  ["familia", "Familiares e contatos", "Companheira(o), parentes, pessoas próximas"],
+  ["outros", "Outras informações", ""],
+];
+
+/** Categorias de foto do card. */
+export const PHOTO_CATEGORIES: [string, string][] = [["perfil", "Fotos do alvo"], ["ocorrencia", "Fotos de ocorrências"], ["levantamento", "Levantamentos de inteligência"]];
 export type AuthorFile = {
   id: string; authorId: string; fileName: string; filePath: string; fileSize: number;
   mimeType: string; description: string; uploadedBy: string; createdAt: string;
   /** Só nos BOs anexados ao card: dados do fato (para mapa e linha do tempo). */
+  /** Fotos: perfil (do alvo), ocorrencia ou levantamento. */
+  category?: string;
   reds?: string; lat?: number | null; lng?: number | null; geoSource?: string; place?: string; crime?: string; eventDate?: string; eventTime?: string;
 };
 
@@ -176,6 +197,7 @@ export function normalizeAuthor(row: any): Author {
     createdAt: row.created_at,
     homeLat: row.home_lat ?? null,
     homeLng: row.home_lng ?? null,
+    extra: row.extra && typeof row.extra === "object" ? row.extra : {},
   };
 }
 
@@ -188,7 +210,7 @@ export function normalizeAuthorFile(row: any): AuthorFile {
     id: row.id, authorId: row.author_id, fileName: row.file_name, filePath: row.file_path, fileSize: row.file_size || 0,
     mimeType: row.mime_type || "", description: row.description || "", uploadedBy: row.uploaded_by || "", createdAt: row.created_at,
     reds: row.reds || "", lat: row.lat ?? null, lng: row.lng ?? null, geoSource: row.geo_source || "", place: row.place || "", crime: row.crime || "",
-    eventDate: row.event_date || "", eventTime: row.event_time || "",
+    eventDate: row.event_date || "", eventTime: row.event_time || "", category: row.category || "perfil",
   };
 }
 
