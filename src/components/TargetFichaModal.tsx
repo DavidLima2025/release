@@ -2,7 +2,7 @@ import { Suspense, lazy, useState } from "react";
 import { reportsAsItems } from "../lib/reportItems";
 
 const CrimeMap = lazy(() => import("../views/CrimeMap"));
-import { Binoculars, Camera, Siren, Star, Users, Download, Map as MapIcon, Clock3, Edit3, FileText, FolderInput, FolderLock, Image as ImageIcon, Link2, Loader2, MapPin, MessageCircle, Paperclip, Share2, Trash2, Upload, UserRound } from "lucide-react";
+import { Binoculars, Camera, ScanText, Siren, Star, Users, Download, Map as MapIcon, Clock3, Edit3, FileText, FolderInput, FolderLock, Image as ImageIcon, Link2, Loader2, MapPin, MessageCircle, Paperclip, Share2, Trash2, Upload, UserRound } from "lucide-react";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import { Select } from "./ui/input";
@@ -10,7 +10,8 @@ import { Badge } from "./ui/badge";
 import type { AppData } from "../hooks/useAppData";
 import type { InvestigationsApi } from "../hooks/useInvestigations";
 import type { Author } from "../lib/domain";
-import { EXTRA_FIELDS, PHOTO_CATEGORIES, formatBytes } from "../lib/domain";
+import { EXTRA_FIELDS, PHOTO_CATEGORIES, formatBytes, type AuthorFile } from "../lib/domain";
+import { BoAuthorModal } from "./BoAuthorModal";
 import { formatBR, formatDateTimeBR } from "../lib/dates";
 import { TARGET_ROLES, stageOf } from "../lib/investigation";
 import type { ReportImage } from "../lib/report/model";
@@ -53,6 +54,9 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
   const [busy, setBusy] = useState<"" | "share" | "download">("");
   const [histView, setHistView] = useState<"linha" | "tabela">("linha");
   const [mapOpen, setMapOpen] = useState(false);
+  const [boFile, setBoFile] = useState<File | null>(null);
+  const [replacing, setReplacing] = useState<AuthorFile | null>(null);
+  const [reading, setReading] = useState(false);
   const [linkInv, setLinkInv] = useState({ id: "", role: "Associado" });
   if (!author) return null;
   const a = data.authors.find((x) => x.id === author.id) || author;
@@ -83,6 +87,33 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
     };
   });
   const companions = companionsOf(a.id, data.authors, data.authorReports, allItems);
+
+  /** PDF de REDS enviado pela ficha: abre o cadastro pelo BO (dados, local, quem estava junto). Outros arquivos: só anexa. */
+  async function isRedsPdf(f: File) {
+    if (!/pdf/i.test(f.type || f.name)) return false;
+    try {
+      const [{ extractPdfItems }, lib] = await Promise.all([import("../lib/pdf"), import("../lib/boletim")]);
+      return lib.isBoletim(lib.parseBoletim(await extractPdfItems(f)));
+    } catch { return false; }
+  }
+  async function uploadReport(f: File) {
+    setReading(true);
+    const bo = await isRedsPdf(f);
+    setReading(false);
+    if (bo) { setReplacing(null); setBoFile(f); }
+    else await data.uploadAuthorFile(a, f, "report");
+  }
+  /** BO já anexado que não foi lido: lê agora e troca o arquivo antigo pelo cadastrado com os dados. */
+  async function rereadReport(r: AuthorFile) {
+    setReading(true);
+    try {
+      const blob = await fetch(data.getIntelFileUrl(r.filePath)).then((x) => x.blob());
+      const f = new File([blob], r.fileName, { type: "application/pdf" });
+      if (await isRedsPdf(f)) { setReplacing(r); setBoFile(f); }
+      else window.alert("Não reconheci um BO do REDS neste PDF (precisa ter texto selecionável).");
+    } catch { window.alert("Não foi possível abrir o arquivo."); }
+    finally { setReading(false); }
+  }
 
   async function buildPdf() {
     const { loadImage } = await import("../hooks/useInvestigations");
@@ -158,6 +189,7 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
   );
 
   return (
+    <>
     <Modal open={Boolean(author)} onClose={onClose} size="xl" eyebrow={`Ficha do alvo · ${folder}`} title={a.name}>
       <div className="space-y-5">
         <div className="grid gap-5 md:grid-cols-[200px_1fr]">
@@ -308,14 +340,27 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
           </div>
           <div>
             <div className="mb-3 flex items-center justify-between"><p className="pm-heading flex items-center gap-2"><Paperclip className="h-4 w-4 text-pm-gold-dark" />Relatórios e BOs ({reports.length})</p>
-              <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-sm border border-pm-line bg-white px-3 text-xs font-bold uppercase hover:border-pm-gold"><Upload className="h-3.5 w-3.5" />Subir<input type="file" className="hidden" onChange={(e) => { data.uploadAuthorFile(a, e.target.files?.[0], "report"); e.target.value = ""; }} /></label>
+              <label className={`inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-sm border border-pm-line bg-white px-3 text-xs font-bold uppercase hover:border-pm-gold ${reading ? "pointer-events-none opacity-60" : ""}`} title="PDF do REDS é lido: os dados do alvo, o local e quem estava junto são cadastrados">
+                {reading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}{reading ? "Lendo…" : "Subir"}
+                <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) uploadReport(f); }} />
+              </label>
             </div>
             <div className="space-y-1.5">
-              {reports.map((r) => (
-                <a key={r.id} href={data.getIntelFileUrl(r.filePath)} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-2 rounded-sm border border-pm-line bg-white px-3 py-2 text-sm hover:border-pm-gold">
-                  <span className="flex min-w-0 items-center gap-2"><FileText className="h-4 w-4 shrink-0 text-pm-gold-dark" /><span className="min-w-0"><span className="block truncate">{r.fileName}</span>{r.description && <span className="block truncate text-xs text-pm-muted">{r.description}</span>}</span></span><span className="shrink-0 text-xs text-pm-muted">{formatBytes(r.fileSize)}</span>
-                </a>
-              ))}
+              {reports.map((r) => {
+                const pdf = /pdf/i.test(r.mimeType || r.fileName);
+                const read = Boolean(r.reds || /REDS/i.test(r.description));
+                return (
+                  <div key={r.id} className="flex items-center gap-1 rounded-sm border border-pm-line bg-white pr-1 text-sm hover:border-pm-gold">
+                    <a href={data.getIntelFileUrl(r.filePath)} target="_blank" rel="noreferrer" className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2">
+                      <FileText className="h-4 w-4 shrink-0 text-pm-gold-dark" />
+                      <span className="min-w-0"><span className="block truncate">{r.fileName}</span>{r.description ? <span className="block truncate text-xs text-pm-muted">{r.description}</span> : pdf ? <span className="block text-xs text-[#8a6200]">BO ainda não lido</span> : null}</span>
+                      <span className="ml-auto shrink-0 text-xs text-pm-muted">{formatBytes(r.fileSize)}</span>
+                    </a>
+                    {pdf && !read && <Button size="sm" variant="gold" disabled={reading} onClick={() => rereadReport(r)} title="Ler o REDS e cadastrar os dados"><ScanText />Ler BO</Button>}
+                    <button type="button" onClick={() => { if (window.confirm(`Excluir ${r.fileName} do card?`)) data.deleteAuthorReport(r); }} className="grid h-8 w-8 shrink-0 place-items-center rounded-sm text-pm-muted hover:bg-red-50 hover:text-status-late" aria-label="Excluir arquivo" title="Excluir"><Trash2 className="h-4 w-4" /></button>
+                  </div>
+                );
+              })}
               {!reports.length && <p className="text-sm text-pm-muted">Nenhum arquivo.</p>}
             </div>
           </div>
@@ -361,6 +406,9 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
         </Modal>
       )}
     </Modal>
+    <BoAuthorModal open={Boolean(boFile)} initialFile={boFile} data={data} api={api} onClose={() => { setBoFile(null); setReplacing(null); }}
+      onDone={async (ids) => { if (replacing && ids.includes(a.id)) await data.deleteAuthorReport(replacing, { silent: true }); setReplacing(null); }} />
+    </>
   );
 }
 

@@ -78,9 +78,13 @@ function compare(a: Author, form: Person["form"]): Conflict[] {
   return out;
 }
 
-type Props = { open: boolean; data: AppData; api?: InvestigationsApi; onClose: () => void; onDone?: (authorIds: string[]) => void; investigationId?: string };
+type Props = {
+  open: boolean; data: AppData; api?: InvestigationsApi; onClose: () => void; onDone?: (authorIds: string[]) => void; investigationId?: string;
+  /** PDF já escolhido (ex.: enviado pela ficha do alvo): lê direto, sem pedir o arquivo de novo. */
+  initialFile?: File | null;
+};
 
-export function BoAuthorModal({ open, data, api, onClose, onDone, investigationId = "" }: Props) {
+export function BoAuthorModal({ open, data, api, onClose, onDone, investigationId = "", initialFile = null }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [bo, setBo] = useState<Boletim | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
@@ -104,7 +108,9 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
     setFile(null); setBo(null); setPeople([]); setSaving(""); setAttachBo(true); setInvId(investigationId); setCoauthor(true);
     setQueue([]); setQueueIndex(0); summary.current = { saved: 0, skipped: 0, people: 0 };
     sessionAuthors.current = new Map(); sessionReports.current = new Set();
-  }, [open, investigationId]);
+    if (initialFile) startQueue([initialFile]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, investigationId, initialFile]);
 
   /** Alvos do banco + os criados/atualizados nesta rodada (o recarregamento do banco pode ainda não ter chegado). */
   const knownAuthors = () => {
