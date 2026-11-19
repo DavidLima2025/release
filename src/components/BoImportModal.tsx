@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { indexReds } from "../lib/companions";
 import { AlertTriangle, CheckCircle2, ChevronDown, FileText, Gavel, Loader2, MapPin, ScanText, Trash2, Upload, Users } from "lucide-react";
 import { AudienciaModal } from "./AudienciaModal";
 import { Modal } from "./ui/modal";
@@ -62,6 +63,24 @@ export function BoImportModal({ open, selectedDate, data, onClose, onCreated }: 
   useEffect(() => {
     setItems((list) => list.map((item) => (item.dateTouched ? item : { ...item, date: pickDate(item.bo, dateSource, selectedDate) })));
   }, [dateSource, selectedDate]);
+
+  // Alerta de reaparecimento: envolvidos que já estão no banco de alvos (por RG/CPF ou nome igual).
+  const bosCount = useMemo(() => {
+    if (!open) return new Map<string, number>();
+    const { byReds } = indexReds(data.authors, data.authorReports, []);
+    const m = new Map<string, number>();
+    byReds.forEach((people) => people.forEach((_, id) => m.set(id, (m.get(id) || 0) + 1)));
+    return m;
+  }, [open, data.authors, data.authorReports]);
+  const norm = (t: string) => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toUpperCase();
+  const knownIn = (bo?: Boletim) => {
+    if (!bo) return [];
+    return bo.envolvidos.filter((e) => e.nome).map((e) => {
+      const docs = [e.rg, e.cpf].map((d) => (d || "").replace(/\D/g, "")).filter((d) => d.length >= 6);
+      const a = data.authors.find((x) => docs.some((d) => (x.document || "").replace(/\D/g, "").includes(d))) || data.authors.find((x) => norm(x.name) === norm(e.nome));
+      return a ? { author: a, tipo: e.tipo, bos: bosCount.get(a.id) || 0 } : null;
+    }).filter(Boolean) as { author: (typeof data.authors)[number]; tipo: string; bos: number }[];
+  };
 
   const update = (key: string, patch: Partial<Item>) => setItems((list) => list.map((item) => (item.key === key ? { ...item, ...patch } : item)));
 
@@ -193,6 +212,7 @@ export function BoImportModal({ open, selectedDate, data, onClose, onCreated }: 
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 text-xs">
                         {item.duplicate && <Badge tone="late">Já importado antes</Badge>}
+                        {knownIn(item.bo).map((k) => <Badge key={k.author.id} tone="high">⚠ Alvo conhecido: {k.author.name}{k.bos ? ` · ${k.bos} BO(s)` : ""}</Badge>)}
                         {item.bo.natureza && <Badge tone="dark">{naturezaCurta(item.bo.natureza)}</Badge>}
                         {item.bo.tentadoConsumado && <Badge>{item.bo.tentadoConsumado}</Badge>}
                         {item.bo.dataFato && <Badge tone="gold">Fato {formatBR(item.bo.dataFato)} {item.bo.horaFato}</Badge>}

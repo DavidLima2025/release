@@ -15,6 +15,7 @@ import {
   googleMapsUrl, hotspots, meanNearestNeighbor, parseCoordinates, polygonArea, streetViewUrl,
 } from "../lib/geo";
 import { createHeatLayer } from "../lib/heatLayer";
+import { REPORT_PREFIX, isReportItem } from "../lib/reportItems";
 
 // ---------- Tipos e utilidades ----------
 type Event = {
@@ -113,7 +114,13 @@ export default function CrimeMap({ data, api, items, investigations, height = "7
     return [...byRef.values()];
   }, [items, invById]);
 
-  const missing = items.filter((i) => (i.lat == null || i.lng == null) && (i.kind === "Boletim de ocorrência" || i.place || i.reference));
+  // Sem local: só o que ainda não aparece no mapa por outra fonte do mesmo REDS.
+  const located = new Set(items.filter((i) => i.lat != null && i.reference).map((i) => i.reference));
+  const missing = items.filter((i) => (i.lat == null || i.lng == null) && (i.kind === "Boletim de ocorrência" || i.place || i.reference) && !(i.reference && located.has(i.reference)));
+
+  /** Grava o local numa fonte da investigação ou num BO anexado ao card. */
+  const setLoc = (item: InvestigationItem, geo: { lat: number | null; lng: number | null; geoSource?: string; place?: string; eventTime?: string; crime?: string; eventDate?: string }, silent = false) =>
+    isReportItem(item) ? data.setReportGeo(item.id.slice(REPORT_PREFIX.length), geo, silent) : api.setItemLocation(item, geo, silent);
   const crimes = useMemo(() => [...new Set(allEvents.map((e) => e.crime))].sort(), [allEvents]);
   const authorsInScope = useMemo(() => {
     const ids = new Set(items.flatMap((i) => i.authorIds));
@@ -182,7 +189,7 @@ export default function CrimeMap({ data, api, items, investigations, height = "7
   }, [placing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function place(target: NonNullable<Placing>, point: LatLng, source: string) {
-    if (target.kind === "item") await api.setItemLocation(target.item, { lat: point.lat, lng: point.lng, geoSource: source });
+    if (target.kind === "item") await setLoc(target.item, { lat: point.lat, lng: point.lng, geoSource: source });
     else await data.setAuthorHome(target.author, point);
     setPlacing(null);
   }
@@ -294,7 +301,7 @@ export default function CrimeMap({ data, api, items, investigations, height = "7
           <div style="margin-top:4px"><a href="${googleMapsUrl(e)}" target="_blank" rel="noreferrer">Google Maps</a> · <a href="${streetViewUrl(e)}" target="_blank" rel="noreferrer">Street View</a></div></div>`;
         if (moving) {
           const m = L.marker([e.lat, e.lng], { draggable: true, icon: L.divIcon({ className: "", iconSize: [18, 18], iconAnchor: [9, 9], html: `<div style="width:18px;height:18px;border-radius:50%;background:${colorOf(e)};border:3px solid #fff;box-shadow:0 0 0 2px #0B0B0C"></div>` }) });
-          m.on("dragend", () => { const p = m.getLatLng(); api.setItemLocation(e.item, { lat: p.lat, lng: p.lng, geoSource: "Mapa" }); });
+          m.on("dragend", () => { const p = m.getLatLng(); setLoc(e.item, { lat: p.lat, lng: p.lng, geoSource: "Mapa" }); });
           group.addLayer(m.bindPopup(popup));
         } else {
           group.addLayer(L.circleMarker([e.lat, e.lng], { renderer, radius: 8, color: "#fff", weight: 2, fillColor: colorOf(e), fillOpacity: 0.95 }).bindPopup(popup));
@@ -311,7 +318,7 @@ export default function CrimeMap({ data, api, items, investigations, height = "7
       if (!item.filePath || !/pdf/i.test(item.mimeType || item.fileName)) continue;
       setBusy(`Lendo REDS ${i + 1} de ${list.length}…`);
       try {
-        const url = await api.itemFileUrl(item);
+        const url = isReportItem(item) ? data.getIntelFileUrl(item.filePath) : await api.itemFileUrl(item);
         if (!url) continue;
         const blob = await fetch(url).then((r) => r.blob());
         const bo = lib.parseBoletim(await extractPdfItems(new File([blob], item.fileName || "bo.pdf", { type: "application/pdf" })));
@@ -319,7 +326,7 @@ export default function CrimeMap({ data, api, items, investigations, height = "7
         read += 1;
         const geo = lib.boletimGeo(bo);
         if (geo.lat != null) found += 1;
-        await api.setItemLocation(item, { ...geo, place: item.place || geo.place, eventTime: item.eventTime || geo.eventTime, crime: item.crime || geo.crime }, true);
+        await setLoc(item, { ...geo, place: item.place || geo.place, eventTime: item.eventTime || geo.eventTime, crime: item.crime || geo.crime, ...(isReportItem(item) ? { eventDate: item.itemDate || bo.dataFato || bo.dataRegistro } : {}) }, true);
       } catch (error) { console.error(error); }
     }
     setBusy("");

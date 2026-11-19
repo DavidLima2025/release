@@ -7,6 +7,8 @@ import { Badge } from "./ui/badge";
 import type { Author } from "../lib/domain";
 import { formatBR } from "../lib/dates";
 import { TARGET_ROLES } from "../lib/investigation";
+import { companionsOf, redsCount } from "../lib/companions";
+import { AlertTriangle } from "lucide-react";
 import type { Boletim, BoEnvolvido } from "../lib/boletim";
 import type { AppData } from "../hooks/useAppData";
 import type { InvestigationsApi } from "../hooks/useInvestigations";
@@ -242,7 +244,13 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
       if (attachBo && bo.numero) sessionReports.current.add(`${author.id}|${bo.numero}`);
       if (p.photo) await data.uploadAuthorFile(author, p.photo, "photo", { silent: true, description: `Foto cadastrada pelo ${ref}` });
       // Mesmo BO já anexado a este card: não duplica o arquivo.
-      if (attachBo && !(p.boAttached && p.mode === "merge")) await data.uploadAuthorFile(author, file, "report", { silent: true, description: `${ref} — ${p.tipo.toLowerCase()}` });
+      if (attachBo && !(p.boAttached && p.mode === "merge")) {
+        const geo = (await import("../lib/boletim")).boletimGeo(bo);
+        await data.uploadAuthorFile(author, file, "report", {
+          silent: true, description: `${ref} — ${p.tipo.toLowerCase()}`,
+          geo: { ...geo, reds: bo.numero, eventDate: bo.dataFato || bo.dataRegistro },
+        });
+      }
     }
 
     // Vínculo com a investigação: alvos + BO como fonte + coautoria.
@@ -343,6 +351,7 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
                       <option value="new">É outra pessoa (homônimo) — criar card novo</option>
                     </Select>
                   </div>
+                  {p.mode === "merge" && <KnownAlert author={p.existing} data={data} api={api} invId={invId} currentReds={bo.numero} onLink={(id) => setInvId(id)} />}
                   {p.mode === "merge" && p.conflicts.length > 0 && (
                     <div className="mt-3 overflow-x-auto">
                       <p className="pm-label">Dados diferentes do card — escolha o que fazer</p>
@@ -426,5 +435,32 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
         </div>
       )}
     </Modal>
+  );
+}
+
+/** Alerta de reaparecimento: o envolvido já é conhecido (BOs anteriores, parceiros, investigações). */
+function KnownAlert({ author, data, api, invId, currentReds, onLink }: { author: Author; data: AppData; api?: InvestigationsApi; invId: string; currentReds: string; onLink: (id: string) => void }) {
+  const items = api?.items || [];
+  const past = redsCount(author.id, data.authors, data.authorReports, items).filter((h) => h.reds !== currentReds);
+  const partners = companionsOf(author.id, data.authors, data.authorReports, items);
+  const invs = (api?.targets || []).filter((t) => t.authorId === author.id)
+    .map((t) => api!.investigations.find((i) => i.id === t.investigationId)).filter((i) => i && (i.status === "Em andamento" || i.status === "Suspensa")) as NonNullable<InvestigationsApi["investigations"][number]>[];
+  if (!past.length && !partners.length && !invs.length) return null;
+  const last = past.find((h) => h.date);
+  return (
+    <div className="mt-2 rounded-sm border-l-4 border-status-late bg-red-50 px-3 py-2 text-sm">
+      <p className="flex items-center gap-1.5 font-black uppercase text-status-late"><AlertTriangle className="h-4 w-4" />Alvo conhecido — reaparecimento</p>
+      <ul className="mt-1 space-y-0.5 text-pm-ink">
+        {past.length > 0 && <li><b>{past.length} BO(s) anterior(es)</b>{last ? `, o último em ${formatBR(last.date)}` : ""}{past.length >= 2 ? " — reincidente" : ""}.</li>}
+        {partners.length > 0 && <li>Já esteve junto com: {partners.slice(0, 5).map((c) => `${c.author.name}${c.occurrences.length > 1 ? ` (${c.occurrences.length}×)` : ""}${c.arrestedTogether ? " — preso junto" : ""}`).join("; ")}{partners.length > 5 ? ` e mais ${partners.length - 5}` : ""}.</li>}
+        {invs.length > 0 && <li>Está em investigação aberta: {invs.map((i) => `${i.code} — ${i.title}`).join("; ")}.</li>}
+      </ul>
+      {invs.length > 0 && !invs.some((i) => i.id === invId) && (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {invs.map((i) => <Button key={i.id} size="sm" variant="primary" onClick={() => onLink(i.id)}><FolderLock />Ligar este BO à {i.code}</Button>)}
+        </div>
+      )}
+      {invs.some((i) => i.id === invId) && <p className="mt-1 text-xs font-semibold text-status-done">Este BO será ligado à {invs.find((i) => i.id === invId)!.code} ao salvar.</p>}
+    </div>
   );
 }

@@ -22,7 +22,7 @@ import { DuplicatesModal, MergeModal, MergePicker, findDuplicates } from "../com
 const EMPTY_AUTHOR = { name: "", alias: "", motherName: "", fatherName: "", birthDate: "", document: "", address: "", neighborhood: "", city: "Belo Horizonte", crimes: "", categoryId: "", status: "Suspeito", riskLevel: "Médio", notes: "" };
 const riskTone = (risk: string) => (risk === "Alto" ? "late" : risk === "Médio" ? "risk" : "done") as any;
 
-export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: AppData; api?: InvestigationsApi; onOpenInvestigation?: (id: string) => void; notify: (text: string, tone?: any) => void }) {
+export function TargetsView({ data, api, onOpenInvestigation, notify, focusId, onFocusDone }: { data: AppData; api?: InvestigationsApi; onOpenInvestigation?: (id: string) => void; notify: (text: string, tone?: any) => void; focusId?: string; onFocusDone?: () => void }) {
   const intake = useIntake(data, notify, data.permissions.targets);
   const [linksOpen, setLinksOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
@@ -37,6 +37,13 @@ export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: 
   const [moving, setMoving] = useState<string[]>([]);
   const [menu, setMenu] = useState<{ kind: "card"; author: Author; at: { x: number; y: number } } | { kind: "folder"; folder: AuthorCategory; at: { x: number; y: number } } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
+  // Vindo de outra tela (ex.: rede de vínculos): abre a ficha do alvo.
+  useEffect(() => {
+    if (!focusId) return;
+    const a = data.authors.find((x) => x.id === focusId);
+    if (a) setFicha(a);
+    onFocusDone?.();
+  }, [focusId]); // eslint-disable-line react-hooks/exhaustive-deps
   const [folderModal, setFolderModal] = useState<{ open: boolean; folder: AuthorCategory | null }>({ open: false, folder: null });
   const [dragOver, setDragOver] = useState("");
   const [merging, setMerging] = useState<Author[]>([]);

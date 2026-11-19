@@ -67,6 +67,8 @@ export type Author = {
 export type AuthorFile = {
   id: string; authorId: string; fileName: string; filePath: string; fileSize: number;
   mimeType: string; description: string; uploadedBy: string; createdAt: string;
+  /** Só nos BOs anexados ao card: dados do fato (para mapa e linha do tempo). */
+  reds?: string; lat?: number | null; lng?: number | null; geoSource?: string; place?: string; crime?: string; eventDate?: string; eventTime?: string;
 };
 
 /** Status exibido: concluída/paralisada ficam como estão; as demais seguem o prazo. */
@@ -185,6 +187,8 @@ export function normalizeAuthorFile(row: any): AuthorFile {
   return {
     id: row.id, authorId: row.author_id, fileName: row.file_name, filePath: row.file_path, fileSize: row.file_size || 0,
     mimeType: row.mime_type || "", description: row.description || "", uploadedBy: row.uploaded_by || "", createdAt: row.created_at,
+    reds: row.reds || "", lat: row.lat ?? null, lng: row.lng ?? null, geoSource: row.geo_source || "", place: row.place || "", crime: row.crime || "",
+    eventDate: row.event_date || "", eventTime: row.event_time || "",
   };
 }
 
