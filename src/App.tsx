@@ -28,14 +28,17 @@ import { TVPanel } from "./views/TVPanel";
 import { InvestigationsView } from "./views/InvestigationsView";
 import { InvestigationDetail } from "./views/InvestigationDetail";
 import { IntakePublicView } from "./views/IntakePublicView";
+import { NetworkView } from "./views/NetworkView";
 
 const CrimeMap = lazy(() => import("./views/CrimeMap"));
+import { reportsAsItems } from "./lib/reportItems";
 
 const TITLES: Record<View, [string, string]> = {
   painel: ["Painel operacional", "Calendário e demandas do dia"],
   tarefas: ["Demandas", "Todas as demandas com filtros e pesquisa"],
   workflow: ["Workflow", "Etapas das demandas"],
   investigacoes: ["Investigações", "Linhas de investigação e dossiês de inteligência"],
+  rede: ["Rede de vínculos", "Alvos ligados por BOs em comum e pelas investigações"],
   mapa: ["Mapa criminal", "Fatos de todas as investigações, com filtros e análises espaciais"],
   dashboard: ["Dashboard", "Indicadores de produtividade e prazos"],
   alvos: ["Banco de alvos", "Autores e suspeitos por modalidade"],
@@ -69,6 +72,7 @@ function AuthenticatedApp() {
   const [tvOpen, setTvOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [audienciaOpen, setAudienciaOpen] = useState(false);
+  const [targetFocus, setTargetFocus] = useState("");
 
   const openCreate = useCallback((date: string) => setTaskForm({ open: true, task: null, date }), []);
   const openEdit = useCallback((task: Task) => setTaskForm({ open: true, task, date: task.date }), []);
@@ -91,7 +95,7 @@ function AuthenticatedApp() {
 
   // Garante que um perfil sem permissão não fique numa tela restrita.
   const allowed: Record<View, boolean> = {
-    painel: true, tarefas: true, workflow: true, investigacoes: data.permissions.investigations, mapa: data.permissions.investigations, dashboard: data.permissions.dashboard, alvos: data.permissions.targets,
+    painel: true, tarefas: true, workflow: true, investigacoes: data.permissions.investigations, mapa: data.permissions.investigations, rede: data.permissions.targets, dashboard: data.permissions.dashboard, alvos: data.permissions.targets,
     usuarios: data.permissions.users, auditoria: data.permissions.audit,
   };
   const current: View = allowed[view] ? view : "painel";
@@ -137,11 +141,14 @@ function AuthenticatedApp() {
               : <InvestigationsView data={data} api={investigations} onOpen={(inv) => { setOpenInvestigationId(inv.id); window.scrollTo({ top: 0 }); }} createOpen={newInvestigationOpen} setCreateOpen={setNewInvestigationOpen} />)}
             {current === "mapa" && (
               <Suspense fallback={<div className="flex items-center gap-3 py-20 text-pm-muted"><Loader2 className="h-5 w-5 animate-spin" />Carregando o mapa…</div>}>
-                <CrimeMap data={data} api={investigations} items={investigations.items} investigations={investigations.investigations} height="72vh" />
+                <CrimeMap data={data} api={investigations} items={[...investigations.items, ...reportsAsItems(data.authorReports)]} investigations={investigations.investigations} height="72vh" />
               </Suspense>
             )}
+            {current === "rede" && <NetworkView data={data} api={data.permissions.investigations ? investigations : undefined}
+              onOpenInTargets={(id) => { setTargetFocus(id); setView("alvos"); }}
+              onOpenInvestigation={(id) => { setView("investigacoes"); setOpenInvestigationId(id); window.scrollTo({ top: 0 }); }} />}
             {current === "dashboard" && <DashboardView data={data} />}
-            {current === "alvos" && <TargetsView notify={notify} data={data} api={data.permissions.investigations ? investigations : undefined} onOpenInvestigation={(id) => { setView("investigacoes"); setOpenInvestigationId(id); window.scrollTo({ top: 0 }); }} />}
+            {current === "alvos" && <TargetsView focusId={targetFocus} onFocusDone={() => setTargetFocus("")} notify={notify} data={data} api={data.permissions.investigations ? investigations : undefined} onOpenInvestigation={(id) => { setView("investigacoes"); setOpenInvestigationId(id); window.scrollTo({ top: 0 }); }} />}
             {current === "usuarios" && <UsersView data={data} />}
             {current === "auditoria" && <AuditView data={data} />}
           </ErrorBoundary>

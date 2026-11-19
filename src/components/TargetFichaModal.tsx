@@ -1,5 +1,8 @@
-import { useState } from "react";
-import { Camera, Users, Download, Edit3, FileText, FolderInput, FolderLock, Image as ImageIcon, Link2, Loader2, MapPin, MessageCircle, Paperclip, Share2, Trash2, Upload, UserRound } from "lucide-react";
+import { Suspense, lazy, useState } from "react";
+import { reportsAsItems } from "../lib/reportItems";
+
+const CrimeMap = lazy(() => import("../views/CrimeMap"));
+import { Camera, Users, Download, Map as MapIcon, Clock3, Edit3, FileText, FolderInput, FolderLock, Image as ImageIcon, Link2, Loader2, MapPin, MessageCircle, Paperclip, Share2, Trash2, Upload, UserRound } from "lucide-react";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import { Select } from "./ui/input";
@@ -48,6 +51,8 @@ type Props = {
 /** Ficha detalhada do alvo, com geração do PDF e compartilhamento. */
 export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, onShareMessage, onOpenInvestigation, onOpenAuthor }: Props) {
   const [busy, setBusy] = useState<"" | "share" | "download">("");
+  const [histView, setHistView] = useState<"linha" | "tabela">("linha");
+  const [mapOpen, setMapOpen] = useState(false);
   const [linkInv, setLinkInv] = useState({ id: "", role: "Associado" });
   if (!author) return null;
   const a = data.authors.find((x) => x.id === author.id) || author;
@@ -67,9 +72,10 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
   const history = redsCount(a.id, data.authors, data.authorReports, allItems).map((h) => {
     const item = allItems.find((i) => i.reference && i.reference.includes(h.reds) && i.authorIds.includes(a.id)) || allItems.find((i) => i.reference && i.reference.includes(h.reds));
     const n = fromNotes(h.reds, notesOf(a));
+    const rep = data.authorReports.find((r) => r.reds === h.reds && (r.crime || r.place || r.eventDate));
     return {
-      reds: h.reds, date: item?.itemDate || h.date, time: item?.eventTime || "", role: h.role,
-      crime: item ? item.crime || item.title.split(" — ")[0] : n.crime, place: item?.place || n.place,
+      reds: h.reds, date: item?.itemDate || rep?.eventDate || h.date, time: item?.eventTime || rep?.eventTime || "", role: h.role,
+      crime: item ? item.crime || item.title.split(" — ")[0] : rep?.crime || n.crime, place: item?.place || rep?.place || n.place,
       inv: item ? api?.investigations.find((i) => i.id === item.investigationId)?.code || "" : "",
     };
   });
@@ -158,6 +164,7 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
               <Button size="sm" onClick={downloadPdf} disabled={Boolean(busy)}>{busy === "download" ? <Loader2 className="animate-spin" /> : <Download />}Baixar PDF</Button>
               <Button size="sm" onClick={() => onEdit(a)}><Edit3 />Editar</Button>
               <Button size="sm" onClick={() => onMove(a)}><FolderInput />Mover</Button>
+              {api && <Button size="sm" onClick={() => setMapOpen(true)}><MapIcon />Ver no mapa</Button>}
               <Button size="sm" variant="danger" onClick={async () => { if (await data.deleteAuthor(a)) onClose(); }}><Trash2 />Excluir</Button>
             </div>
             <div className="grid gap-2 text-sm sm:grid-cols-2">
@@ -227,19 +234,26 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
 
         {history.length > 0 && (
           <div className="overflow-x-auto rounded-sm border border-pm-line bg-white p-3">
-            <p className="pm-label flex items-center gap-1.5"><FileText className="h-3.5 w-3.5 text-pm-gold-dark" />Histórico de BOs ({history.length}){history.length >= 3 && <Badge tone="late" className="ml-1">Reincidente</Badge>}</p>
-            <table className="w-full text-sm">
-              <thead><tr className="text-left text-[11px] uppercase tracking-wider text-pm-muted"><th className="py-1 pr-3">Data</th><th className="py-1 pr-3">Natureza</th><th className="py-1 pr-3">Papel</th><th className="py-1 pr-3">REDS</th><th className="py-1">Local</th></tr></thead>
-              <tbody>{history.map((o) => (
-                <tr key={o.reds} className="border-t border-pm-line align-top">
-                  <td className="whitespace-nowrap py-1.5 pr-3">{o.date ? formatBR(o.date) : "—"}{o.time ? ` ${o.time}` : ""}</td>
-                  <td className="py-1.5 pr-3 font-semibold">{o.crime || "—"}</td>
-                  <td className="py-1.5 pr-3">{o.role || "—"}</td>
-                  <td className="whitespace-nowrap py-1.5 pr-3">{o.reds}</td>
-                  <td className="py-1.5">{o.place || "—"}{o.inv ? <span className="block text-xs text-pm-muted">{o.inv}</span> : null}</td>
-                </tr>
-              ))}</tbody>
-            </table>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <p className="pm-label !mb-0 flex items-center gap-1.5"><FileText className="h-3.5 w-3.5 text-pm-gold-dark" />Histórico de BOs ({history.length}){history.length >= 3 && <Badge tone="late" className="ml-1">Reincidente</Badge>}</p>
+              <div className="ml-auto flex rounded-sm border border-pm-line text-[11px] font-bold uppercase">
+                {(["linha", "tabela"] as const).map((v) => <button key={v} type="button" onClick={() => setHistView(v)} className={`px-2.5 py-1 ${histView === v ? "bg-pm-black text-white" : "hover:bg-pm-cream"}`}>{v === "linha" ? "Linha do tempo" : "Tabela"}</button>)}
+              </div>
+            </div>
+            {histView === "linha" ? <Timeline history={history} companions={companions} createdAt={a.createdAt} photos={photos.map((p) => p.createdAt)} /> : (
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-[11px] uppercase tracking-wider text-pm-muted"><th className="py-1 pr-3">Data</th><th className="py-1 pr-3">Natureza</th><th className="py-1 pr-3">Papel</th><th className="py-1 pr-3">REDS</th><th className="py-1">Local</th></tr></thead>
+                <tbody>{history.map((o) => (
+                  <tr key={o.reds} className="border-t border-pm-line align-top">
+                    <td className="whitespace-nowrap py-1.5 pr-3">{o.date ? formatBR(o.date) : "—"}{o.time ? ` ${o.time}` : ""}</td>
+                    <td className="py-1.5 pr-3 font-semibold">{o.crime || "—"}</td>
+                    <td className="py-1.5 pr-3">{o.role || "—"}</td>
+                    <td className="whitespace-nowrap py-1.5 pr-3">{o.reds}</td>
+                    <td className="py-1.5">{o.place || "—"}{o.inv ? <span className="block text-xs text-pm-muted">{o.inv}</span> : null}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            )}
           </div>
         )}
 
@@ -270,6 +284,70 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
           </div>
         </div>
       </div>
+      {mapOpen && (
+        <Modal open={mapOpen} onClose={() => setMapOpen(false)} size="xl" eyebrow={`Mapa · ${a.name}`} title="Fatos do alvo no mapa">
+          <Suspense fallback={<div className="flex items-center gap-2 py-16 text-pm-muted"><Loader2 className="h-5 w-5 animate-spin" />Carregando o mapa…</div>}>
+            <CrimeMap data={data} api={api!} height="60vh"
+              items={[...allItems.filter((i) => i.authorIds.includes(a.id)), ...reportsAsItems(data.authorReports.filter((r) => r.authorId === a.id || (r.reds && history.some((h) => h.reds === r.reds))))]} />
+          </Suspense>
+          <p className="mt-2 text-xs text-pm-muted">Inclui os BOs anexados ao card e os das investigações. Fatos sem local: aba <b>Localizar</b> (lê a coordenada do PDF do REDS ou marque no mapa). Marque a residência para ver a distância casa → fato.</p>
+        </Modal>
+      )}
     </Modal>
+  );
+}
+
+type HistoryRow = { reds: string; date: string; time: string; role: string; crime: string; place: string; inv: string };
+
+const days = (a: string, b: string) => Math.round((new Date(`${b}T12:00:00`).getTime() - new Date(`${a}T12:00:00`).getTime()) / 86400000);
+const span = (d: number) => (d >= 365 ? `${(d / 365).toFixed(1).replace(".", ",")} ano(s)` : d >= 60 ? `${Math.round(d / 30)} meses` : `${d} dia(s)`);
+
+/** Linha do tempo do alvo: BOs em ordem, intervalo entre eles e quem estava junto. */
+function Timeline({ history, companions, createdAt, photos }: { history: HistoryRow[]; companions: ReturnType<typeof companionsOf>; createdAt: string; photos: string[] }) {
+  const dated = history.filter((h) => h.date).sort((x, y) => `${x.date} ${x.time}`.localeCompare(`${y.date} ${y.time}`));
+  const undated = history.filter((h) => !h.date);
+  const gaps = dated.slice(1).map((h, i) => days(dated[i].date, h.date));
+  const avg = gaps.length ? Math.round(gaps.reduce((s, g) => s + g, 0) / gaps.length) : 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const sinceLast = dated.length ? days(dated[dated.length - 1].date, today) : 0;
+  const withWhom = (reds: string) => companions.filter((c) => c.occurrences.some((o) => o.reds === reds)).map((c) => c.author.name);
+  const arrested = (role: string) => /PRES|CONDUZ|AUTUAD|FLAGRANTE/i.test(role);
+  return (
+    <div>
+      {dated.length > 0 && (
+        <div className="mb-3 grid gap-2 text-xs sm:grid-cols-4">
+          <div className="rounded-sm bg-pm-cream px-2 py-1.5"><b className="block text-base">{dated.length}</b>BOs com data</div>
+          <div className="rounded-sm bg-pm-cream px-2 py-1.5"><b className="block text-base">{formatBR(dated[0].date)}</b>primeiro registro</div>
+          <div className="rounded-sm bg-pm-cream px-2 py-1.5"><b className="block text-base">{avg ? span(avg) : "—"}</b>intervalo médio entre BOs</div>
+          <div className={`rounded-sm px-2 py-1.5 ${sinceLast <= 30 ? "bg-red-50 text-status-late" : "bg-pm-cream"}`}><b className="block text-base">{span(Math.max(0, sinceLast))}</b>desde o último BO</div>
+        </div>
+      )}
+      <ol className="relative ml-2 border-l-2 border-pm-gold/50">
+        {dated.map((h, i) => {
+          const gap = i > 0 ? days(dated[i - 1].date, h.date) : null;
+          const people = withWhom(h.reds);
+          return (
+            <li key={h.reds} className="relative mb-3 pl-5">
+              {gap !== null && <span className="mb-1 block text-[11px] font-bold uppercase text-pm-muted">+ {span(gap)} depois</span>}
+              <span className={`absolute -left-[9px] top-1.5 h-4 w-4 rounded-full border-2 border-white ${arrested(h.role) ? "bg-status-late" : "bg-pm-gold"}`} style={gap !== null ? { top: "1.6rem" } : undefined} />
+              <p className="text-sm"><b>{formatBR(h.date)}{h.time ? ` ${h.time}` : ""}</b> — <b className="uppercase">{h.crime || "BO"}</b>{h.role ? <span className="text-pm-muted"> · {h.role}</span> : null}{arrested(h.role) && <Badge tone="late" className="ml-1">preso/conduzido</Badge>}</p>
+              <p className="text-xs text-pm-muted">REDS {h.reds}{h.place ? ` · ${h.place}` : ""}{h.inv ? ` · ${h.inv}` : ""}</p>
+              {people.length > 0 && <p className="text-xs"><Users className="mr-1 inline h-3 w-3 text-pm-gold-dark" />Junto com: {people.join(", ")}</p>}
+            </li>
+          );
+        })}
+        {undated.length > 0 && (
+          <li className="relative mb-2 pl-5">
+            <span className="absolute -left-[9px] top-1.5 h-4 w-4 rounded-full border-2 border-white bg-pm-line" />
+            <p className="text-sm font-bold">Sem data ({undated.length})</p>
+            <p className="text-xs text-pm-muted">{undated.map((h) => `REDS ${h.reds}`).join(" · ")}</p>
+          </li>
+        )}
+        <li className="relative pl-5">
+          <span className="absolute -left-[7px] top-1 h-3 w-3 rounded-full bg-pm-black" />
+          <p className="text-xs text-pm-muted"><Clock3 className="mr-1 inline h-3 w-3" />Card criado em {formatDateTimeBR(createdAt)}{photos.length ? ` · ${photos.length} foto(s)` : ""}.</p>
+        </li>
+      </ol>
+    </div>
   );
 }

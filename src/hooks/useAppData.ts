@@ -58,6 +58,29 @@ function storageErrorText(error: any) {
   return msg || "erro desconhecido.";
 }
 
+export type ReportGeo = { lat?: number | null; lng?: number | null; geoSource?: string; place?: string; crime?: string; eventDate?: string; eventTime?: string; reds?: string };
+
+function reportGeoRow(g: ReportGeo) {
+  const row: Record<string, any> = {};
+  if ("lat" in g) row.lat = g.lat ?? null;
+  if ("lng" in g) row.lng = g.lng ?? null;
+  if (g.geoSource !== undefined) row.geo_source = g.geoSource || null;
+  if (g.place !== undefined) row.place = g.place || null;
+  if (g.crime !== undefined) row.crime = g.crime || null;
+  if (g.eventDate !== undefined) row.event_date = g.eventDate || null;
+  if (g.eventTime !== undefined) row.event_time = g.eventTime || null;
+  if (g.reds !== undefined) row.reds = g.reds || null;
+  return row;
+}
+
+function toRowFile(f: AuthorFile) {
+  return {
+    id: f.id, author_id: f.authorId, file_name: f.fileName, file_path: f.filePath, file_size: f.fileSize, mime_type: f.mimeType, description: f.description,
+    uploaded_by: f.uploadedBy, created_at: f.createdAt, reds: f.reds, lat: f.lat, lng: f.lng, geo_source: f.geoSource, place: f.place, crime: f.crime,
+    event_date: f.eventDate, event_time: f.eventTime,
+  };
+}
+
 function readSession(): Session | null {
   try {
     localStorage.removeItem(LEGACY_SESSION_KEY); // sessão antiga (sem token) não vale mais
@@ -610,6 +633,16 @@ export function useAppData(notify: Notify) {
     return true;
   }
 
+  /** Local e dados do fato de um BO anexado ao card (mapa e linha do tempo). */
+  async function setReportGeo(reportId: string, geo: ReportGeo, silent = false) {
+    const row = reportGeoRow(geo);
+    const { error } = await supabase.from("author_reports").update(row).eq("id", reportId);
+    if (error) { notify("Erro ao gravar o local do BO.", "error"); return false; }
+    setAuthorReports((list) => list.map((r) => (r.id === reportId ? normalizeAuthorFile({ ...toRowFile(r), ...row }) : r)));
+    if (!silent) notify(geo.lat === null ? "Local removido do mapa." : "Local gravado no mapa.");
+    return true;
+  }
+
   /** Residência do alvo no mapa (null apaga). */
   async function setAuthorHome(author: Author, point: { lat: number; lng: number } | null) {
     const { error } = await supabase.from("crime_authors").update({ home_lat: point?.lat ?? null, home_lng: point?.lng ?? null }).eq("id", author.id);
@@ -639,7 +672,7 @@ export function useAppData(notify: Notify) {
     return true;
   }
 
-  async function uploadAuthorFile(author: { id: string; name: string }, file: File | undefined | null, kind: "photo" | "report" = "report", options: { silent?: boolean; description?: string; noAudit?: boolean } = {}) {
+  async function uploadAuthorFile(author: { id: string; name: string }, file: File | undefined | null, kind: "photo" | "report" = "report", options: { silent?: boolean; description?: string; noAudit?: boolean; geo?: ReportGeo } = {}) {
     if (!file || !author?.id) return false;
     const table = kind === "photo" ? "author_photos" : "author_reports";
     const path = `${author.id}/${kind === "photo" ? "fotos" : "relatorios"}/${Date.now()}-${safeFileName(file.name)}`;
@@ -648,6 +681,7 @@ export function useAppData(notify: Notify) {
     const { error } = await supabase.from(table).insert({
       author_id: author.id, file_name: file.name, file_path: path, file_size: file.size, mime_type: file.type, uploaded_by: currentUser?.id || null,
       description: options.description || null,
+      ...(kind === "report" && options.geo ? reportGeoRow(options.geo) : {}),
     });
     if (error) { notify("Arquivo enviado, mas houve erro ao registrar no banco.", "error"); return false; }
     if (!options.noAudit) await addAudit(kind === "photo" ? "Foto anexada" : "Relatório anexado", `Anexou ${file.name} no card: ${author.name}.`);
@@ -741,7 +775,7 @@ export function useAppData(notify: Notify) {
     // workflow
     addWorkflow, deleteWorkflow, moveWorkflow,
     // alvos
-    getIntelFileUrl, addAuthorCategory, updateAuthorCategory, moveAuthors, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, setAuthorHome, mergeAuthors, uploadAuthorFile, deleteAuthorPhoto, importTrelloBoard,
+    getIntelFileUrl, addAuthorCategory, updateAuthorCategory, moveAuthors, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, setAuthorHome, setReportGeo, mergeAuthors, uploadAuthorFile, deleteAuthorPhoto, importTrelloBoard,
   };
 }
 

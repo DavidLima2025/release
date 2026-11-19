@@ -30,10 +30,11 @@ export function indexReds(authors: Author[], reports: AuthorFile[], items: Inves
   const known = new Set(authors.map((a) => a.id));
   for (const r of reports) {
     if (!known.has(r.authorId)) continue;
-    const text = `${r.description} ${r.fileName}`;
-    for (const m of text.matchAll(REDS)) {
-      const role = (r.description.split("—")[1] || "").trim();
-      add(m[1], r.authorId, role);
+    const text = `${r.reds || ""} ${r.description} ${r.fileName}`;
+    const role = (r.description.split("—")[1] || "").trim();
+    for (const reds of new Set([...text.matchAll(REDS)].map((m) => m[1]))) {
+      add(reds, r.authorId, role);
+      if (r.eventDate && !dates.has(reds)) dates.set(reds, r.eventDate);
     }
   }
   for (const a of authors) {
