@@ -11,6 +11,7 @@ export type FichaInput = {
   investigations: { code: string; title: string; role: string }[];
   occurrences: { date: string; time: string; crime: string; reference: string; place: string; inv: string }[];
   attachments: string[];
+  companions?: { name: string; alias: string; together: string; reds: string }[];
   generatedBy: string; generatedAt: string;
 };
 
@@ -172,8 +173,17 @@ export async function renderFicha(input: FichaInput): Promise<Uint8Array> {
     for (const inv of input.investigations) paragraph(`${inv.code} — ${inv.title} (papel: ${inv.role})`);
   }
 
+  if (input.companions?.length) {
+    section(`Envolvidos juntos (${input.companions.length})`);
+    for (const c of input.companions) {
+      paragraph(`${c.name}${c.alias ? ` ("${c.alias}")` : ""} — ${c.together}`, 10, bold);
+      paragraph(`REDS: ${c.reds}`, 9, regular, MUTED);
+      y -= 2;
+    }
+  }
+
   if (input.occurrences.length) {
-    section(`Ocorrências vinculadas (${input.occurrences.length})`);
+    section(`Histórico de BOs (${input.occurrences.length})${input.occurrences.length >= 3 ? " — reincidente" : ""}`);
     const cols = [62, 34, 118, 0];
     cols[3] = CW - cols[0] - cols[1] - cols[2];
     const head = ["DATA", "HORA", "NATUREZA / REDS", "LOCAL"];
