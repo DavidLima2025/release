@@ -81,7 +81,7 @@ export function TargetsView({ data, api, onOpenInvestigation, notify, focusId, o
   const submit = async () => {
     if (editing) {
       if (!(await data.updateAuthor(editing.id, form))) return;
-      if (photo) await data.uploadAuthorFile(editing, photo, "photo");
+      if (photo) await data.uploadAuthorFile(editing, photo, "photo", { cover: true });
     } else {
       const created = await data.addAuthor(form);
       if (!created) return;
@@ -273,7 +273,7 @@ export function TargetsView({ data, api, onOpenInvestigation, notify, focusId, o
           <Field label="Crimes / modus operandi" className="md:col-span-2"><Input value={form.crimes} onChange={(e) => set("crimes", e.target.value)} /></Field>
           <Field label="Risco"><Select value={form.riskLevel} onChange={(e) => set("riskLevel", e.target.value)}>{["Baixo", "Médio", "Alto"].map((s) => <option key={s}>{s}</option>)}</Select></Field>
           <Field label="Observações / vínculos" className="md:col-span-2"><Textarea rows={4} value={form.notes} onChange={(e) => set("notes", e.target.value)} /></Field>
-          <Field label="Foto">
+          <Field label={editing ? "Nova foto de capa" : "Foto"}>
             <label className="flex h-[118px] cursor-pointer flex-col items-center justify-center gap-1 rounded-sm border border-dashed border-pm-line bg-white text-center text-xs text-pm-muted hover:border-pm-gold">
               <Camera className="h-5 w-5 text-pm-gold-dark" /><span className="px-2 font-semibold text-pm-ink">{photo ? photo.name : "Escolher foto"}</span>
               <input type="file" accept="image/*" className="hidden" onChange={(e) => setPhoto(e.target.files?.[0] || null)} />
