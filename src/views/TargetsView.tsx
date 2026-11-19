@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type * as React from "react";
 import { Camera, Check, CheckSquare, Combine, Edit3, Eye, FolderInput, FolderOpen, Images, Inbox, Link2, MessageCircle, MoreVertical, Plus, ScanText, Search, Trash2, Upload, UserPlus, UserRound, X } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -16,6 +16,7 @@ import { ShareTargetModal } from "../components/ShareTargetModal";
 import { useIntake } from "../hooks/useIntake";
 import { ContextMenu, FolderModal, MenuItem, MoveModal } from "../components/TargetParts";
 import { TargetFichaModal } from "../components/TargetFichaModal";
+import { indexReds } from "../lib/companions";
 import { DuplicatesModal, MergeModal, MergePicker, findDuplicates } from "../components/MergeAuthors";
 
 const EMPTY_AUTHOR = { name: "", alias: "", motherName: "", fatherName: "", birthDate: "", document: "", address: "", neighborhood: "", city: "Belo Horizonte", crimes: "", categoryId: "", status: "Suspeito", riskLevel: "Médio", notes: "" };
@@ -42,6 +43,17 @@ export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: 
   const [dupOpen, setDupOpen] = useState(false);
   const [mergeWith, setMergeWith] = useState<Author | null>(null);
   const dupCount = useMemo(() => findDuplicates(authors).length, [authors]);
+  // Quantos BOs cada alvo tem e com quantos parceiros já apareceu.
+  const bosByAuthor = useMemo(() => {
+    const { byReds } = indexReds(authors, data.authorReports, api?.items || []);
+    const count = new Map<string, { bos: number; partners: Set<string> }>();
+    for (const people of byReds.values()) for (const id of people.keys()) {
+      const c = count.get(id) || { bos: 0, partners: new Set<string>() };
+      c.bos += 1; people.forEach((_, other) => other !== id && c.partners.add(other));
+      count.set(id, c);
+    }
+    return count;
+  }, [authors, data.authorReports, api?.items]);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Author | null>(null);
   const [form, setForm] = useState(EMPTY_AUTHOR);
@@ -91,6 +103,14 @@ export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: 
 
   const toggleSel = (id: string) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const openCardMenu = (e: React.MouseEvent, a: Author) => { e.preventDefault(); setMenu({ kind: "card", author: a, at: { x: e.clientX, y: e.clientY } }); };
+  // Clique simples abre o menu (com um instante de espera para o clique duplo abrir a ficha direto).
+  const clickTimer = useRef<number>();
+  const cardClick = (e: React.MouseEvent, a: Author) => {
+    const at = { x: e.clientX, y: e.clientY };
+    window.clearTimeout(clickTimer.current);
+    if (e.detail > 1) return;
+    clickTimer.current = window.setTimeout(() => setMenu({ kind: "card", author: a, at }), 230);
+  };
   const openFolderMenu = (e: React.MouseEvent, f: AuthorCategory) => { e.preventDefault(); e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenu({ kind: "folder", folder: f, at: e.type === "contextmenu" ? { x: e.clientX, y: e.clientY } : { x: r.left, y: r.bottom + 4 } }); };
   const dropOn = async (e: React.DragEvent, folder: string | null) => {
     e.preventDefault(); setDragOver("");
@@ -186,9 +206,9 @@ export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: 
               return (
                 <div key={author.id} role="button" tabIndex={0} draggable
                   onDragStart={(e) => { const ids = checked ? [...sel] : [author.id]; e.dataTransfer.setData("text/x-alvos", ids.join(",")); e.dataTransfer.effectAllowed = "move"; }}
-                  onClick={(e) => (sel.size ? toggleSel(author.id) : openCardMenu(e, author))}
+                  onClick={(e) => (sel.size ? toggleSel(author.id) : cardClick(e, author))}
                   onContextMenu={(e) => openCardMenu(e, author)}
-                  onDoubleClick={() => { setMenu(null); setFicha(author); }}
+                  onDoubleClick={() => { window.clearTimeout(clickTimer.current); setMenu(null); if (!sel.size) setFicha(author); }}
                   onKeyDown={(e) => { if (e.key === "Enter") setFicha(author); }}
                   className={`group relative flex cursor-pointer select-none gap-3 rounded-sm border bg-white p-2.5 text-left transition hover:border-pm-gold ${checked ? "border-pm-gold ring-2 ring-pm-gold" : menuOpen ? "border-pm-black" : "border-pm-line"}`}>
                   <button type="button" aria-label={checked ? "Desmarcar" : "Selecionar"} onClick={(e) => { e.stopPropagation(); toggleSel(author.id); }}
@@ -199,7 +219,10 @@ export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: 
                     {cover ? <img src={data.getIntelFileUrl(cover.filePath)} alt="" loading="lazy" draggable={false} className="h-full w-full object-cover" /> : <UserRound className="h-8 w-8 text-pm-muted" />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap gap-1"><Badge>{author.status}</Badge><Badge tone={riskTone(author.riskLevel)}>{author.riskLevel}</Badge></div>
+                    <div className="flex flex-wrap gap-1"><Badge>{author.status}</Badge><Badge tone={riskTone(author.riskLevel)}>{author.riskLevel}</Badge>
+                      {(bosByAuthor.get(author.id)?.bos || 0) > 0 && <Badge tone={(bosByAuthor.get(author.id)!.bos >= 3) ? "late" : "gold"}>{bosByAuthor.get(author.id)!.bos} BO{bosByAuthor.get(author.id)!.bos > 1 ? "s" : ""}</Badge>}
+                      {(bosByAuthor.get(author.id)?.partners.size || 0) > 0 && <Badge tone="dark">{bosByAuthor.get(author.id)!.partners.size} parceiro(s)</Badge>}
+                    </div>
                     <p className="mt-1 truncate font-black uppercase">{author.name}</p>
                     <p className="truncate text-sm text-pm-muted">Vulgo: {author.alias || "—"}</p>
                     <p className="mt-1 line-clamp-2 text-xs text-pm-muted">{folderId === "all" ? folderName(author.categoryId) : author.crimes || folderName(author.categoryId)}</p>
@@ -212,7 +235,7 @@ export function TargetsView({ data, api, onOpenInvestigation, notify }: { data: 
         </CardContent>
       </Card>
 
-      <TargetFichaModal author={ficha} data={data} api={api} onClose={() => setFicha(null)} onEdit={openEdit} onMove={(a) => setMoving([a.id])} onShareMessage={(a) => setSharing(a)} onOpenInvestigation={onOpenInvestigation} />
+      <TargetFichaModal author={ficha} data={data} api={api} onClose={() => setFicha(null)} onEdit={openEdit} onMove={(a) => setMoving([a.id])} onShareMessage={(a) => setSharing(a)} onOpenInvestigation={onOpenInvestigation} onOpenAuthor={(o) => setFicha(o)} />
       <DuplicatesModal open={dupOpen} data={data} onClose={() => setDupOpen(false)} onMerge={(list) => setMerging(list)} />
       <MergePicker author={mergeWith} data={data} onClose={() => setMergeWith(null)} onPick={(other) => { const a = mergeWith!; setMergeWith(null); setMerging([a, other]); }} />
       <MergeModal open={merging.length > 1} authors={merging} data={data} onClose={() => setMerging([])} onDone={() => setSel(new Set())} />

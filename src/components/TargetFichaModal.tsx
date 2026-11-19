@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Camera, Download, Edit3, FileText, FolderInput, FolderLock, Image as ImageIcon, Link2, Loader2, MapPin, MessageCircle, Paperclip, Share2, Trash2, Upload, UserRound } from "lucide-react";
+import { Camera, Users, Download, Edit3, FileText, FolderInput, FolderLock, Image as ImageIcon, Link2, Loader2, MapPin, MessageCircle, Paperclip, Share2, Trash2, Upload, UserRound } from "lucide-react";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import { Select } from "./ui/input";
@@ -11,6 +11,7 @@ import { formatBytes } from "../lib/domain";
 import { formatBR, formatDateTimeBR } from "../lib/dates";
 import { TARGET_ROLES, stageOf } from "../lib/investigation";
 import type { ReportImage } from "../lib/report/model";
+import { companionsOf, redsCount } from "../lib/companions";
 
 const riskTone = (risk: string) => (risk === "Alto" ? "late" : risk === "Médio" ? "risk" : "done") as any;
 
@@ -41,10 +42,11 @@ type Props = {
   author: Author | null; data: AppData; api?: InvestigationsApi;
   onClose: () => void; onEdit: (a: Author) => void; onMove: (a: Author) => void; onShareMessage: (a: Author) => void;
   onOpenInvestigation?: (id: string) => void;
+  onOpenAuthor?: (a: Author) => void;
 };
 
 /** Ficha detalhada do alvo, com geração do PDF e compartilhamento. */
-export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, onShareMessage, onOpenInvestigation }: Props) {
+export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, onShareMessage, onOpenInvestigation, onOpenAuthor }: Props) {
   const [busy, setBusy] = useState<"" | "share" | "download">("");
   const [linkInv, setLinkInv] = useState({ id: "", role: "Associado" });
   if (!author) return null;
@@ -55,10 +57,23 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
   const canInv = Boolean(api && data.permissions.investigations);
   const linked = canInv ? api!.targets.filter((t) => t.authorId === a.id).map((t) => ({ t, inv: api!.investigations.find((i) => i.id === t.investigationId) })).filter((x) => x.inv) : [];
   const available = canInv ? api!.investigations.filter((i) => (i.status === "Em andamento" || i.status === "Suspensa") && !linked.some((x) => x.inv!.id === i.id)) : [];
-  const occurrences = canInv
-    ? [...new Map(api!.items.filter((i) => i.authorIds.includes(a.id) && (i.kind === "Boletim de ocorrência" || i.reference)).map((i) => [i.reference || i.id, i])).values()]
-      .sort((x, y) => (y.itemDate || "").localeCompare(x.itemDate || ""))
-    : [];
+  const allItems = api?.items || [];
+  // Histórico de BOs do alvo (BOs anexados, observações e fontes das investigações).
+  const notesOf = (au: Author) => au.notes || "";
+  const fromNotes = (reds: string, text: string) => {
+    const m = text.match(new RegExp(`REDS ${reds}[^—\\n]*—\\s*(?:[A-Z]\\d{4,5}\\s*-\\s*)?([^,\\n]+?)(?:,\\s*([^\\n]+?))?\\.(?:\\n|$)`));
+    return m ? { crime: m[1].trim(), place: (m[2] || "").trim() } : { crime: "", place: "" };
+  };
+  const history = redsCount(a.id, data.authors, data.authorReports, allItems).map((h) => {
+    const item = allItems.find((i) => i.reference && i.reference.includes(h.reds) && i.authorIds.includes(a.id)) || allItems.find((i) => i.reference && i.reference.includes(h.reds));
+    const n = fromNotes(h.reds, notesOf(a));
+    return {
+      reds: h.reds, date: item?.itemDate || h.date, time: item?.eventTime || "", role: h.role,
+      crime: item ? item.crime || item.title.split(" — ")[0] : n.crime, place: item?.place || n.place,
+      inv: item ? api?.investigations.find((i) => i.id === item.investigationId)?.code || "" : "",
+    };
+  });
+  const companions = companionsOf(a.id, data.authors, data.authorReports, allItems);
 
   async function buildPdf() {
     const { loadImage } = await import("../hooks/useInvestigations");
@@ -76,9 +91,10 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
       crimes: a.crimes, notes: a.notes,
       photo: await cropPortrait(main as ReportImage | undefined), extraPhotos: extra.filter(Boolean) as ReportImage[], logo: logo as ReportImage | undefined,
       investigations: linked.map(({ t, inv }) => ({ code: inv!.code, title: inv!.title, role: t.role })),
-      occurrences: occurrences.map((o) => ({
-        date: o.itemDate, time: o.eventTime, crime: o.crime || o.title.split(" — ")[0], reference: o.reference, place: o.place,
-        inv: api?.investigations.find((i) => i.id === o.investigationId)?.code || "",
+      occurrences: history.map((o) => ({ date: o.date, time: o.time, crime: [o.crime, o.role && `(${o.role})`].filter(Boolean).join(" "), reference: o.reds, place: o.place, inv: o.inv })),
+      companions: companions.map((c) => ({
+        name: c.author.name, alias: c.author.alias, together: c.arrestedTogether ? "Preso/conduzido junto" : "Envolvido no mesmo BO",
+        reds: c.occurrences.map((o) => `${o.reds}${o.date ? ` (${formatBR(o.date)})` : ""}`).join("; "),
       })),
       attachments: reports.map((r) => r.description ? `${r.fileName} — ${r.description}` : r.fileName),
       generatedBy: data.currentUser?.warName || data.currentUser?.name || "",
@@ -179,22 +195,51 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
                 <Button size="sm" variant="primary" className="!h-9" disabled={!linkInv.id} onClick={async () => { const inv = api!.investigations.find((i) => i.id === linkInv.id); if (inv && await api!.addTarget(inv, a.id, linkInv.role)) { data.reload(); setLinkInv({ id: "", role: linkInv.role }); } }}><Link2 />Vincular</Button>
               </div>
             )}
-            {occurrences.length > 0 && (
-              <div className="mt-3 overflow-x-auto">
-                <p className="pm-label">Ocorrências vinculadas ({occurrences.length})</p>
-                <table className="w-full text-sm">
-                  <thead><tr className="text-left text-[11px] uppercase tracking-wider text-pm-muted"><th className="py-1 pr-3">Data</th><th className="py-1 pr-3">Natureza</th><th className="py-1 pr-3">REDS</th><th className="py-1">Local</th></tr></thead>
-                  <tbody>{occurrences.map((o) => (
-                    <tr key={o.id} className="border-t border-pm-line align-top">
-                      <td className="py-1.5 pr-3 whitespace-nowrap">{o.itemDate ? formatBR(o.itemDate) : "—"}{o.eventTime ? ` ${o.eventTime}` : ""}</td>
-                      <td className="py-1.5 pr-3 font-semibold">{o.crime || o.title.split(" — ")[0]}</td>
-                      <td className="py-1.5 pr-3 whitespace-nowrap">{o.reference || "—"}</td>
-                      <td className="py-1.5">{o.place || "—"}</td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-              </div>
-            )}
+          </div>
+        )}
+
+        {companions.length > 0 && (
+          <div className="rounded-sm border border-pm-line bg-white p-3">
+            <p className="pm-label flex items-center gap-1.5"><Users className="h-3.5 w-3.5 text-pm-gold-dark" />Envolvidos juntos ({companions.length})</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {companions.map((c) => {
+                const ph = data.authorPhotos.find((p) => p.authorId === c.author.id);
+                return (
+                  <button key={c.author.id} type="button" onClick={() => onOpenAuthor?.(c.author)} className="flex gap-2.5 rounded-sm border border-pm-line p-2 text-left hover:border-pm-gold">
+                    <div className="grid h-16 w-12 shrink-0 place-items-center overflow-hidden rounded-sm bg-pm-sand">
+                      {ph ? <img src={data.getIntelFileUrl(ph.filePath)} alt="" className="h-full w-full object-cover" /> : <UserRound className="h-6 w-6 text-pm-muted" />}
+                    </div>
+                    <div className="min-w-0 flex-1 text-xs">
+                      <p className="truncate text-sm font-black uppercase">{c.author.name}</p>
+                      {c.author.alias && <p className="truncate text-pm-muted">Vulgo: {c.author.alias}</p>}
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        <Badge tone={c.arrestedTogether ? "late" : "default"}>{c.arrestedTogether ? "Preso/conduzido junto" : "Mesmo BO"}</Badge>
+                        <Badge tone="gold">{c.occurrences.length}× juntos</Badge>
+                      </div>
+                      <p className="mt-1 truncate text-pm-muted">{c.occurrences.map((o) => `REDS ${o.reds}${o.date ? ` (${formatBR(o.date)})` : ""}`).join(" · ")}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {history.length > 0 && (
+          <div className="overflow-x-auto rounded-sm border border-pm-line bg-white p-3">
+            <p className="pm-label flex items-center gap-1.5"><FileText className="h-3.5 w-3.5 text-pm-gold-dark" />Histórico de BOs ({history.length}){history.length >= 3 && <Badge tone="late" className="ml-1">Reincidente</Badge>}</p>
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-[11px] uppercase tracking-wider text-pm-muted"><th className="py-1 pr-3">Data</th><th className="py-1 pr-3">Natureza</th><th className="py-1 pr-3">Papel</th><th className="py-1 pr-3">REDS</th><th className="py-1">Local</th></tr></thead>
+              <tbody>{history.map((o) => (
+                <tr key={o.reds} className="border-t border-pm-line align-top">
+                  <td className="whitespace-nowrap py-1.5 pr-3">{o.date ? formatBR(o.date) : "—"}{o.time ? ` ${o.time}` : ""}</td>
+                  <td className="py-1.5 pr-3 font-semibold">{o.crime || "—"}</td>
+                  <td className="py-1.5 pr-3">{o.role || "—"}</td>
+                  <td className="whitespace-nowrap py-1.5 pr-3">{o.reds}</td>
+                  <td className="py-1.5">{o.place || "—"}{o.inv ? <span className="block text-xs text-pm-muted">{o.inv}</span> : null}</td>
+                </tr>
+              ))}</tbody>
+            </table>
           </div>
         )}
 

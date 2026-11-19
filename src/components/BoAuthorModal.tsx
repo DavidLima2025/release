@@ -203,6 +203,9 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
     const ref = bo.numero ? `REDS ${bo.numero}` : file.name;
     for (const p of selected) {
       setSaving(`Salvando ${p.form.name}…`);
+      // Quem estava junto neste BO (outros envolvidos marcados como alvo).
+      const together = selected.filter((o) => o !== p).map((o) => `${o.form.name} (${o.tipo.toLowerCase()})`);
+      const togetherNote = together.length ? `${/PRES|CONDUZ|AUTUAD/i.test(p.tipo) ? "Preso/conduzido junto com" : "Envolvido junto com"}: ${together.join("; ")} — REDS ${bo.numero}.` : "";
       let author: { id: string; name: string } | null = null;
       if (p.existing && p.mode === "merge") {
         // Completa o que estava vazio; nas divergências segue a escolha feita em cada campo.
@@ -225,13 +228,13 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
             extraNotes.push(`Divergência — ${c.label.toLowerCase()} informado(a) como "${c.incoming}" no ${when}.`);
           }
         });
-        const boNote = e.notes?.includes(bo.numero) ? "" : p.form.notes;
+        const boNote = e.notes?.includes(bo.numero) ? "" : [p.form.notes, togetherNote].filter(Boolean).join("\n");
         merged.notes = [e.notes, boNote, ...extraNotes].filter(Boolean).join("\n\n");
         merged.crimes = e.crimes && !norm(e.crimes).includes(norm(p.form.crimes.split(" — ")[0])) ? `${e.crimes}; ${p.form.crimes}` : e.crimes || p.form.crimes;
         if (p.form.alias && p.form.alias !== e.alias) merged.alias = p.form.alias;
         if (await data.updateAuthor(e.id, merged, { silent: true })) { author = { id: e.id, name: e.name }; sessionAuthors.current.set(e.id, { ...e, ...merged }); }
       } else {
-        const made = await data.addAuthor(p.form, { silent: true });
+        const made = await data.addAuthor({ ...p.form, notes: [p.form.notes, togetherNote].filter(Boolean).join("\n") }, { silent: true });
         if (made) { author = made; sessionAuthors.current.set(made.id, made); }
       }
       if (!author) continue;
