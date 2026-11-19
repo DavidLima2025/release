@@ -4,7 +4,7 @@ import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/input";
 import type { AppData } from "../hooks/useAppData";
-import type { Author } from "../lib/domain";
+import { EXTRA_FIELDS, type Author } from "../lib/domain";
 import { formatBR } from "../lib/dates";
 import { whatsappUrl } from "./IntakeModals";
 
@@ -14,6 +14,7 @@ const PARTS = [
   ["docs", "Documentos (RG/CPF)"],
   ["endereco", "Endereço"],
   ["crimes", "Crimes / modus operandi"],
+  ["extra", "Dados adicionais"],
   ["obs", "Observações"],
   ["foto", "Foto"],
 ] as const;
@@ -30,6 +31,7 @@ export function buildTargetText(a: Author, parts: Set<Part>, folder: string) {
   if (parts.has("docs") && a.document) lines.push(`Documentos: ${a.document}`);
   if (parts.has("endereco") && (a.address || a.neighborhood || a.city)) lines.push(`Endereço: ${[a.address, a.neighborhood, a.city].filter(Boolean).join(" — ")}`);
   if (parts.has("crimes") && a.crimes) lines.push(`Crimes/modus: ${a.crimes}`);
+  if (parts.has("extra")) for (const [k, label] of EXTRA_FIELDS) if (String(a.extra?.[k] || "").trim()) lines.push(`${label}: ${a.extra[k]}`);
   if (parts.has("obs") && a.notes) lines.push(`Obs.: ${a.notes.length > 700 ? `${a.notes.slice(0, 700)}…` : a.notes}`);
   lines.push("_Difusão restrita — não repasse._");
   return lines.join("\n");
@@ -42,7 +44,7 @@ export function ShareTargetModal({ author, data, onClose }: { author: Author | n
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const folder = author ? data.authorCategories.find((f) => f.id === author.categoryId)?.name || "" : "";
-  const photo = author ? data.authorPhotos.find((p) => p.authorId === author.id) : undefined;
+  const photo = author ? data.authorPhotos.find((p) => p.authorId === author.id && (p.category || "perfil") === "perfil") : undefined;
   const auto = useMemo(() => (author ? buildTargetText(author, parts, folder) : ""), [author, parts, folder]);
 
   useEffect(() => { setText(auto); setMsg(""); }, [auto]);

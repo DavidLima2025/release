@@ -212,7 +212,8 @@ export function useAppData(notify: Notify) {
       if (attachmentsRes.data) setAttachments(attachmentsRes.data.map(normalizeAttachment));
       if (categoriesRes.data) setAuthorCategories(categoriesRes.data.map(normalizeAuthorCategory));
       if (authorsRes.data) setAuthors(authorsRes.data.map(normalizeAuthor));
-      if (photosRes.data) setAuthorPhotos(photosRes.data.map(normalizeAuthorFile));
+      // Ordem: capa, depois fotos do alvo, depois ocorrências/levantamentos (a "foto do alvo" é sempre a primeira).
+      if (photosRes.data) setAuthorPhotos(photosRes.data.map(normalizeAuthorFile).sort((a, b) => Number(b.category === "perfil") - Number(a.category === "perfil")));
       if (reportsRes.data) setAuthorReports(reportsRes.data.map(normalizeAuthorFile));
       const stored = [...(photosRes.data || []), ...(reportsRes.data || [])].map((r: any) => r.file_path as string)
         .filter((path) => path && !/^https?:\/\//i.test(path));
@@ -611,6 +612,7 @@ export function useAppData(notify: Notify) {
       status: form.status, risk_level: form.riskLevel, notes: form.notes,
       // Residência no mapa: só grava quando o formulário traz o campo (não apaga ao editar por outra tela).
       ...("homeLat" in form ? { home_lat: form.homeLat ?? null, home_lng: form.homeLng ?? null } : {}),
+      ...(form.extra && typeof form.extra === "object" ? { extra: Object.fromEntries(Object.entries(form.extra).filter(([, v]) => String(v || "").trim())) } : {}),
     };
   }
 
@@ -673,7 +675,7 @@ export function useAppData(notify: Notify) {
     return true;
   }
 
-  async function uploadAuthorFile(author: { id: string; name: string }, file: File | undefined | null, kind: "photo" | "report" = "report", options: { silent?: boolean; description?: string; noAudit?: boolean; geo?: ReportGeo; cover?: boolean } = {}) {
+  async function uploadAuthorFile(author: { id: string; name: string }, file: File | undefined | null, kind: "photo" | "report" = "report", options: { silent?: boolean; description?: string; noAudit?: boolean; geo?: ReportGeo; cover?: boolean; category?: string } = {}) {
     if (!file || !author?.id) return false;
     const table = kind === "photo" ? "author_photos" : "author_reports";
     const path = `${author.id}/${kind === "photo" ? "fotos" : "relatorios"}/${Date.now()}-${safeFileName(file.name)}`;
@@ -686,6 +688,7 @@ export function useAppData(notify: Notify) {
       description: options.description || null,
       ...(kind === "report" && options.geo ? reportGeoRow(options.geo) : {}),
       ...(kind === "photo" && options.cover ? { is_cover: true } : {}),
+      ...(kind === "photo" && options.category && options.category !== "perfil" ? { category: options.category } : {}),
     });
     if (error) { notify("Arquivo enviado, mas houve erro ao registrar no banco.", "error"); return false; }
     if (!options.noAudit) await addAudit(kind === "photo" ? "Foto anexada" : "Relatório anexado", `Anexou ${file.name} no card: ${author.name}.`);

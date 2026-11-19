@@ -2,7 +2,7 @@ import { Suspense, lazy, useState } from "react";
 import { reportsAsItems } from "../lib/reportItems";
 
 const CrimeMap = lazy(() => import("../views/CrimeMap"));
-import { Camera, Star, Users, Download, Map as MapIcon, Clock3, Edit3, FileText, FolderInput, FolderLock, Image as ImageIcon, Link2, Loader2, MapPin, MessageCircle, Paperclip, Share2, Trash2, Upload, UserRound } from "lucide-react";
+import { Binoculars, Camera, Siren, Star, Users, Download, Map as MapIcon, Clock3, Edit3, FileText, FolderInput, FolderLock, Image as ImageIcon, Link2, Loader2, MapPin, MessageCircle, Paperclip, Share2, Trash2, Upload, UserRound } from "lucide-react";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import { Select } from "./ui/input";
@@ -10,7 +10,7 @@ import { Badge } from "./ui/badge";
 import type { AppData } from "../hooks/useAppData";
 import type { InvestigationsApi } from "../hooks/useInvestigations";
 import type { Author } from "../lib/domain";
-import { formatBytes } from "../lib/domain";
+import { EXTRA_FIELDS, PHOTO_CATEGORIES, formatBytes } from "../lib/domain";
 import { formatBR, formatDateTimeBR } from "../lib/dates";
 import { TARGET_ROLES, stageOf } from "../lib/investigation";
 import type { ReportImage } from "../lib/report/model";
@@ -56,7 +56,10 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
   const [linkInv, setLinkInv] = useState({ id: "", role: "Associado" });
   if (!author) return null;
   const a = data.authors.find((x) => x.id === author.id) || author;
-  const photos = data.authorPhotos.filter((p) => p.authorId === a.id);
+  const allPhotos = data.authorPhotos.filter((p) => p.authorId === a.id);
+  const photos = allPhotos.filter((p) => (p.category || "perfil") === "perfil");
+  const photosOf = (cat: string) => allPhotos.filter((p) => (p.category || "perfil") === cat);
+  const extraFilled = EXTRA_FIELDS.filter(([k]) => String(a.extra?.[k] || "").trim());
   const reports = data.authorReports.filter((r) => r.authorId === a.id);
   const folder = data.authorCategories.find((f) => f.id === a.categoryId)?.name || "Sem pasta";
   const canInv = Boolean(api && data.permissions.investigations);
@@ -89,12 +92,20 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
       photos[0] ? loadImage(data.getIntelFileUrl(photos[0].filePath)) : Promise.resolve(undefined),
       ...photos.slice(1, 5).map((p) => loadImage(data.getIntelFileUrl(p.filePath))),
     ]);
+    const loadCat = async (cat: string) => {
+      const out: { img: ReportImage; caption: string }[] = [];
+      for (const p of photosOf(cat).slice(0, 8)) { const img = await loadImage(data.getIntelFileUrl(p.filePath)); if (img) out.push({ img: img as ReportImage, caption: p.description || "" }); }
+      return out;
+    };
+    const [occurrencePhotos, surveyPhotos] = await Promise.all([loadCat("ocorrencia"), loadCat("levantamento")]);
     const bytes = await renderFicha({
+      occurrencePhotos, surveyPhotos,
       name: a.name, alias: a.alias, status: a.status, riskLevel: a.riskLevel, folder,
       birthDate: a.birthDate, motherName: a.motherName, fatherName: a.fatherName, document: a.document,
       address: a.address, neighborhood: a.neighborhood, city: a.city,
       home: a.homeLat != null ? `${a.homeLat.toFixed(6)}, ${a.homeLng!.toFixed(6)}` : undefined,
-      crimes: a.crimes, notes: a.notes,
+      crimes: a.crimes, notes: "",
+      extra: extraFilled.map(([k, label]) => ({ label, value: a.extra[k] })),
       photo: await cropPortrait(main as ReportImage | undefined), extraPhotos: extra.filter(Boolean) as ReportImage[], logo: logo as ReportImage | undefined,
       investigations: linked.map(({ t, inv }) => ({ code: inv!.code, title: inv!.title, role: t.role })),
       occurrences: history.map((o) => ({ date: o.date, time: o.time, crime: [o.crime, o.role && `(${o.role})`].filter(Boolean).join(" "), reference: o.reds, place: o.place, inv: o.inv })),
@@ -179,7 +190,26 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
 
         <div className="grid gap-2 text-sm">
           {field("Crimes / modus operandi", a.crimes)}
-          {a.notes && field("Observações e vínculos", a.notes)}
+          {extraFilled.length > 0 ? (
+            <div className="rounded-sm border border-pm-line bg-white p-3">
+              <p className="pm-label">Dados adicionais</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {extraFilled.map(([k, label]) => (
+                  <div key={k} className={`rounded-sm bg-pm-cream/60 px-3 py-2 ${(a.extra[k] || "").length > 80 ? "sm:col-span-2" : ""}`}>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-pm-muted">{label}</p><p className="whitespace-pre-wrap font-semibold">{a.extra[k]}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <button type="button" onClick={() => onEdit(a)} className="rounded-sm border border-dashed border-pm-line px-3 py-2 text-left text-xs text-pm-muted hover:border-pm-gold">+ Dados adicionais (características, tatuagens, telefones, veículos, facção…) — clique para preencher</button>
+          )}
+          {a.notes && (
+            <details className="group rounded-sm border border-pm-line bg-pm-cream/60 px-3 py-2">
+              <summary className="cursor-pointer list-none text-[10px] font-bold uppercase tracking-wider text-pm-muted"><span className="mr-1 inline-block transition group-open:rotate-90">▸</span>Observações e vínculos <span className="font-normal normal-case">({a.notes.split("\n").filter(Boolean).length} linha(s) — clique para abrir)</span></summary>
+              <p className="mt-2 whitespace-pre-wrap text-sm font-semibold">{a.notes}</p>
+            </details>
+          )}
           {a.homeLat != null && <p className="flex items-center gap-1.5 text-xs text-pm-muted"><MapPin className="h-3.5 w-3.5 text-pm-gold-dark" />Residência marcada no mapa: {a.homeLat.toFixed(6)}, {a.homeLng!.toFixed(6)}</p>}
           <p className="text-xs text-pm-muted">Card criado em {formatDateTimeBR(a.createdAt)}.</p>
         </div>
@@ -259,7 +289,7 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
 
         <div className="grid gap-6 lg:grid-cols-2">
           <div>
-            <div className="mb-3 flex items-center justify-between"><p className="pm-heading flex items-center gap-2"><ImageIcon className="h-4 w-4 text-pm-gold-dark" />Fotos ({photos.length})</p>
+            <div className="mb-3 flex items-center justify-between"><p className="pm-heading flex items-center gap-2"><ImageIcon className="h-4 w-4 text-pm-gold-dark" />Fotos do alvo ({photos.length})</p>
               <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-sm bg-pm-black px-3 text-xs font-bold uppercase text-white hover:bg-pm-ink"><Camera className="h-3.5 w-3.5" />Subir foto<input type="file" accept="image/*" className="hidden" onChange={(e) => { data.uploadAuthorFile(a, e.target.files?.[0], "photo"); e.target.value = ""; }} /></label>
             </div>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -289,6 +319,36 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
               {!reports.length && <p className="text-sm text-pm-muted">Nenhum arquivo.</p>}
             </div>
           </div>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          {PHOTO_CATEGORIES.filter(([c]) => c !== "perfil").map(([cat, label]) => {
+            const list = photosOf(cat);
+            return (
+              <div key={cat}>
+                <div className="mb-3 flex items-center justify-between gap-2"><p className="pm-heading flex items-center gap-2">{cat === "ocorrencia" ? <Siren className="h-4 w-4 text-pm-gold-dark" /> : <Binoculars className="h-4 w-4 text-pm-gold-dark" />}{label} ({list.length})</p>
+                  <label className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-sm border border-pm-line bg-white px-3 text-xs font-bold uppercase hover:border-pm-gold"><Camera className="h-3.5 w-3.5" />Subir
+                    <input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => {
+                      const files = Array.from(e.target.files || []); e.target.value = "";
+                      if (!files.length) return;
+                      const caption = window.prompt(cat === "ocorrencia" ? "Legenda (opcional): ex. REDS nº, data, material apreendido" : "Legenda (opcional): ex. data, local, o que foi observado") || "";
+                      for (const f of files) await data.uploadAuthorFile(a, f, "photo", { category: cat, description: caption.trim() || undefined, silent: files.length > 1 });
+                    }} />
+                  </label>
+                </div>
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  {list.map((p) => (
+                    <figure key={p.id} className="group relative">
+                      <a href={data.getIntelFileUrl(p.filePath)} target="_blank" rel="noreferrer" className="block aspect-square overflow-hidden rounded-sm bg-pm-sand"><img src={data.getIntelFileUrl(p.filePath)} alt={p.description || p.fileName} loading="lazy" className="h-full w-full object-cover transition group-hover:scale-105" /></a>
+                      <button type="button" onClick={() => { if (window.confirm("Excluir esta foto?")) data.deleteAuthorPhoto(p); }} className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-sm bg-pm-black/70 text-white opacity-100 hover:bg-status-late sm:opacity-0 sm:group-hover:opacity-100" aria-label="Excluir foto"><Trash2 className="h-3 w-3" /></button>
+                      <figcaption className="mt-0.5 line-clamp-2 text-[10px] leading-tight text-pm-muted">{p.description || formatDateTimeBR(p.createdAt)}</figcaption>
+                    </figure>
+                  ))}
+                  {!list.length && <p className="col-span-full text-sm text-pm-muted">Nenhuma foto.</p>}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
       {mapOpen && (
