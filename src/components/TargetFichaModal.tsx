@@ -2,7 +2,7 @@ import { Suspense, lazy, useState } from "react";
 import { reportsAsItems } from "../lib/reportItems";
 
 const CrimeMap = lazy(() => import("../views/CrimeMap"));
-import { Camera, Users, Download, Map as MapIcon, Clock3, Edit3, FileText, FolderInput, FolderLock, Image as ImageIcon, Link2, Loader2, MapPin, MessageCircle, Paperclip, Share2, Trash2, Upload, UserRound } from "lucide-react";
+import { Camera, Star, Users, Download, Map as MapIcon, Clock3, Edit3, FileText, FolderInput, FolderLock, Image as ImageIcon, Link2, Loader2, MapPin, MessageCircle, Paperclip, Share2, Trash2, Upload, UserRound } from "lucide-react";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import { Select } from "./ui/input";
@@ -263,8 +263,15 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
               <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-sm bg-pm-black px-3 text-xs font-bold uppercase text-white hover:bg-pm-ink"><Camera className="h-3.5 w-3.5" />Subir foto<input type="file" accept="image/*" className="hidden" onChange={(e) => { data.uploadAuthorFile(a, e.target.files?.[0], "photo"); e.target.value = ""; }} /></label>
             </div>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-              {photos.map((p) => (
-                <a key={p.id} href={data.getIntelFileUrl(p.filePath)} target="_blank" rel="noreferrer" className="aspect-[3/4] overflow-hidden rounded-sm bg-pm-sand"><img src={data.getIntelFileUrl(p.filePath)} alt={p.fileName} loading="lazy" className="h-full w-full object-cover transition hover:scale-105" /></a>
+              {photos.map((p, i) => (
+                <div key={p.id} className={`group relative aspect-[3/4] overflow-hidden rounded-sm bg-pm-sand ${i === 0 ? "ring-2 ring-pm-gold" : ""}`}>
+                  <a href={data.getIntelFileUrl(p.filePath)} target="_blank" rel="noreferrer" title="Abrir a foto"><img src={data.getIntelFileUrl(p.filePath)} alt={p.fileName} loading="lazy" className="h-full w-full object-cover transition group-hover:scale-105" /></a>
+                  {i === 0 && photos.length > 1 && <span className="absolute left-1 top-1 rounded-sm bg-pm-gold px-1.5 py-0.5 text-[10px] font-black uppercase text-pm-black">Capa</span>}
+                  <div className="absolute inset-x-0 bottom-0 flex gap-1 bg-pm-black/75 p-1 opacity-100 sm:opacity-0 sm:transition sm:group-hover:opacity-100">
+                    {i !== 0 && <button type="button" onClick={() => data.setCoverPhoto(p)} className="flex flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-sm bg-pm-gold px-1 py-1 text-[9px] font-black uppercase text-pm-black hover:bg-pm-gold-light" title="Usar esta foto como capa do alvo"><Star className="h-3 w-3" />Tornar capa</button>}
+                    <button type="button" onClick={() => { if (window.confirm("Excluir esta foto do card?")) data.deleteAuthorPhoto(p); }} className={`grid place-items-center rounded-sm px-1.5 py-1 text-white hover:bg-status-late ${i === 0 ? "ml-auto" : ""}`} aria-label="Excluir foto" title="Excluir foto"><Trash2 className="h-3.5 w-3.5" /></button>
+                  </div>
+                </div>
               ))}
               {!photos.length && <p className="col-span-full text-sm text-pm-muted">Nenhuma foto.</p>}
             </div>

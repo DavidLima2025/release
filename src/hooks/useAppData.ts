@@ -192,7 +192,8 @@ export function useAppData(notify: Notify) {
         supabase.from("demand_attachments").select("*").order("created_at", { ascending: false }),
         supabase.from("author_folders").select("*").order("name", { ascending: true }),
         supabase.from("crime_authors").select("*").order("created_at", { ascending: false }),
-        supabase.from("author_photos").select("*").order("created_at", { ascending: true }),
+        // Capa primeiro: em todo o sistema a "foto do alvo" é a primeira da lista.
+        supabase.from("author_photos").select("*").order("is_cover", { ascending: false }).order("created_at", { ascending: true }),
         supabase.from("author_reports").select("*").order("created_at", { ascending: false }),
       ]);
 
@@ -672,21 +673,37 @@ export function useAppData(notify: Notify) {
     return true;
   }
 
-  async function uploadAuthorFile(author: { id: string; name: string }, file: File | undefined | null, kind: "photo" | "report" = "report", options: { silent?: boolean; description?: string; noAudit?: boolean; geo?: ReportGeo } = {}) {
+  async function uploadAuthorFile(author: { id: string; name: string }, file: File | undefined | null, kind: "photo" | "report" = "report", options: { silent?: boolean; description?: string; noAudit?: boolean; geo?: ReportGeo; cover?: boolean } = {}) {
     if (!file || !author?.id) return false;
     const table = kind === "photo" ? "author_photos" : "author_reports";
     const path = `${author.id}/${kind === "photo" ? "fotos" : "relatorios"}/${Date.now()}-${safeFileName(file.name)}`;
     const upload = await uploadWithRetry(INTEL_BUCKET, path, file);
     if (upload.error) { notify(`Erro ao subir ${file.name}: ${storageErrorText(upload.error)}`, "error"); return false; }
+    // Foto nova enviada como capa: as outras deixam de ser capa antes.
+    if (kind === "photo" && options.cover) await supabase.from("author_photos").update({ is_cover: false }).eq("author_id", author.id);
     const { error } = await supabase.from(table).insert({
       author_id: author.id, file_name: file.name, file_path: path, file_size: file.size, mime_type: file.type, uploaded_by: currentUser?.id || null,
       description: options.description || null,
       ...(kind === "report" && options.geo ? reportGeoRow(options.geo) : {}),
+      ...(kind === "photo" && options.cover ? { is_cover: true } : {}),
     });
     if (error) { notify("Arquivo enviado, mas houve erro ao registrar no banco.", "error"); return false; }
     if (!options.noAudit) await addAudit(kind === "photo" ? "Foto anexada" : "Relatório anexado", `Anexou ${file.name} no card: ${author.name}.`);
     if (!options.silent) notify(kind === "photo" ? "Foto anexada." : "Relatório anexado.");
     reload();
+    return true;
+  }
+
+  /** Define a foto de capa do card (a que aparece nos cards, ficha, organograma e relatórios). */
+  async function setCoverPhoto(photo: AuthorFile) {
+    const off = await supabase.from("author_photos").update({ is_cover: false }).eq("author_id", photo.authorId);
+    const on = await supabase.from("author_photos").update({ is_cover: true }).eq("id", photo.id);
+    if (off.error || on.error) { notify("Erro ao definir a capa (rode o script 08_foto_capa.sql).", "error"); return false; }
+    // Reordena na hora: a capa vira a primeira foto do alvo.
+    setAuthorPhotos((list) => [photo, ...list.filter((p) => p.id !== photo.id)]);
+    const author = authors.find((a) => a.id === photo.authorId);
+    await addAudit("Foto de capa alterada", `Definiu ${photo.fileName} como capa de ${author?.name || "alvo"}.`);
+    notify("Foto de capa atualizada.");
     return true;
   }
 
@@ -775,7 +792,7 @@ export function useAppData(notify: Notify) {
     // workflow
     addWorkflow, deleteWorkflow, moveWorkflow,
     // alvos
-    getIntelFileUrl, addAuthorCategory, updateAuthorCategory, moveAuthors, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, setAuthorHome, setReportGeo, mergeAuthors, uploadAuthorFile, deleteAuthorPhoto, importTrelloBoard,
+    getIntelFileUrl, addAuthorCategory, updateAuthorCategory, moveAuthors, deleteAuthorCategory, addAuthor, updateAuthor, deleteAuthor, setAuthorHome, setReportGeo, mergeAuthors, uploadAuthorFile, deleteAuthorPhoto, setCoverPhoto, importTrelloBoard,
   };
 }
 
