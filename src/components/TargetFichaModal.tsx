@@ -29,7 +29,7 @@ function ageOf(iso: string) {
 
 type Props = {
   author: Author | null; data: AppData; api?: InvestigationsApi;
-  onClose: () => void; onEdit: (a: Author) => void; onMove: (a: Author) => void; onShareMessage: (a: Author) => void;
+  onClose: () => void; onEdit?: (a: Author) => void; onMove?: (a: Author) => void; onShareMessage?: (a: Author) => void;
   onOpenInvestigation?: (id: string) => void;
   onOpenAuthor?: (a: Author) => void;
 };
@@ -132,10 +132,10 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
             </div>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="gold" onClick={sharePdf} disabled={Boolean(busy)}>{busy === "share" ? <Loader2 className="animate-spin" /> : <Share2 />}Enviar ficha (PDF)</Button>
-              <Button size="sm" variant="gold" onClick={() => onShareMessage(a)}><MessageCircle />Mensagem com foto</Button>
+              {onShareMessage && <Button size="sm" variant="gold" onClick={() => onShareMessage(a)}><MessageCircle />Mensagem com foto</Button>}
               <Button size="sm" onClick={downloadPdf} disabled={Boolean(busy)}>{busy === "download" ? <Loader2 className="animate-spin" /> : <Download />}Baixar PDF</Button>
-              <Button size="sm" onClick={() => onEdit(a)}><Edit3 />Editar</Button>
-              <Button size="sm" onClick={() => onMove(a)}><FolderInput />Mover</Button>
+              {onEdit && <Button size="sm" onClick={() => onEdit(a)}><Edit3 />Editar</Button>}
+              {onMove && <Button size="sm" onClick={() => onMove(a)}><FolderInput />Mover</Button>}
               {api && <Button size="sm" onClick={() => setMapOpen(true)}><MapIcon />Ver no mapa</Button>}
               <Button size="sm" variant="danger" onClick={async () => { if (await data.deleteAuthor(a)) onClose(); }}><Trash2 />Excluir</Button>
             </div>
@@ -162,9 +162,9 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
                 ))}
               </div>
             </div>
-          ) : (
+          ) : onEdit ? (
             <button type="button" onClick={() => onEdit(a)} className="rounded-sm border border-dashed border-pm-line px-3 py-2 text-left text-xs text-pm-muted hover:border-pm-gold">+ Dados adicionais (características, tatuagens, telefones, veículos, facção…) — clique para preencher</button>
-          )}
+          ) : null}
           {a.notes && (
             <details className="group rounded-sm border border-pm-line bg-pm-cream/60 px-3 py-2">
               <summary className="cursor-pointer list-none text-[10px] font-bold uppercase tracking-wider text-pm-muted"><span className="mr-1 inline-block transition group-open:rotate-90">▸</span>Observações e vínculos <span className="font-normal normal-case">({a.notes.split("\n").filter(Boolean).length} linha(s) — clique para abrir)</span></summary>
