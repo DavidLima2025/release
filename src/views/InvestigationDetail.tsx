@@ -605,29 +605,33 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
                 const a = authorOf(t);
                 const photo = t.authorId ? data.authorPhotos.find((p) => p.authorId === t.authorId) : undefined;
                 return (
-                  <div key={t.id} className={`grid gap-3 rounded-sm border bg-white p-3 md:grid-cols-[56px_minmax(0,1fr)_150px_180px_auto] md:items-center ${selected === t.id ? "border-pm-black ring-2 ring-pm-gold" : "border-pm-line"}`} onClick={() => setSelected(t.id)}>
-                    <div className="grid h-14 w-14 place-items-center overflow-hidden rounded-sm bg-pm-sand">{photo ? <img src={data.getIntelFileUrl(photo.filePath)} alt="" className="h-full w-full object-cover" /> : <Users className="h-5 w-5 text-pm-muted" />}</div>
-                    <div className="min-w-0">
-                      {a ? <p className="break-words font-black uppercase leading-tight">{a.name}{groupStatus(t) && <span className="ml-2 rounded-sm bg-pm-black px-1.5 py-0.5 text-[10px] text-pm-gold-light">{groupStatus(t)}</span>}</p>
-                        : <div className="grid gap-1"><Input className="h-8 w-full font-black uppercase" defaultValue={t.label} key={t.label} onBlur={(e) => e.target.value.trim() && e.target.value.toUpperCase() !== t.label && api.updateTarget(t, { label: e.target.value.toUpperCase() })} /><Button size="sm" variant="gold" onClick={(e) => { e.stopPropagation(); setIdentify(t); }}>Identificar no banco</Button></div>}
-                      <p className="truncate text-xs text-pm-muted">{a ? <>{a.alias ? `"${a.alias}" · ` : ""}{a.crimes || a.status}</> : "Não identificado — sem card no banco de alvos"}</p>
-                      <Input className="mt-1.5 h-8 text-xs" placeholder="Observação nesta investigação" defaultValue={t.notes} onBlur={(e) => e.target.value !== t.notes && api.updateTarget(t, { notes: e.target.value })} />
+                  <div key={t.id} className={`space-y-3 rounded-sm border bg-white p-3 ${selected === t.id ? "border-pm-black ring-2 ring-pm-gold" : "border-pm-line"}`} onClick={() => setSelected(t.id)}>
+                    {/* Linha 1: foto, nome e ações */}
+                    <div className="flex items-start gap-3">
+                      <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-sm bg-pm-sand">{photo ? <img src={data.getIntelFileUrl(photo.filePath)} alt="" className="h-full w-full object-cover" /> : <Users className="h-5 w-5 text-pm-muted" />}</div>
+                      <div className="min-w-0 flex-1">
+                        {a ? <p className="font-black uppercase leading-tight [overflow-wrap:anywhere]">{a.name}{groupStatus(t) && <span className="ml-2 rounded-sm bg-pm-black px-1.5 py-0.5 text-[10px] text-pm-gold-light">{groupStatus(t)}</span>}</p>
+                          : <div className="flex flex-wrap gap-1"><Input className="h-8 min-w-[180px] flex-1 font-black uppercase" defaultValue={t.label} key={t.label} onClick={(e) => e.stopPropagation()} onBlur={(e) => e.target.value.trim() && e.target.value.toUpperCase() !== t.label && api.updateTarget(t, { label: e.target.value.toUpperCase() })} /><Button size="sm" variant="gold" onClick={(e) => { e.stopPropagation(); setIdentify(t); }}>Identificar no banco</Button></div>}
+                        <p className="truncate text-xs text-pm-muted">{a ? <>{a.alias ? `"${a.alias}" · ` : ""}{a.crimes || a.status}</> : "Não identificado — sem card no banco de alvos"}</p>
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        <Button size="icon" variant="ghost" title="Indícios da função e área de atuação" onClick={(e) => { e.stopPropagation(); setEvidenceOf(t); }}><Binoculars /></Button>
+                        <Button size="icon" variant="ghost" title="Ver ficha completa" disabled={!a} onClick={(e) => { e.stopPropagation(); setFicha(a || null); }}><UserRound /></Button>
+                        <Button size="icon" variant="ghost" title="Desvincular" onClick={() => api.removeTarget(t)}><Trash2 /></Button>
+                      </div>
                     </div>
-                    <Field label="Papel"><Select className="h-9" value={t.role} onChange={(e) => api.updateTarget(t, { role: e.target.value })}>{TARGET_ROLES.map((r) => <option key={r}>{r}</option>)}</Select></Field>
-                    <Field label="Superior"><Select className="h-9" value={t.parentId} onChange={(e) => api.updateTarget(t, { parentId: e.target.value })}><option value="">— topo —</option>{targets.filter((x) => x.id !== t.id).map((x) => <option key={x.id} value={x.id}>{nameOf(x.id)}</option>)}</Select></Field>
-                    <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" title="Indícios da função e área de atuação" onClick={(e) => { e.stopPropagation(); setEvidenceOf(t); }}><Binoculars /></Button>
-                      <Button size="icon" variant="ghost" title="Ver ficha completa" disabled={!a} onClick={(e) => { e.stopPropagation(); setFicha(a || null); }}><UserRound /></Button>
-                      <Button size="icon" variant="ghost" title="Desvincular" onClick={() => api.removeTarget(t)}><Trash2 /></Button>
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-[150px_1fr_1fr_auto] md:col-span-full md:col-start-2" onClick={(e) => e.stopPropagation()}>
+                    {/* Linha 2: campos — se ajustam à largura disponível */}
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-2" onClick={(e) => e.stopPropagation()}>
+                      <Field label="Papel"><Select className="h-9" value={t.role} onChange={(e) => api.updateTarget(t, { role: e.target.value })}>{TARGET_ROLES.map((r) => <option key={r}>{r}</option>)}</Select></Field>
+                      <Field label="Superior"><Select className="h-9" value={t.parentId} onChange={(e) => api.updateTarget(t, { parentId: e.target.value })}><option value="">— topo —</option>{targets.filter((x) => x.id !== t.id).map((x) => <option key={x.id} value={x.id}>{nameOf(x.id)}</option>)}</Select></Field>
                       <Field label="Grau na hierarquia"><Select className="h-9" value={t.grade ?? ""} onChange={(e) => api.updateTarget(t, { grade: e.target.value ? Number(e.target.value) : null })}>
                         <option value="">Pela função ({autoLevel(t.role) + 1}º)</option>{LEVEL_LABELS.map((l, i) => <option key={i} value={i + 1}>{l.split(" — ")[0]} grau</option>)}
                       </Select></Field>
                       <Field label="Núcleo"><Select className="h-9" value={t.cluster} onChange={(e) => api.updateTarget(t, { cluster: e.target.value })}>{clusterOptions(t).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>
                       <Field label="Área de atuação"><div className="relative"><MapPin className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-pm-muted" /><Input className="h-9 pl-8 uppercase" placeholder="bairro / ponto" defaultValue={t.area} key={t.area} onBlur={(e) => e.target.value.toUpperCase() !== t.area && api.updateTarget(t, { area: e.target.value.toUpperCase() })} /></div></Field>
-                      <button type="button" onClick={() => setEvidenceOf(t)} className="self-end rounded-sm border border-pm-line px-3 py-2 text-xs font-bold hover:border-pm-gold">{t.evidence.length ? `${t.evidence.length} indício(s)` : "+ indício"}</button>
+                      <Field label="Indícios"><button type="button" onClick={() => setEvidenceOf(t)} className="h-9 w-full rounded-sm border border-pm-line px-3 text-xs font-bold hover:border-pm-gold">{t.evidence.length ? `${t.evidence.length} indício(s)` : "+ indício"}</button></Field>
                     </div>
+                    <Input className="h-8 text-xs" placeholder="Observação nesta investigação" defaultValue={t.notes} onClick={(e) => e.stopPropagation()} onBlur={(e) => e.target.value !== t.notes && api.updateTarget(t, { notes: e.target.value })} />
                   </div>
                 );
               })}
