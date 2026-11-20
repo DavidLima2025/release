@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowLeft, Check, ChevronRight, Download, Edit3, ExternalLink, FileSearch, FileText, GitFork, History, Link2, Loader2,
-  Map as MapIcon, Paperclip, Plus, Presentation, Save, ScanText, Search, Sparkles, Trash2, UserRound, UserPlus, Users,
+  Map as MapIcon, Paperclip, Plus, Presentation, Save, ScanText, Search, Sparkles, Layers, Binoculars, MapPin, Trash2, UserRound, UserPlus, Users,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, EmptyState, SectionHeader } from "../components/ui/card";
@@ -11,7 +11,10 @@ import { Modal } from "../components/ui/modal";
 import { LinkChart, Organogram } from "../components/Organogram";
 import { BoAuthorModal } from "../components/BoAuthorModal";
 import { DossieModal } from "../components/DossieModal";
-import { CompareModal, HierarchyModal } from "../components/OrgTools";
+import { CompareModal, EvidenceModal, GroupsModal, HierarchyModal } from "../components/OrgTools";
+import { OrgBoard, type BoardPerson } from "../components/OrgBoard";
+import { AUTO_GROUPS, roleOfAutoGroup } from "../lib/orgBoard";
+import { redsCount } from "../lib/companions";
 import { TargetFichaModal } from "../components/TargetFichaModal";
 import { ShareTargetModal } from "../components/ShareTargetModal";
 import type { Author } from "../lib/domain";
@@ -370,6 +373,9 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
   const [hierOpen, setHierOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [ficha, setFicha] = useState<Author | null>(null);
+  const [orgView, setOrgView] = useState<"quadro" | "arvore">("quadro");
+  const [groupsOpen, setGroupsOpen] = useState(false);
+  const [evidenceOf, setEvidenceOf] = useState<InvestigationTarget | null>(null);
   const [sharing, setSharing] = useState<Author | null>(null);
   const [adding, setAdding] = useState(false);
   const [autoLink, setAutoLink] = useState(true);
@@ -457,19 +463,50 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
     );
   };
 
+  const boardPeople = useMemo(() => {
+    const m = new Map<string, BoardPerson>();
+    for (const t of targets) {
+      const a = authorOf(t);
+      const ph = data.authorPhotos.find((p) => p.authorId === t.authorId && (p.category || "perfil") === "perfil");
+      m.set(t.id, { name: a?.name || "?", alias: a?.alias || "", photo: ph ? data.getIntelFileUrl(ph.filePath) : undefined, role: t.role, area: t.area, evidence: t.evidence.length, bos: a ? redsCount(a.id, data.authors, data.authorReports, api.items).length : 0 });
+    }
+    return m;
+  }, [targets, data.authors, data.authorPhotos, data.authorReports, api.items]); // eslint-disable-line react-hooks/exhaustive-deps
+  const clusterOptions = (t: InvestigationTarget) => [
+    ["", `Automático (${(AUTO_GROUPS[t.role] || AUTO_GROUPS["Associado"]).name.toLowerCase()})`],
+    ...inv.orgGroups.map((g) => [g.name, g.name]),
+  ];
+
   return (
     <div className="space-y-5">
       <Card>
         <CardContent>
-          <SectionHeader icon={GitFork} title="Organograma" subtitle="Arraste um alvo sobre outro para deixá-lo subordinado (no vazio vai para o topo). Clique seleciona; clique duplo abre a ficha. Linhas cheias: hierarquia; tracejadas: vínculos."
+          <SectionHeader icon={GitFork} title="Organograma" subtitle={orgView === "quadro"
+            ? "Cada quadro é um núcleo do grupo. Arraste um alvo: sobre outro alvo = fica subordinado (seta vermelha); sobre um quadro = muda de núcleo; no vazio = sem superior. Clique duplo abre a ficha."
+            : "Arraste um alvo sobre outro para deixá-lo subordinado (no vazio vai para o topo). Clique seleciona; clique duplo abre a ficha."}
             actions={<div className="flex flex-wrap gap-2">
+              <div className="flex overflow-hidden rounded-sm border border-pm-line text-xs font-bold">
+                {([["quadro", "Quadro por núcleos"], ["arvore", "Árvore"]] as const).map(([k, l]) => <button key={k} type="button" onClick={() => setOrgView(k)} className={`px-3 py-1.5 ${orgView === k ? "bg-pm-black text-white" : "bg-white"}`}>{l}</button>)}
+              </div>
+              <Button size="sm" onClick={() => setGroupsOpen(true)}><Layers />Núcleos ({inv.orgGroups.length})</Button>
               <Button size="sm" disabled={targets.length < 2} onClick={() => setHierOpen(true)}><Sparkles />Sugerir funções e hierarquia</Button>
               <Button size="sm" onClick={() => setCompareOpen(true)}><GitFork />Comparar investigações</Button>
               <Button size="sm" variant="primary" disabled={!targets.length} onClick={() => setDossieOpen(true)}><FileText />PDF: organograma + qualificações</Button>
             </div>} />
           {targets.length === 0 ? <EmptyState icon={Users} title="Nenhum alvo no dossiê">Vincule alvos do banco de alvos ou cadastre novos ao lado.</EmptyState>
+            : orgView === "quadro" ? <OrgBoard targets={targets} links={links} groups={inv.orgGroups} people={boardPeople} selectedId={selected} onSelect={(t) => setSelected(t.id)} onOpen={(t) => setFicha(authorOf(t) || null)}
+                onDropOnTarget={(t, parentId) => api.updateTarget(t, { parentId })}
+                onDropOnGroup={(t, key) => key.startsWith("c:") ? api.updateTarget(t, { cluster: key.slice(2) }) : api.updateTarget(t, { cluster: "", role: roleOfAutoGroup(key.slice(2)) || t.role })} />
             : <Organogram targets={targets} links={links} authors={data.authors} photos={data.authorPhotos} photoUrl={data.getIntelFileUrl} selectedId={selected} onSelect={(t) => setSelected(t.id)}
                 onReparent={(t, parentId) => api.updateTarget(t, { parentId })} onOpen={(t) => setFicha(authorOf(t) || null)} />}
+          {orgView === "quadro" && targets.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[11px] font-semibold text-pm-muted">
+              <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-6 bg-[#C0201A]" />▶ comanda / hierarquia</span>
+              <span className="inline-flex items-center gap-1.5"><span className="w-6 border-t-2 border-dashed border-[#2E6B3A]" />vínculo (parente, namoro, fornecedor…)</span>
+              <span className="inline-flex items-center gap-1.5"><span className="grid h-4 w-4 place-items-center rounded-full bg-[#9B8A5C] text-[9px] text-white">2</span>indícios da função</span>
+              <span className="inline-flex items-center gap-1.5 text-[#2F5D7C]">◉ área de atuação</span>
+            </div>
+          )}
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-pm-muted">
             {TARGET_ROLES.map((r) => <span key={r} className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-[2px]" style={{ background: ROLE_COLOR[r] }} />{r}</span>)}
           </div>
@@ -504,8 +541,14 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
                     <Field label="Papel"><Select className="h-9" value={t.role} onChange={(e) => api.updateTarget(t, { role: e.target.value })}>{TARGET_ROLES.map((r) => <option key={r}>{r}</option>)}</Select></Field>
                     <Field label="Superior"><Select className="h-9" value={t.parentId} onChange={(e) => api.updateTarget(t, { parentId: e.target.value })}><option value="">— topo —</option>{targets.filter((x) => x.id !== t.id).map((x) => <option key={x.id} value={x.id}>{nameOf(x.id)}</option>)}</Select></Field>
                     <div className="flex gap-1">
+                      <Button size="icon" variant="ghost" title="Indícios da função e área de atuação" onClick={(e) => { e.stopPropagation(); setEvidenceOf(t); }}><Binoculars /></Button>
                       <Button size="icon" variant="ghost" title="Ver ficha completa" disabled={!a} onClick={(e) => { e.stopPropagation(); setFicha(a || null); }}><UserRound /></Button>
                       <Button size="icon" variant="ghost" title="Desvincular" onClick={() => api.removeTarget(t)}><Trash2 /></Button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] md:col-span-full md:col-start-2" onClick={(e) => e.stopPropagation()}>
+                      <Field label="Núcleo"><Select className="h-9" value={t.cluster} onChange={(e) => api.updateTarget(t, { cluster: e.target.value })}>{clusterOptions(t).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>
+                      <Field label="Área de atuação"><div className="relative"><MapPin className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-pm-muted" /><Input className="h-9 pl-8 uppercase" placeholder="bairro / ponto" defaultValue={t.area} key={t.area} onBlur={(e) => e.target.value.toUpperCase() !== t.area && api.updateTarget(t, { area: e.target.value.toUpperCase() })} /></div></Field>
+                      <button type="button" onClick={() => setEvidenceOf(t)} className="self-end rounded-sm border border-pm-line px-3 py-2 text-xs font-bold hover:border-pm-gold">{t.evidence.length ? `${t.evidence.length} indício(s)` : "+ indício"}</button>
                     </div>
                   </div>
                 );
@@ -575,6 +618,8 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
         </div>
       </div>
       <BoAuthorModal open={boOpen} data={data} api={api} investigationId={inv.id} onClose={() => setBoOpen(false)} />
+      <GroupsModal open={groupsOpen} onClose={() => setGroupsOpen(false)} data={data} api={api} inv={inv} targets={targets} />
+      <EvidenceModal target={evidenceOf} onClose={() => setEvidenceOf(null)} data={data} api={api} inv={inv} />
       <HierarchyModal open={hierOpen} onClose={() => setHierOpen(false)} data={data} api={api} inv={inv} targets={targets} />
       <CompareModal open={compareOpen} onClose={() => setCompareOpen(false)} data={data} api={api} inv={inv} targets={targets} onOpenAuthor={(id) => setFicha(data.authors.find((x) => x.id === id) || null)} />
       <TargetFichaModal author={ficha} data={data} api={api} onClose={() => setFicha(null)} onShareMessage={(x) => setSharing(x)} onOpenAuthor={(x) => setFicha(x)} />
