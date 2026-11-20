@@ -90,20 +90,12 @@ export function OrgBoard({ targets, links, groups: custom, autoLinks = [], peopl
 
   const svg = (
     <svg ref={svgRef} xmlns="http://www.w3.org/2000/svg" width={W} height={H} viewBox={`0 0 ${W} ${H}`} fontFamily={exportMode ? FONT : undefined}
-      className={exportMode ? undefined : "block select-none"} role="img" aria-label="Organograma por núcleos">
+      className={exportMode ? undefined : "mx-auto block select-none"} role="img" aria-label="Organograma por núcleos">
       <defs>
         <marker id="seta-chefia" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C0201A" /></marker>
         {board.groups.flatMap((g) => g.cards.map((c) => <clipPath key={c.targetId} id={`ph-${c.targetId}`}><rect x={g.x + c.x + 19} y={g.y + c.y + 8} width={74} height={90} rx={3} /></clipPath>))}
       </defs>
       <rect width={W} height={H} fill="#FFFFFF" />
-      {/* Graus da hierarquia (linhas) */}
-      {board.rows.map((r) => (
-        <g key={`row${r.level}`}>
-          <rect x={6} y={r.top} width={34} height={r.bottom - r.top} rx={3} fill="#0B0B0C" />
-          <text x={23} y={(r.top + r.bottom) / 2 - 2} textAnchor="middle" fontSize={15} fontWeight={900} fill="#F5D547">{`${r.level + 1}º`}</text>
-          <text x={23} y={(r.top + r.bottom) / 2 + 12} textAnchor="middle" fontSize={7.5} fontWeight={800} fill="#FFFFFF">GRAU</text>
-        </g>
-      ))}
       {/* Quadros dos núcleos */}
       {board.groups.map((g) => {
         const over = drag?.overGroup === g.key;
