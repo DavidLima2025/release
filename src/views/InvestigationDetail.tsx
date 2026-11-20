@@ -1,7 +1,7 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowLeft, Check, ChevronRight, Download, Edit3, ExternalLink, FileSearch, FileText, GitFork, History, Link2, Loader2,
-  Map as MapIcon, Paperclip, Plus, Presentation, Save, ScanText, Trash2, UserPlus, Users,
+  Map as MapIcon, Paperclip, Plus, Presentation, Save, ScanText, Search, Trash2, UserPlus, Users,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, EmptyState, SectionHeader } from "../components/ui/card";
@@ -10,6 +10,8 @@ import { Badge } from "../components/ui/badge";
 import { Modal } from "../components/ui/modal";
 import { LinkChart, Organogram } from "../components/Organogram";
 import { BoAuthorModal } from "../components/BoAuthorModal";
+import { DossieModal } from "../components/DossieModal";
+import { companionsOf } from "../lib/companions";
 
 const CrimeMap = lazy(() => import("./CrimeMap"));
 import {
@@ -359,7 +361,10 @@ function ItemModal({ open, boMode, data, api, inv, item, targets, onClose }: {
 // ---------- Alvos, hierarquia e vínculos ----------
 function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: InvestigationsApi; inv: Investigation; targets: InvestigationTarget[]; links: InvestigationLink[] }) {
   const [selected, setSelected] = useState<string>("");
-  const [authorId, setAuthorId] = useState("");
+  const [picked, setPicked] = useState<string[]>([]);
+  const [dossieOpen, setDossieOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [autoLink, setAutoLink] = useState(true);
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("Associado");
   const [parentId, setParentId] = useState("");
@@ -369,16 +374,87 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
   const authorOf = (t: InvestigationTarget) => data.authors.find((a) => a.id === t.authorId);
   const nameOf = (id: string) => { const t = targets.find((x) => x.id === id); return t ? authorOf(t)?.name || "?" : "—"; };
   const inDossier = new Set(targets.map((t) => t.authorId));
-  const candidates = useMemo(() => data.authors.filter((a) => !inDossier.has(a.id) && matchesText([a.name, a.alias, a.document, a.crimes], search)).slice(0, 50),
-    [data.authors, search, targets]); // eslint-disable-line react-hooks/exhaustive-deps
+  const candidates = useMemo(() => (search.trim()
+    ? data.authors.filter((a) => matchesText([a.name, a.alias, a.document, a.crimes, a.neighborhood, a.notes], search))
+        .sort((x, y) => Number(inDossier.has(x.id)) - Number(inDossier.has(y.id))).slice(0, 40)
+    : []), [data.authors, search, targets]); // eslint-disable-line react-hooks/exhaustive-deps
+  const folderName = (id: string) => data.authorCategories.find((f) => f.id === id)?.name || "";
 
-  const add = async () => { if (!authorId) return; const t = await api.addTarget(inv, authorId, role, parentId); if (t) { setAuthorId(""); setSearch(""); setSelected(t.id); } };
+  // Sugestões: quem esteve no mesmo BO que os alvos do dossiê e ainda não está nele.
+  const suggestions = useMemo(() => {
+    const out = new Map<string, { author: (typeof data.authors)[number]; with: string[]; times: number; arrested: boolean }>();
+    for (const t of targets) {
+      const a = authorOf(t);
+      if (!a) continue;
+      for (const c of companionsOf(a.id, data.authors, data.authorReports, api.items)) {
+        if (inDossier.has(c.author.id)) continue;
+        const cur = out.get(c.author.id) || { author: c.author, with: [], times: 0, arrested: false };
+        cur.with.push(a.name); cur.times += c.occurrences.length; cur.arrested ||= c.arrestedTogether;
+        out.set(c.author.id, cur);
+      }
+    }
+    return [...out.values()].sort((x, y) => y.times - x.times).slice(0, 12);
+  }, [targets, data.authors, data.authorReports, api.items]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const togglePick = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+
+  /** Vincula os escolhidos; se marcado, registra "Comparsa/Associado" com quem esteve no mesmo BO. */
+  const add = async (ids = picked) => {
+    if (!ids.length) return;
+    setAdding(true);
+    const created: InvestigationTarget[] = [];
+    for (const id of ids) {
+      if (inDossier.has(id)) continue;
+      const t = await api.addTarget(inv, id, role, parentId);
+      if (t) created.push(t);
+    }
+    if (autoLink && created.length) {
+      const all = [...targets, ...created];
+      const done = new Set(links.map((l) => [l.fromTarget, l.toTarget].sort().join("|")));
+      for (const t of created) {
+        for (const c of companionsOf(t.authorId, data.authors, data.authorReports, api.items)) {
+          const other = all.find((x) => x.authorId === c.author.id && x.id !== t.id);
+          if (!other) continue;
+          const key = [t.id, other.id].sort().join("|");
+          if (done.has(key)) continue;
+          done.add(key);
+          await api.addLink(inv, other.id, t.id, c.arrestedTogether ? "Comparsa" : "Contato", `Juntos em ${c.occurrences.length} BO(s): ${c.occurrences.map((o) => o.reds).join(", ")}`);
+        }
+      }
+    }
+    setAdding(false);
+    setPicked([]);
+    if (created.length) { setSelected(created[created.length - 1].id); setSearch(""); }
+  };
+
+  const row = (a: (typeof data.authors)[number], extra?: ReactNode) => {
+    const inside = inDossier.has(a.id);
+    const on = picked.includes(a.id);
+    const ph = data.authorPhotos.find((p) => p.authorId === a.id && (p.category || "perfil") === "perfil");
+    return (
+      <div key={a.id} role="button" tabIndex={0} onClick={() => !inside && togglePick(a.id)} onKeyDown={(e) => e.key === "Enter" && !inside && togglePick(a.id)}
+        className={`flex items-center gap-2 rounded-sm border p-1.5 text-left ${inside ? "border-pm-line bg-pm-sand/40 opacity-60" : on ? "cursor-pointer border-pm-gold bg-pm-gold/15" : "cursor-pointer border-pm-line bg-white hover:border-pm-gold"}`}>
+        <input type="checkbox" className="h-4 w-4 shrink-0 accent-[#7A6C45]" checked={on || inside} disabled={inside} readOnly tabIndex={-1} />
+        <div className="grid h-11 w-9 shrink-0 place-items-center overflow-hidden rounded-sm bg-pm-sand">{ph ? <img src={data.getIntelFileUrl(ph.filePath)} alt="" className="h-full w-full object-cover" /> : <Users className="h-4 w-4 text-pm-muted" />}</div>
+        <div className="min-w-0 flex-1 text-xs">
+          <p className="truncate text-[13px] font-black uppercase leading-tight">{a.name}</p>
+          <p className="truncate text-pm-muted">{[a.alias && `"${a.alias}"`, a.document, folderName(a.categoryId)].filter(Boolean).join(" · ") || "—"}</p>
+          {extra}
+        </div>
+        {inside ? <Badge>no dossiê</Badge> : (
+          <button type="button" title="Vincular agora" onClick={(e) => { e.stopPropagation(); add([a.id]); }} disabled={adding}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-sm bg-pm-black text-white hover:bg-pm-ink disabled:opacity-50"><Plus className="h-4 w-4" /></button>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-5">
       <Card>
         <CardContent>
-          <SectionHeader icon={GitFork} title="Organograma" subtitle="Linhas cheias: hierarquia (superior → subordinado). Tracejadas: demais vínculos. Clique num alvo para editar." />
+          <SectionHeader icon={GitFork} title="Organograma" subtitle="Linhas cheias: hierarquia (superior → subordinado). Tracejadas: demais vínculos. Clique num alvo para editar."
+            actions={<Button variant="primary" disabled={!targets.length} onClick={() => setDossieOpen(true)}><FileText />PDF: organograma + qualificações</Button>} />
           {targets.length === 0 ? <EmptyState icon={Users} title="Nenhum alvo no dossiê">Vincule alvos do banco de alvos ou cadastre novos ao lado.</EmptyState>
             : <Organogram targets={targets} links={links} authors={data.authors} photos={data.authorPhotos} photoUrl={data.getIntelFileUrl} selectedId={selected} onSelect={(t) => setSelected(t.id)} />}
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-pm-muted">
@@ -428,15 +504,30 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
             <CardContent>
               <SectionHeader icon={UserPlus} title="Vincular alvo" />
               <div className="grid gap-2">
-                <Input placeholder="Buscar no banco de alvos (nome, vulgo, RG…)" value={search} onChange={(e) => setSearch(e.target.value)} />
-                <Select value={authorId} onChange={(e) => setAuthorId(e.target.value)} size={Math.min(6, Math.max(2, candidates.length))} className="h-auto py-1">
-                  {candidates.map((a) => <option key={a.id} value={a.id}>{a.name}{a.alias ? ` ("${a.alias}")` : ""}</option>)}
-                </Select>
+                <div className="relative"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-pm-muted" />
+                  <Input className="pl-9" placeholder="Buscar: nome, vulgo, RG/CPF, bairro…" value={search} onChange={(e) => setSearch(e.target.value)} autoComplete="off" />
+                </div>
+                {search.trim() && (
+                  <div className="max-h-72 space-y-1 overflow-auto">
+                    {candidates.length === 0 && <p className="px-1 text-sm text-pm-muted">Nenhum alvo encontrado. Cadastre abaixo.</p>}
+                    {candidates.map((a) => row(a))}
+                  </div>
+                )}
+                {!search.trim() && suggestions.length > 0 && (
+                  <div>
+                    <p className="pm-label">Sugeridos — estiveram no mesmo BO que alvos do dossiê</p>
+                    <div className="max-h-72 space-y-1 overflow-auto">
+                      {suggestions.map((s) => row(s.author, <p className={`truncate ${s.arrested ? "font-semibold text-status-late" : "text-pm-gold-dark"}`}>{s.arrested ? "Preso junto" : "Junto"} com {s.with.join(", ")} ({s.times}×)</p>))}
+                    </div>
+                  </div>
+                )}
+                {!search.trim() && !suggestions.length && <p className="px-1 text-xs text-pm-muted">Digite para buscar no banco de alvos. Clique nos alvos para marcar vários, ou no + para vincular na hora.</p>}
                 <div className="grid grid-cols-2 gap-2">
                   <Field label="Papel"><Select value={role} onChange={(e) => setRole(e.target.value)}>{TARGET_ROLES.map((r) => <option key={r}>{r}</option>)}</Select></Field>
                   <Field label="Superior"><Select value={parentId} onChange={(e) => setParentId(e.target.value)}><option value="">— topo —</option>{targets.map((x) => <option key={x.id} value={x.id}>{nameOf(x.id)}</option>)}</Select></Field>
                 </div>
-                <Button variant="primary" disabled={!authorId} onClick={add}><Plus />Vincular ao dossiê</Button>
+                <label className="flex items-center gap-2 text-xs"><input type="checkbox" className="h-4 w-4 accent-[#7A6C45]" checked={autoLink} onChange={(e) => setAutoLink(e.target.checked)} />Ligar no organograma a quem esteve no mesmo BO</label>
+                <Button variant="primary" disabled={!picked.length || adding} onClick={() => add()}>{adding ? <Loader2 className="animate-spin" /> : <Plus />}{picked.length > 1 ? `Vincular ${picked.length} alvos` : "Vincular ao dossiê"}</Button>
                 <Button onClick={() => setNewOpen(true)}><UserPlus />Cadastrar alvo novo</Button>
                 <Button onClick={() => setBoOpen(true)}><ScanText />Cadastrar alvos pelo BO</Button>
               </div>
@@ -468,6 +559,7 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
         </div>
       </div>
       <BoAuthorModal open={boOpen} data={data} api={api} investigationId={inv.id} onClose={() => setBoOpen(false)} />
+      <DossieModal open={dossieOpen} onClose={() => setDossieOpen(false)} data={data} api={api} inv={inv} targets={targets} links={links} />
       <NewTargetModal open={newOpen} data={data} targets={targets} nameOf={nameOf} onClose={() => setNewOpen(false)}
         onSave={async (form, r, p) => { const t = await api.createAndAddTarget(inv, form, r, p); if (t) { setNewOpen(false); setSelected(t.id); } }} />
     </div>
