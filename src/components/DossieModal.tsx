@@ -8,6 +8,8 @@ import type { Investigation, InvestigationLink, InvestigationTarget } from "../l
 import type { ReportImage } from "../lib/report/model";
 import { buildFichaInput, cropPortrait, fileSlug } from "../lib/fichaInput";
 import { redsCount } from "../lib/companions";
+import { groupKeyOf } from "../lib/orgBoard";
+import { formatBR } from "../lib/dates";
 
 type Props = { open: boolean; onClose: () => void; data: AppData; api: InvestigationsApi; inv: Investigation; targets: InvestigationTarget[]; links: InvestigationLink[] };
 
@@ -27,16 +29,23 @@ export function DossieModal({ open, onClose, data, api, inv, targets, links }: P
     const [{ renderDossie }, { renderFicha }] = await Promise.all([import("../lib/report/dossie"), import("../lib/report/ficha")]);
     setProgress("Montando o organograma…");
     const people = new Map<string, any>();
+    const boardPeople = new Map<string, any>();
     for (const t of ordered) {
       const a = authorOf(t); if (!a) continue;
       const ph = data.authorPhotos.find((p) => p.authorId === a.id && (p.category || "perfil") === "perfil");
       const img = ph ? await cropPortrait((await loadImage(data.getIntelFileUrl(ph.filePath))) as ReportImage | undefined) : undefined;
       const parent = targets.find((x) => x.id === t.parentId);
+      const bos = redsCount(a.id, data.authors, data.authorReports, api.items).length;
       people.set(t.id, {
         name: a.name, alias: a.alias, role: t.role, status: a.status, document: a.document, photo: img,
-        parent: parent ? authorOf(parent)?.name || "" : "", bos: redsCount(a.id, data.authors, data.authorReports, api.items).length,
+        parent: parent ? authorOf(parent)?.name || "" : "", bos,
+        group: groupKeyOf(t, inv.orgGroups).slice(2), area: t.area,
+        evidence: t.evidence.map((e) => ({ source: e.source, note: e.note, date: e.date ? formatBR(e.date) : "" })),
       });
+      boardPeople.set(t.id, { name: a.name, alias: a.alias, photo: img?.dataUrl, role: t.role, area: t.area, evidence: t.evidence.length, bos });
     }
+    const { renderBoardImage } = await import("../lib/boardImage");
+    const orgImage = await renderBoardImage(targets, links, inv.orgGroups, boardPeople).catch((e) => { console.error(e); return undefined; });
     const fichas: Uint8Array[] = [];
     const list = ordered.filter((t) => chosen.has(t.id));
     for (const [i, t] of list.entries()) {
@@ -47,7 +56,7 @@ export function DossieModal({ open, onClose, data, api, inv, targets, links }: P
     setProgress("Juntando o PDF…");
     const bytes = await renderDossie({
       code: inv.code, title: inv.title, status: inv.status, responsible: userName(inv.responsibleId), objective: inv.objective,
-      targets, links, people, fichas,
+      targets, links, people, fichas, orgImage,
       logo: (await loadImage("/pmmg-logo.png", true)) as ReportImage | undefined,
       generatedBy: data.currentUser?.warName || data.currentUser?.name || "",
       generatedAt: new Date().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }),
@@ -83,7 +92,7 @@ export function DossieModal({ open, onClose, data, api, inv, targets, links }: P
   return (
     <Modal open={open} onClose={() => !progress && onClose()} size="md" eyebrow="Organograma e qualificações" title={<span className="inline-flex items-center gap-2"><FileText className="h-5 w-5 text-pm-gold-light" />Dossiê em PDF</span>}>
       <div className="space-y-4 text-sm">
-        <p className="text-pm-muted">O PDF traz: <b>1)</b> o organograma com as fotos; <b>2)</b> a relação de alvos e de vínculos; <b>3)</b> no final, a ficha de qualificação de cada alvo marcado abaixo.</p>
+        <p className="text-pm-muted">O PDF traz: <b>1)</b> o organograma por núcleos, com fotos e setas de comando; <b>2)</b> a relação de alvos (função, núcleo, área de atuação), dos vínculos e dos indícios; <b>3)</b> no final, a ficha de qualificação de cada alvo marcado abaixo.</p>
         <div>
           <div className="mb-1 flex items-center justify-between">
             <p className="pm-label">Qualificações ({chosen.size} de {targets.length})</p>

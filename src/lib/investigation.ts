@@ -67,7 +67,7 @@ export const INFO_RATINGS: [string, string][] = [
 ];
 
 export const TARGET_ROLES = ["Líder", "Gerente", "Financeiro", "Executor", "Apoio / logística", "Receptador", "Olheiro", "Associado", "Vítima", "Testemunha"];
-export const RELATIONS = ["Comparsa", "Subordinado", "Parente", "Cônjuge / companheiro(a)", "Fornecedor", "Comprador", "Receptador", "Contato", "Rival", "Outro"];
+export const RELATIONS = ["Comparsa", "Subordinado", "Parente", "Irmão(ã)", "Cônjuge / companheiro(a)", "Namorado(a)", "Fornecedor", "Comprador", "Receptador", "Financia", "Agente público", "Advogado", "Contato", "Rival", "Outro"];
 
 export const ROLE_COLOR: Record<string, string> = {
   "Líder": "#B3261E", "Gerente": "#C28A12", "Financeiro": "#7A6C45", "Executor": "#231F20", "Apoio / logística": "#2F5D7C",
@@ -79,7 +79,13 @@ export type Investigation = {
   analysis: string; conclusion: string; recommendations: string; methodology: string; classification: string; status: string;
   stage: StageKey; stages: Record<string, { done?: boolean[]; notes?: string; completedAt?: string }>; priority: string; nature: string; area: string;
   responsibleId: string; team: string[]; openedAt: string; dueDate: string; closedAt: string; createdAt: string; updatedAt: string;
+  /** Núcleos do organograma definidos pelo analista. */
+  orgGroups: OrgGroup[];
 };
+
+export type OrgGroup = { name: string; activities: string; color: string };
+/** Indício da função/atuação: fonte da investigação, foto de levantamento ou anotação livre. */
+export type Evidence = { id: string; source: string; note: string; date: string; role?: string; area?: string };
 
 export type InvestigationItem = {
   id: string; investigationId: string; kind: string; title: string; itemDate: string; source: string; reference: string; url: string;
@@ -89,7 +95,11 @@ export type InvestigationItem = {
   lat: number | null; lng: number | null; geoSource: string; place: string; eventTime: string; crime: string;
 };
 
-export type InvestigationTarget = { id: string; investigationId: string; authorId: string; role: string; parentId: string; notes: string; position: number };
+export type InvestigationTarget = {
+  id: string; investigationId: string; authorId: string; role: string; parentId: string; notes: string; position: number;
+  /** Núcleo no organograma ("" = automático pela função), área de atuação e indícios. */
+  cluster: string; area: string; evidence: Evidence[];
+};
 export type InvestigationLink = { id: string; investigationId: string; fromTarget: string; toTarget: string; relation: string; notes: string };
 
 export function normalizeInvestigation(row: any): Investigation {
@@ -101,6 +111,7 @@ export function normalizeInvestigation(row: any): Investigation {
     stages: row.stages && typeof row.stages === "object" ? row.stages : {}, priority: row.priority || "Média", nature: row.nature || "",
     area: row.area || "", responsibleId: row.responsible_id || "", team: Array.isArray(row.team) ? row.team : [], openedAt: row.opened_at || "",
     dueDate: row.due_date || "", closedAt: row.closed_at || "", createdAt: row.created_at || "", updatedAt: row.updated_at || "",
+    orgGroups: Array.isArray(row.org_groups) ? row.org_groups.filter((g: any) => g && g.name).map((g: any) => ({ name: String(g.name), activities: String(g.activities || ""), color: String(g.color || "") })) : [],
   };
 }
 
@@ -115,7 +126,10 @@ export function normalizeItem(row: any): InvestigationItem {
 }
 
 export function normalizeTarget(row: any): InvestigationTarget {
-  return { id: row.id, investigationId: row.investigation_id, authorId: row.author_id, role: row.role || "Associado", parentId: row.parent_id || "", notes: row.notes || "", position: row.position || 0 };
+  return {
+    id: row.id, investigationId: row.investigation_id, authorId: row.author_id, role: row.role || "Associado", parentId: row.parent_id || "", notes: row.notes || "", position: row.position || 0,
+    cluster: row.cluster || "", area: row.area || "", evidence: Array.isArray(row.evidence) ? row.evidence : [],
+  };
 }
 
 export function normalizeLink(row: any): InvestigationLink {

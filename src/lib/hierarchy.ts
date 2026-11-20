@@ -6,15 +6,33 @@ import { indexReds } from "./companions";
 
 export type Proposal = {
   target: InvestigationTarget; author?: Author;
-  role: string; parentId: string;
+  role: string; parentId: string; area: string; areaWhy: string;
   score: number; bos: number; partners: number; arrested: number;
   reason: string;
 };
 
 const ARREST = /PRES|CONDUZ|AUTUAD|APREEND|FLAGRANTE/i;
+
+/** Palavras que, num levantamento, vestígio ou fonte, indicam a função. */
+const ROLE_WORDS: [string, RegExp][] = [
+  ["Líder", /\b(LIDER|LIDERA|CHEFE|CHEFIA|PATRAO|DONO DA BOCA|MANDANTE|CABECA DO GRUPO|COMANDA|QUEM MANDA)\b/],
+  ["Gerente", /\b(GERENTE|GERENCIA|FRENTE DA BOCA|BRACO DIREITO|SUBGERENTE|COORDENA)\b/],
+  ["Financeiro", /\b(FINANCEIRO|CONTADOR|LAVAGEM|LARANJA|MOVIMENTA(CAO)? (DE )?DINHEIRO|PIX|CONTA BANCARIA|GUARDA O DINHEIRO)\b/],
+  ["Receptador", /\b(RECEPTA\w*|COMPRA OS? (CELULARES|OBJETOS|PRODUTOS)|DESMANCHE|REVENDE)\b/],
+  ["Olheiro", /\b(OLHEIRO|FOGUETEIRO|VIGIA|RADINHO|CAMPANA|AVISA A CHEGADA)\b/],
+  ["Apoio / logística", /\b(MOTORISTA|LOGISTICA|TRANSPORT\w*|ESCONDE|DEPOSITO|GUARDA AS? (ARMAS|DROGAS|OBJETOS)|APOIO|FUGA)\b/],
+  ["Executor", /\b(EXECUTOR|EXECUTA|VAPOR|AUTOR DO (FURTO|ROUBO)|ATIRADOR|PUNGUISTA|MAO LEVE|ABORDA AS VITIMAS)\b/],
+];
+/** Bairro/local a partir de "RUA X, 10 — BAIRRO — CIDADE/UF". */
+function placeArea(place: string) {
+  const parts = place.split(/\s+[—-]\s+/).map((p) => p.trim()).filter(Boolean);
+  const bairro = parts.length >= 3 ? parts[1] : parts.length === 2 && !/\/[A-Z]{2}$/.test(parts[1]) ? parts[1] : "";
+  return bairro.replace(/\s+/g, " ").toUpperCase();
+}
+export type EvidenceText = { authorId: string; text: string; source: string };
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
 
-export function proposeHierarchy(targets: InvestigationTarget[], authors: Author[], reports: AuthorFile[], items: InvestigationItem[]): Proposal[] {
+export function proposeHierarchy(targets: InvestigationTarget[], authors: Author[], reports: AuthorFile[], items: InvestigationItem[], photos: AuthorFile[] = []): Proposal[] {
   const { byReds } = indexReds(authors, reports, items);
   const authorOf = new Map(authors.map((a) => [a.id, a]));
   const tByAuthor = new Map(targets.map((t) => [t.authorId, t]));
@@ -54,8 +72,38 @@ export function proposeHierarchy(targets: InvestigationTarget[], authors: Author
   const ranked = [...base].sort((a, b) => b.score - a.score);
   const top = ranked[0]?.score || 0;
 
+  // Indícios: o que o analista anotou, fontes que citam o alvo e fotos de levantamento/ocorrência.
+  const clueRole = (t: InvestigationTarget): { role: string; why: string } | null => {
+    const explicit = [...t.evidence].reverse().find((e) => e.role);
+    if (explicit) return { role: explicit.role!, why: `indício: ${explicit.source || "anotação"}` };
+    const texts: { text: string; source: string }[] = [
+      ...t.evidence.map((e) => ({ text: e.note, source: e.source || "indício" })),
+      ...items.filter((i) => i.authorIds.includes(t.authorId)).map((i) => ({ text: `${i.title} ${i.summary}`, source: `${i.kind} ${i.reference || i.title}`.trim() })),
+      ...photos.filter((p) => p.authorId === t.authorId && (p.category === "levantamento" || p.category === "ocorrencia") && p.description).map((p) => ({ text: p.description, source: p.category === "levantamento" ? "foto de levantamento" : "foto de ocorrência" })),
+    ];
+    for (const [role, re] of ROLE_WORDS) {
+      const hit = texts.find((x) => re.test(norm(x.text)));
+      if (hit) return { role, why: `"${norm(hit.text).match(re)![0].toLowerCase()}" em ${hit.source}` };
+    }
+    return null;
+  };
+  const areaOf = (t: InvestigationTarget): { area: string; why: string } => {
+    const ev = [...t.evidence].reverse().find((e) => e.area);
+    if (ev) return { area: ev.area!, why: `indício: ${ev.source || "anotação"}` };
+    const counts = new Map<string, number>();
+    const places = [
+      ...items.filter((i) => i.authorIds.includes(t.authorId) && i.place).map((i) => i.place),
+      ...reports.filter((r) => r.authorId === t.authorId && r.place).map((r) => r.place),
+    ];
+    for (const pl of places) { const b = placeArea(pl); if (b) counts.set(b, (counts.get(b) || 0) + 1); }
+    const best = [...counts.entries()].sort((x, y) => y[1] - x[1])[0];
+    return best ? { area: best[0], why: `${best[1]} de ${places.length} BO(s) no bairro` } : { area: t.area, why: "" };
+  };
+
   const roleOf = (b: (typeof base)[number], rank: number) => {
     const a = authorOf.get(b.t.authorId);
+    const clue = clueRole(b.t);
+    if (clue) return clue.role;
     const roles = b.s.roles.map(norm);
     const victim = roles.filter((r) => /VITIMA/.test(r)).length; const witness = roles.filter((r) => /TESTEMUNHA/.test(r)).length;
     if (b.s.bos && victim > b.s.bos / 2) return "Vítima";
@@ -79,15 +127,18 @@ export function proposeHierarchy(targets: InvestigationTarget[], authors: Author
         .filter((p) => (scoreOf.get(p.id) || 0) > b.score && !["Vítima", "Testemunha"].includes(roles.get(tByAuthor.get(p.id)!.id) || ""))
         .sort((x, y) => y.n - x.n || (scoreOf.get(y.id) || 0) - (scoreOf.get(x.id) || 0));
       if (above[0]) parentId = tByAuthor.get(above[0].id)!.id;
+      // Sem BO em comum com ninguém do dossiê: mantém o superior que o analista já definiu.
+      else if (!b.ps.length) parentId = b.t.parentId;
     }
+    const clue = clueRole(b.t); const ar = areaOf(b.t);
     const names = b.ps.sort((x, y) => y.n - x.n).slice(0, 3).map((p) => `${authorOf.get(p.id)?.name.split(" ")[0] || "?"} ${p.n}×`);
     const reason = [
       `${b.s.bos} BO(s)`,
       b.ps.length ? `${b.ps.length} parceiro(s) no dossiê (${names.join(", ")})` : "sem BO em comum com o dossiê",
       b.arrested ? `${b.arrested} prisão(ões) junto` : "",
-      role === "Receptador" ? "receptação no cadastro" : role === "Vítima" || role === "Testemunha" ? `aparece como ${role.toLowerCase()} nos BOs` : "",
+      clue && clue.role === role ? clue.why : role === "Receptador" ? "receptação no cadastro" : role === "Vítima" || role === "Testemunha" ? `aparece como ${role.toLowerCase()} nos BOs` : "",
     ].filter(Boolean).join(" · ");
-    out.push({ target: b.t, author: authorOf.get(b.t.authorId), role, parentId, score: Math.round(b.score * 10) / 10, bos: b.s.bos, partners: b.ps.length, arrested: b.arrested, reason });
+    out.push({ target: b.t, author: authorOf.get(b.t.authorId), role, parentId, area: ar.area || b.t.area, areaWhy: ar.why, score: Math.round(b.score * 10) / 10, bos: b.s.bos, partners: b.ps.length, arrested: b.arrested, reason });
   }
   return out;
 }

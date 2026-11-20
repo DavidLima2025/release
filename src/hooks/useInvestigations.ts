@@ -12,7 +12,7 @@ const INV_FIELDS: Record<string, string> = {
   title: "title", objective: "objective", origin: "origin", destination: "destination", summary: "summary", analysis: "analysis",
   conclusion: "conclusion", recommendations: "recommendations", methodology: "methodology", classification: "classification",
   status: "status", stage: "stage", stages: "stages", priority: "priority", nature: "nature", area: "area", responsibleId: "responsible_id",
-  team: "team", openedAt: "opened_at", dueDate: "due_date", closedAt: "closed_at",
+  team: "team", openedAt: "opened_at", dueDate: "due_date", closedAt: "closed_at", orgGroups: "org_groups",
 };
 const ITEM_FIELDS: Record<string, string> = {
   kind: "kind", title: "title", itemDate: "item_date", source: "source", reference: "reference", url: "url", sourceRating: "source_rating",
@@ -270,12 +270,15 @@ export function useInvestigations(data: AppData, notify: Notify) {
     if ("parentId" in values) row.parent_id = values.parentId || null;
     if ("notes" in values) row.notes = values.notes;
     if ("position" in values) row.position = values.position;
+    if ("cluster" in values) row.cluster = values.cluster || "";
+    if ("area" in values) row.area = values.area || "";
+    if ("evidence" in values) row.evidence = values.evidence || [];
     const { error } = await supabase.from("investigation_targets").update(row).eq("id", target.id);
     if (error) { load(); fail(error, "Erro ao atualizar o alvo."); }
   }
 
   /** Aplica várias mudanças de papel/superior de uma vez (proposta já conferida, sem ciclos). */
-  async function applyTargets(changes: { target: InvestigationTarget; role: string; parentId: string }[]) {
+  async function applyTargets(changes: { target: InvestigationTarget; role: string; parentId: string; area?: string }[]) {
     if (!changes.length) return true;
     const ids = new Set(changes.map((c) => c.target.id));
     // Confere ciclos no resultado final.
@@ -285,8 +288,8 @@ export function useInvestigations(data: AppData, notify: Notify) {
       const seen = new Set<string>(); let cur = final.get(id) || "";
       while (cur) { if (cur === id || seen.has(cur)) { notify("A hierarquia proposta tem um ciclo. Ajuste antes de aplicar.", "error"); return false; } seen.add(cur); cur = final.get(cur) || ""; }
     }
-    setTargets((list) => list.map((t) => { const c = changes.find((x) => x.target.id === t.id); return c ? { ...t, role: c.role, parentId: c.parentId } : t; }));
-    const results = await Promise.all(changes.map((c) => supabase.from("investigation_targets").update({ role: c.role, parent_id: c.parentId || null }).eq("id", c.target.id)));
+    setTargets((list) => list.map((t) => { const c = changes.find((x) => x.target.id === t.id); return c ? { ...t, role: c.role, parentId: c.parentId, area: c.area ?? t.area } : t; }));
+    const results = await Promise.all(changes.map((c) => supabase.from("investigation_targets").update({ role: c.role, parent_id: c.parentId || null, ...(c.area !== undefined ? { area: c.area } : {}) }).eq("id", c.target.id)));
     const err = results.find((r) => r.error)?.error;
     if (err) { load(); fail(err, "Erro ao aplicar a hierarquia."); return false; }
     notify(`Organograma atualizado (${changes.length} alvo(s)).`, "success");

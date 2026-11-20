@@ -4,11 +4,16 @@ import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from "pdf
 import { layoutOrganogram, ROLE_COLOR, type InvestigationLink, type InvestigationTarget } from "../investigation";
 import type { ReportImage } from "./model";
 
-export type DossiePerson = { name: string; alias: string; role: string; status: string; document: string; parent: string; photo?: ReportImage; bos: number };
+export type DossiePerson = {
+  name: string; alias: string; role: string; status: string; document: string; parent: string; photo?: ReportImage; bos: number;
+  group?: string; area?: string; evidence?: { source: string; note: string; date: string }[];
+};
 export type DossieInput = {
   code: string; title: string; status: string; responsible: string; objective: string;
   targets: InvestigationTarget[]; links: InvestigationLink[]; people: Map<string, DossiePerson>;
   logo?: ReportImage; fichas: Uint8Array[];
+  /** Organograma por núcleos já desenhado (PNG). Sem ele, desenha a árvore simples. */
+  orgImage?: ReportImage;
   generatedBy: string; generatedAt: string;
 };
 
@@ -87,6 +92,29 @@ export async function renderDossie(input: DossieInput): Promise<Uint8Array> {
 
   // ---------- 1. Organograma ----------
   const { targets, links, people } = input;
+  const orgImg = await embed(input.orgImage);
+  if (orgImg) {
+    // Folha deitada; cresce (até A2) se o quadro for grande, para os nomes continuarem legíveis.
+    const iw = orgImg.width / 2; const ih = orgImg.height / 2; // imagem gerada em 2x
+    let pw = 841.89; let ph = 595.28;
+    const fit = (w: number, h: number) => Math.min(1, (w - 2 * M) / iw, (h - 73 - 50 - 50) / ih);
+    if (fit(pw, ph) < 0.7) { pw = Math.min(1684, Math.max(pw, iw * 0.7 + 2 * M)); ph = Math.min(1191, Math.max(ph, ih * 0.7 + 173)); }
+    const sc = fit(pw, ph);
+    header(pw, ph, "ORGANOGRAMA DA INVESTIGAÇÃO");
+    T([`Situação: ${input.status || "—"}`, `Responsável: ${input.responsible || "—"}`, `Alvos: ${targets.length}`, `Vínculos: ${links.length}`].join("     "), M, PH - 92, 8.5, regular, MUTED);
+    const w = iw * sc; const h = ih * sc;
+    page.drawImage(orgImg, { x: (PW - w) / 2, y: 50 + (PH - 73 - 50 - 50 - h) / 2, width: w, height: h });
+    // Legenda
+    let lx = M; const ly = 38;
+    page.drawLine({ start: { x: lx, y: ly + 3 }, end: { x: lx + 24, y: ly + 3 }, thickness: 2, color: rgb(0.75, 0.13, 0.1) });
+    T("comando / hierarquia", lx + 28, ly, 7.5); lx += 120;
+    page.drawLine({ start: { x: lx, y: ly + 3 }, end: { x: lx + 24, y: ly + 3 }, thickness: 1.4, color: rgb(0.18, 0.42, 0.23), dashArray: [4, 3] });
+    T("vínculo (parentesco, namoro, fornecedor…)", lx + 28, ly, 7.5); lx += 200;
+    page.drawCircle({ x: lx + 5, y: ly + 3, size: 5, color: GOLD }); T("nº de indícios da função", lx + 14, ly, 7.5); lx += 110;
+    T("◉ área de atuação".replace("◉", "o"), lx, ly, 7.5, regular, rgb(0.18, 0.36, 0.49));
+    footer("Organograma");
+  }
+  if (!orgImg) {
   const layout = layoutOrganogram(targets);
   const BW = 156; const BH = 66; const GX = 18; const GY = 40;
   const natW = Math.max(1, layout.width) * (BW + GX) - GX;
@@ -195,6 +223,7 @@ export async function renderDossie(input: DossieInput): Promise<Uint8Array> {
     T("hierarquia", lx + 96, ly, 7.5, regular, INK);
   }
   footer("Organograma");
+  }
 
   // ---------- 2. Relação de alvos e vínculos (A4 retrato) ----------
   const A4W = 595.28; const A4H = 841.89;
@@ -234,9 +263,17 @@ export async function renderDossie(input: DossieInput): Promise<Uint8Array> {
   sectionTitle(`Alvos (${targets.length})`);
   const ordered = [...targets].sort((a, b) => a.position - b.position);
   table(
-    [{ label: "Nº", w: 24 }, { label: "NOME", w: 150 }, { label: "VULGO", w: 70 }, { label: "FUNÇÃO", w: 70 }, { label: "SUBORDINADO A", w: 110 }, { label: "SITUAÇÃO / BOs", w: A4W - 2 * M - 424 }],
-    ordered.map((t, i) => { const p = people.get(t.id); return [String(i + 1), p?.name || "?", p?.alias || "", p?.role || t.role, p?.parent || "", [p?.status, p?.bos ? `${p.bos} BO(s)` : ""].filter(Boolean).join(" · ")]; }),
+    [{ label: "Nº", w: 22 }, { label: "NOME", w: 128 }, { label: "VULGO", w: 58 }, { label: "FUNÇÃO / NÚCLEO", w: 92 }, { label: "SUBORDINADO A", w: 92 }, { label: "ÁREA DE ATUAÇÃO", w: 72 }, { label: "BOs", w: A4W - 2 * M - 464 }],
+    ordered.map((t, i) => { const p = people.get(t.id); return [String(i + 1), p?.name || "?", p?.alias || "", [p?.role || t.role, p?.group && p.group !== p.role ? p.group : ""].filter(Boolean).join(" / "), p?.parent || "", p?.area || "", p?.bos ? String(p.bos) : ""]; }),
   );
+  const withEv = ordered.filter((t) => people.get(t.id)?.evidence?.length);
+  if (withEv.length) {
+    sectionTitle("Indícios da função e da área de atuação");
+    table(
+      [{ label: "ALVO", w: 24 }, { label: "NOME", w: 120 }, { label: "FONTE / VESTÍGIO", w: 130 }, { label: "O QUE INDICA", w: A4W - 2 * M - 274 }],
+      withEv.flatMap((t) => people.get(t.id)!.evidence!.map((e) => [String(ordered.indexOf(t) + 1), people.get(t.id)!.name, [e.source, e.date].filter(Boolean).join(" · "), e.note])),
+    );
+  }
   if (links.length) {
     sectionTitle(`Vínculos (${links.length})`);
     table(
