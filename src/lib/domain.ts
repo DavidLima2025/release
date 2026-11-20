@@ -228,5 +228,7 @@ export function safeFileName(name: string) {
 export function matchesText(haystack: (string | undefined | null)[], query: string) {
   const needle = query.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   if (!needle) return true;
-  return haystack.filter(Boolean).join(" ").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").includes(needle);
+  const hay = haystack.filter(Boolean).join(" ").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  // Cada palavra digitada precisa aparecer (em qualquer ordem): "joao pico" acha "JOÃO ... (PICO)".
+  return needle.split(/\s+/).every((w) => hay.includes(w) || hay.replace(/[.\-/]/g, "").includes(w.replace(/[.\-/]/g, "")));
 }
