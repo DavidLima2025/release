@@ -9,6 +9,8 @@ import type { ReportImage } from "../lib/report/model";
 import { buildFichaInput, cropPortrait, fileSlug } from "../lib/fichaInput";
 import { redsCount } from "../lib/companions";
 import { groupKeyOf } from "../lib/orgBoard";
+import { autoLinksFor } from "../lib/sharedContacts";
+import { groupStatus } from "../lib/investigation";
 import { formatBR } from "../lib/dates";
 
 type Props = { open: boolean; onClose: () => void; data: AppData; api: InvestigationsApi; inv: Investigation; targets: InvestigationTarget[]; links: InvestigationLink[] };
@@ -31,7 +33,13 @@ export function DossieModal({ open, onClose, data, api, inv, targets, links }: P
     const people = new Map<string, any>();
     const boardPeople = new Map<string, any>();
     for (const t of ordered) {
-      const a = authorOf(t); if (!a) continue;
+      const a = authorOf(t);
+      if (!a) {
+        const parent = targets.find((x) => x.id === t.parentId);
+        people.set(t.id, { name: t.label || "NÃO IDENTIFICADO", alias: "", role: t.role, status: "Não identificado", document: "", parent: parent ? authorOf(parent)?.name || parent.label : "", bos: 0, group: groupKeyOf(t, inv.orgGroups).slice(2), area: t.area, evidence: t.evidence.map((e) => ({ source: e.source, note: e.note, date: e.date ? formatBR(e.date) : "" })) });
+        boardPeople.set(t.id, { name: t.label || "NÃO IDENTIFICADO", alias: "", role: t.role, area: t.area, evidence: t.evidence.length, bos: 0, unknown: true, status: groupStatus(t) });
+        continue;
+      }
       const ph = data.authorPhotos.find((p) => p.authorId === a.id && (p.category || "perfil") === "perfil");
       const img = ph ? await cropPortrait((await loadImage(data.getIntelFileUrl(ph.filePath))) as ReportImage | undefined) : undefined;
       const parent = targets.find((x) => x.id === t.parentId);
@@ -42,10 +50,12 @@ export function DossieModal({ open, onClose, data, api, inv, targets, links }: P
         group: groupKeyOf(t, inv.orgGroups).slice(2), area: t.area,
         evidence: t.evidence.map((e) => ({ source: e.source, note: e.note, date: e.date ? formatBR(e.date) : "" })),
       });
-      boardPeople.set(t.id, { name: a.name, alias: a.alias, photo: img?.dataUrl, role: t.role, area: t.area, evidence: t.evidence.length, bos });
+      const ev = t.evidence.filter((e) => !e.role || e.role === t.role);
+      const confidence = ev.length ? (["confirmado", "provavel", "a confirmar"] as const).find((c) => ev.some((e) => (e.confidence || "provavel") === c)) : undefined;
+      boardPeople.set(t.id, { name: a.name, alias: a.alias, photo: img?.dataUrl, role: t.role, area: t.area, evidence: t.evidence.length, bos, status: groupStatus(t), confidence });
     }
     const { renderBoardImage } = await import("../lib/boardImage");
-    const orgImage = await renderBoardImage(targets, links, inv.orgGroups, boardPeople).catch((e) => { console.error(e); return undefined; });
+    const orgImage = await renderBoardImage(targets, links, inv.orgGroups, boardPeople, autoLinksFor(targets, data.authors)).catch((e) => { console.error(e); return undefined; });
     const fichas: Uint8Array[] = [];
     const list = ordered.filter((t) => chosen.has(t.id));
     for (const [i, t] of list.entries()) {
@@ -102,7 +112,7 @@ export function DossieModal({ open, onClose, data, api, inv, targets, links }: P
             {ordered.map((t) => (
               <label key={t.id} className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-pm-sand/50">
                 <input type="checkbox" className="h-4 w-4 accent-[#7A6C45]" checked={chosen.has(t.id)} onChange={() => toggle(t.id)} />
-                <span className="min-w-0 flex-1 truncate font-semibold uppercase">{authorOf(t)?.name || "?"}</span>
+                <span className="min-w-0 flex-1 truncate font-semibold uppercase">{authorOf(t)?.name || t.label || "?"}</span>
                 <span className="text-xs text-pm-muted">{t.role}</span>
               </label>
             ))}

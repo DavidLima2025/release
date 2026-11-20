@@ -3,7 +3,7 @@ import { INVESTIGATION_BUCKET, supabase } from "../supabase";
 import { safeFileName, Author } from "../lib/domain";
 import {
   Investigation, InvestigationItem, InvestigationLink, InvestigationTarget, StageKey, STAGES,
-  normalizeInvestigation, normalizeItem, normalizeLink, normalizeTarget, slug, stageIndex,
+  normalizeInvestigation, normalizeItem, normalizeLink, normalizeTarget, slug, stageIndex, newId,
 } from "../lib/investigation";
 import type { AppData, Notify } from "./useAppData";
 import type { ReportImage, ReportPerson } from "../lib/report/model";
@@ -254,17 +254,26 @@ export function useInvestigations(data: AppData, notify: Notify) {
     return addTarget(inv, author.id, role, parentId);
   }
 
-  async function updateTarget(target: InvestigationTarget, values: Partial<InvestigationTarget>) {
-    if (values.parentId && values.parentId === target.id) { notify("Um alvo não pode ser superior de si mesmo.", "error"); return; }
-    // Evita ciclo: o novo superior não pode ser subordinado deste alvo.
-    if (values.parentId) {
-      let cursor = targets.find((t) => t.id === values.parentId);
-      while (cursor) {
-        if (cursor.id === target.id) { notify("Esse vínculo criaria um ciclo na hierarquia.", "error"); return; }
-        cursor = targets.find((t) => t.id === cursor!.parentId);
-      }
-    }
-    setTargets((list) => list.map((t) => (t.id === target.id ? { ...t, ...values } : t)));
+  // ---------- Desfazer (organograma) ----------
+  type Undo = { label: string; targets?: InvestigationTarget[]; linkAdded?: string; linkRemoved?: InvestigationLink };
+  const undoStack = useRef<Undo[]>([]);
+  const [undoCount, setUndoCount] = useState(0);
+  const pushUndo = (u: Undo) => { undoStack.current = [...undoStack.current.slice(-29), u]; setUndoCount(undoStack.current.length); };
+  const undoLabel = undoCount ? undoStack.current[undoStack.current.length - 1]?.label || "" : "";
+
+  const tName = (id: string) => { const t = targets.find((x) => x.id === id); if (!t) return "—"; return data.authors.find((a) => a.id === t.authorId)?.name || t.label || "NÃO IDENTIFICADO"; };
+  const today = () => new Date().toISOString().slice(0, 10);
+  /** Registra no histórico do alvo as mudanças de função, superior e núcleo. */
+  const logChanges = (t: InvestigationTarget, v: Partial<InvestigationTarget>) => {
+    const notes: string[] = [];
+    if ("role" in v && v.role !== t.role) notes.push(`Função: ${t.role} → ${v.role}`);
+    if ("parentId" in v && (v.parentId || "") !== (t.parentId || "")) notes.push(`Superior: ${t.parentId ? tName(t.parentId) : "nenhum"} → ${v.parentId ? tName(v.parentId) : "nenhum"}`);
+    if ("cluster" in v && (v.cluster || "") !== (t.cluster || "")) notes.push(`Núcleo: ${t.cluster || "automático"} → ${v.cluster || "automático"}`);
+    if ("area" in v && (v.area || "") !== (t.area || "") && v.area) notes.push(`Área: ${t.area || "—"} → ${v.area}`);
+    if (!notes.length) return undefined;
+    return [...t.history, { id: newId(), date: today(), kind: "role" in v && v.role !== t.role ? "Assumiu função" : "Outro", note: notes.join(" · "), auto: true }];
+  };
+  const toRowT = (values: Partial<InvestigationTarget>) => {
     const row: any = {};
     if ("role" in values) row.role = values.role;
     if ("parentId" in values) row.parent_id = values.parentId || null;
@@ -273,7 +282,29 @@ export function useInvestigations(data: AppData, notify: Notify) {
     if ("cluster" in values) row.cluster = values.cluster || "";
     if ("area" in values) row.area = values.area || "";
     if ("evidence" in values) row.evidence = values.evidence || [];
-    const { error } = await supabase.from("investigation_targets").update(row).eq("id", target.id);
+    if ("label" in values) row.label = values.label || "";
+    if ("history" in values) row.history = values.history || [];
+    if ("authorId" in values) row.author_id = values.authorId || null;
+    return row;
+  };
+
+  async function updateTarget(target: InvestigationTarget, values: Partial<InvestigationTarget>, opts: { undo?: boolean } = {}) {
+    if (values.parentId && values.parentId === target.id) { notify("Um alvo não pode ser superior de si mesmo.", "error"); return; }
+    const current = targets.find((t) => t.id === target.id) || target;
+    // Evita ciclo: o novo superior não pode ser subordinado deste alvo.
+    if (values.parentId) {
+      let cursor = targets.find((t) => t.id === values.parentId);
+      while (cursor) {
+        if (cursor.id === target.id) { notify(`Não dá: ${tName(values.parentId)} já está abaixo de ${tName(target.id)}. Mude primeiro o superior de ${tName(values.parentId)}.`, "error"); return; }
+        cursor = targets.find((t) => t.id === cursor!.parentId);
+      }
+    }
+    const structural = ["role", "parentId", "cluster", "area"].some((k) => k in values);
+    const v = { ...values };
+    if (structural && !("history" in values)) { const h = logChanges(current, values); if (h) v.history = h; }
+    if (structural && opts.undo !== false) pushUndo({ label: `${tName(target.id)}`, targets: [current] });
+    setTargets((list) => list.map((t) => (t.id === target.id ? { ...t, ...v } : t)));
+    const { error } = await supabase.from("investigation_targets").update(toRowT(v)).eq("id", target.id);
     if (error) { load(); fail(error, "Erro ao atualizar o alvo."); }
   }
 
@@ -288,17 +319,58 @@ export function useInvestigations(data: AppData, notify: Notify) {
       const seen = new Set<string>(); let cur = final.get(id) || "";
       while (cur) { if (cur === id || seen.has(cur)) { notify("A hierarquia proposta tem um ciclo. Ajuste antes de aplicar.", "error"); return false; } seen.add(cur); cur = final.get(cur) || ""; }
     }
-    setTargets((list) => list.map((t) => { const c = changes.find((x) => x.target.id === t.id); return c ? { ...t, role: c.role, parentId: c.parentId, area: c.area ?? t.area } : t; }));
-    const results = await Promise.all(changes.map((c) => supabase.from("investigation_targets").update({ role: c.role, parent_id: c.parentId || null, ...(c.area !== undefined ? { area: c.area } : {}) }).eq("id", c.target.id)));
+    const before = changes.map((c) => targets.find((t) => t.id === c.target.id) || c.target);
+    pushUndo({ label: `sugestão aplicada (${changes.length})`, targets: before });
+    const rows = changes.map((c) => {
+      const cur = targets.find((t) => t.id === c.target.id) || c.target;
+      const v: Partial<InvestigationTarget> = { role: c.role, parentId: c.parentId, ...(c.area !== undefined ? { area: c.area } : {}) };
+      const h = logChanges(cur, v); if (h) v.history = h;
+      return { id: c.target.id, v };
+    });
+    setTargets((list) => list.map((t) => { const r = rows.find((x) => x.id === t.id); return r ? { ...t, ...r.v } : t; }));
+    const results = await Promise.all(rows.map((r) => supabase.from("investigation_targets").update(toRowT(r.v)).eq("id", r.id)));
     const err = results.find((r) => r.error)?.error;
     if (err) { load(); fail(err, "Erro ao aplicar a hierarquia."); return false; }
     notify(`Organograma atualizado (${changes.length} alvo(s)).`, "success");
     return true;
   }
 
+  /** Volta a última mudança do organograma (função, superior, núcleo, área ou vínculo). */
+  async function undo() {
+    const u = undoStack.current.pop(); setUndoCount(undoStack.current.length);
+    if (!u) return;
+    if (u.targets) {
+      setTargets((list) => list.map((t) => { const o = u.targets!.find((x) => x.id === t.id); return o ? { ...t, role: o.role, parentId: o.parentId, cluster: o.cluster, area: o.area, history: o.history } : t; }));
+      await Promise.all(u.targets.map((o) => supabase.from("investigation_targets").update(toRowT({ role: o.role, parentId: o.parentId, cluster: o.cluster, area: o.area, history: o.history })).eq("id", o.id)));
+    }
+    if (u.linkAdded) {
+      setLinks((list) => list.filter((l) => l.id !== u.linkAdded));
+      await supabase.from("investigation_links").delete().eq("id", u.linkAdded);
+    }
+    if (u.linkRemoved) {
+      const l = u.linkRemoved;
+      const { data: created } = await supabase.from("investigation_links").insert({ investigation_id: l.investigationId, from_target: l.fromTarget, to_target: l.toTarget, relation: l.relation, notes: l.notes }).select("*").single();
+      if (created) setLinks((list) => [...list, normalizeLink(created)]);
+    }
+    notify("Desfeito.", "info");
+  }
+
+  /** Alvo "não identificado": entra no organograma sem criar card no banco de alvos. */
+  async function addUnknownTarget(inv: Investigation, label: string, role = "Associado", parentId = "", cluster = "") {
+    const name = label.trim().toUpperCase() || "NÃO IDENTIFICADO";
+    const position = targets.filter((t) => t.investigationId === inv.id).length;
+    const { data: created, error } = await supabase.from("investigation_targets")
+      .insert({ investigation_id: inv.id, author_id: null, label: name, role, parent_id: parentId || null, cluster, position }).select("*").single();
+    if (error) return fail(error, "Erro ao incluir o não identificado.");
+    const target = normalizeTarget(created);
+    setTargets((list) => [...list, target]);
+    audit("Alvo vinculado", `${inv.code}: ${name} (não identificado) como ${role}.`);
+    return target;
+  }
+
   async function removeTarget(target: InvestigationTarget) {
     const author = data.authors.find((a) => a.id === target.authorId);
-    if (!window.confirm(`Desvincular ${author?.name || "este alvo"} da investigação? (O card no banco de alvos continua.)`)) return;
+    if (!window.confirm(author ? `Desvincular ${author.name} da investigação? (O card no banco de alvos continua.)` : `Remover ${target.label || "este não identificado"} do organograma?`)) return;
     const { error } = await supabase.from("investigation_targets").delete().eq("id", target.id);
     if (error) { fail(error, "Erro ao desvincular."); return; }
     setTargets((list) => list.filter((t) => t.id !== target.id).map((t) => (t.parentId === target.id ? { ...t, parentId: "" } : t)));
@@ -311,6 +383,7 @@ export function useInvestigations(data: AppData, notify: Notify) {
     if (error) return fail(error, "Erro ao registrar o vínculo.");
     const link = normalizeLink(created);
     setLinks((list) => [...list, link]);
+    pushUndo({ label: `vínculo ${relation.toLowerCase()}`, linkAdded: link.id });
     return link;
   }
 
@@ -318,6 +391,7 @@ export function useInvestigations(data: AppData, notify: Notify) {
     const { error } = await supabase.from("investigation_links").delete().eq("id", link.id);
     if (error) { fail(error, "Erro ao remover o vínculo."); return; }
     setLinks((list) => list.filter((l) => l.id !== link.id));
+    pushUndo({ label: `remoção do vínculo ${link.relation.toLowerCase()}`, linkRemoved: link });
   }
 
   // ---------- Relatório ----------
@@ -329,8 +403,11 @@ export function useInvestigations(data: AppData, notify: Notify) {
     const people: ReportPerson[] = [];
     for (const t of [...invTargets].sort((a, b) => a.position - b.position)) {
       const a = authorOf(t.authorId);
-      if (!a) continue;
       const parent = invTargets.find((x) => x.id === t.parentId);
+      if (!a) {
+        if (t.label) people.push({ targetId: t.id, authorId: "", name: t.label, alias: "", role: t.role, parentName: parent ? authorOf(parent.authorId)?.name || parent.label : "", birthDate: "", motherName: "", document: "", address: "", neighborhood: "", city: "", status: "Não identificado", crimes: "", notes: "", targetNotes: t.notes } as ReportPerson);
+        continue;
+      }
       const photoRow = data.authorPhotos.find((p) => p.authorId === a.id);
       const photo = photoRow ? await loadImage(data.getIntelFileUrl(photoRow.filePath)) : undefined;
       people.push({
@@ -360,7 +437,7 @@ export function useInvestigations(data: AppData, notify: Notify) {
   return {
     investigations, items, targets, links, loaded, reload: load,
     createInvestigation, updateInvestigation, toggleStageItem, setStage, deleteInvestigation,
-    saveItem, deleteItem, openItemFile, setItemLocation, itemFileUrl, addTarget, createAndAddTarget, updateTarget, applyTargets, removeTarget, addLink, deleteLink, generateReport,
+    saveItem, deleteItem, openItemFile, setItemLocation, itemFileUrl, addTarget, addUnknownTarget, createAndAddTarget, updateTarget, applyTargets, undo, undoLabel, undoCount, removeTarget, addLink, deleteLink, generateReport,
   };
 }
 

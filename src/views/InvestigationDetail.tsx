@@ -11,9 +11,11 @@ import { Modal } from "../components/ui/modal";
 import { LinkChart, Organogram } from "../components/Organogram";
 import { BoAuthorModal } from "../components/BoAuthorModal";
 import { DossieModal } from "../components/DossieModal";
-import { CompareModal, EvidenceModal, GroupsModal, HierarchyModal } from "../components/OrgTools";
+import { CompareModal, EvidenceModal, GroupTimeline, GroupsModal, HierarchyModal, LinkDropModal, SharedContactsPanel, UnknownModal } from "../components/OrgTools";
+import { autoLinksFor } from "../lib/sharedContacts";
+import { groupStatus, type Confidence } from "../lib/investigation";
 import { OrgBoard, type BoardPerson } from "../components/OrgBoard";
-import { AUTO_GROUPS, roleOfAutoGroup } from "../lib/orgBoard";
+import { AUTO_GROUPS, groupKeyOf, roleOfAutoGroup } from "../lib/orgBoard";
 import { redsCount } from "../lib/companions";
 import { TargetFichaModal } from "../components/TargetFichaModal";
 import { ShareTargetModal } from "../components/ShareTargetModal";
@@ -44,6 +46,20 @@ export function InvestigationDetail({ data, api, investigation: inv, onBack }: P
   const items = api.items.filter((i) => i.investigationId === inv.id);
   const targets = api.targets.filter((t) => t.investigationId === inv.id);
   const links = api.links.filter((l) => l.investigationId === inv.id);
+  // Núcleos do organograma para o mapa (área de atuação × onde agiu).
+  const mapNucleos = (() => {
+    const by = new Map<string, { name: string; color: string; members: { authorId: string; name: string; area: string }[] }>();
+    for (const t of targets) {
+      if (!t.authorId) continue;
+      const key = groupKeyOf(t, inv.orgGroups); const name = key.slice(2);
+      const custom = inv.orgGroups.find((g) => g.name === name && key.startsWith("c:"));
+      const color = custom?.color || ROLE_COLOR[roleOfAutoGroup(name)] || "#6B655A";
+      const g = by.get(key) || { name, color, members: [] };
+      g.members.push({ authorId: t.authorId, name: data.authors.find((a) => a.id === t.authorId)?.name || "?", area: t.area });
+      by.set(key, g);
+    }
+    return [...by.values()];
+  })();
   const canDelete = data.permissions.users || data.currentUser?.role === "Gestor" || inv.responsibleId === data.currentUser?.id;
 
   const generate = async (format: "pdf" | "pptx") => {
@@ -92,7 +108,7 @@ export function InvestigationDetail({ data, api, investigation: inv, onBack }: P
       {tab === "alvos" && <TargetsTab data={data} api={api} inv={inv} targets={targets} links={links} />}
       {tab === "mapa" && (
         <Suspense fallback={<div className="flex items-center gap-2 py-16 text-pm-muted"><Loader2 className="h-5 w-5 animate-spin" />Carregando o mapa…</div>}>
-          <CrimeMap data={data} api={api} items={items} />
+          <CrimeMap data={data} api={api} items={items} nucleos={mapNucleos} />
         </Suspense>
       )}
       {tab === "cronologia" && <TimelineTab inv={inv} items={items} />}
@@ -374,6 +390,10 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
   const [compareOpen, setCompareOpen] = useState(false);
   const [ficha, setFicha] = useState<Author | null>(null);
   const [orgView, setOrgView] = useState<"quadro" | "arvore">("quadro");
+  const [dragMode, setDragMode] = useState<"superior" | "vinculo">("superior");
+  const [linkPair, setLinkPair] = useState<{ from: string; to: string } | null>(null);
+  const [unknownOpen, setUnknownOpen] = useState(false);
+  const [identify, setIdentify] = useState<InvestigationTarget | null>(null);
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [evidenceOf, setEvidenceOf] = useState<InvestigationTarget | null>(null);
   const [sharing, setSharing] = useState<Author | null>(null);
@@ -386,7 +406,7 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
   const [boOpen, setBoOpen] = useState(false);
   const [link, setLink] = useState({ from: "", to: "", relation: "Comparsa", notes: "" });
   const authorOf = (t: InvestigationTarget) => data.authors.find((a) => a.id === t.authorId);
-  const nameOf = (id: string) => { const t = targets.find((x) => x.id === id); return t ? authorOf(t)?.name || "?" : "—"; };
+  const nameOf = (id: string) => { const t = targets.find((x) => x.id === id); return t ? authorOf(t)?.name || t.label || "NÃO IDENTIFICADO" : "—"; };
   const inDossier = new Set(targets.map((t) => t.authorId));
   const candidates = useMemo(() => (search.trim()
     ? data.authors.filter((a) => matchesText([a.name, a.alias, a.document, a.crimes, a.neighborhood, a.notes], search))
@@ -468,10 +488,17 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
     for (const t of targets) {
       const a = authorOf(t);
       const ph = data.authorPhotos.find((p) => p.authorId === t.authorId && (p.category || "perfil") === "perfil");
-      m.set(t.id, { name: a?.name || "?", alias: a?.alias || "", photo: ph ? data.getIntelFileUrl(ph.filePath) : undefined, role: t.role, area: t.area, evidence: t.evidence.length, bos: a ? redsCount(a.id, data.authors, data.authorReports, api.items).length : 0 });
+      const rank: Confidence[] = ["confirmado", "provavel", "a confirmar"];
+      const ev = t.evidence.filter((e) => !e.role || e.role === t.role);
+      const confidence = ev.length ? rank.find((c) => ev.some((e) => (e.confidence || "provavel") === c)) : undefined;
+      m.set(t.id, {
+        name: a?.name || t.label || "NÃO IDENTIFICADO", alias: a?.alias || "", photo: ph ? data.getIntelFileUrl(ph.filePath) : undefined, role: t.role, area: t.area,
+        evidence: t.evidence.length, bos: a ? redsCount(a.id, data.authors, data.authorReports, api.items).length : 0, unknown: !a, status: groupStatus(t), confidence,
+      });
     }
     return m;
   }, [targets, data.authors, data.authorPhotos, data.authorReports, api.items]); // eslint-disable-line react-hooks/exhaustive-deps
+  const autoLinks = useMemo(() => autoLinksFor(targets, data.authors), [targets, data.authors]);
   const clusterOptions = (t: InvestigationTarget) => [
     ["", `Automático (${(AUTO_GROUPS[t.role] || AUTO_GROUPS["Associado"]).name.toLowerCase()})`],
     ...inv.orgGroups.map((g) => [g.name, g.name]),
@@ -489,12 +516,25 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
                 {([["quadro", "Quadro por núcleos"], ["arvore", "Árvore"]] as const).map(([k, l]) => <button key={k} type="button" onClick={() => setOrgView(k)} className={`px-3 py-1.5 ${orgView === k ? "bg-pm-black text-white" : "bg-white"}`}>{l}</button>)}
               </div>
               <Button size="sm" onClick={() => setGroupsOpen(true)}><Layers />Núcleos ({inv.orgGroups.length})</Button>
+              <Button size="sm" onClick={() => setUnknownOpen(true)}><UserPlus />Não identificado</Button>
               <Button size="sm" disabled={targets.length < 2} onClick={() => setHierOpen(true)}><Sparkles />Sugerir funções e hierarquia</Button>
               <Button size="sm" onClick={() => setCompareOpen(true)}><GitFork />Comparar investigações</Button>
               <Button size="sm" variant="primary" disabled={!targets.length} onClick={() => setDossieOpen(true)}><FileText />PDF: organograma + qualificações</Button>
             </div>} />
+          {targets.length > 0 && (
+            <div className="mb-2 flex flex-wrap items-center gap-2 rounded-sm bg-pm-cream/70 px-2 py-1.5 text-xs">
+              <span className="font-bold uppercase text-pm-muted">Arrastar um alvo sobre outro:</span>
+              <div className="flex overflow-hidden rounded-sm border border-pm-line font-bold">
+                <button type="button" onClick={() => setDragMode("superior")} className={`px-3 py-1.5 ${dragMode === "superior" ? "bg-[#C0201A] text-white" : "bg-white"}`}>▼ define o superior</button>
+                <button type="button" onClick={() => setDragMode("vinculo")} className={`px-3 py-1.5 ${dragMode === "vinculo" ? "bg-[#2E6B3A] text-white" : "bg-white"}`}>⇢ cria vínculo</button>
+              </div>
+              <span className="text-pm-muted">Os quadros não mudam de lugar ao ligar alvos: a linha depende só da função (ou do nível do núcleo).</span>
+              <Button size="sm" className="ml-auto" disabled={!api.undoCount} onClick={() => api.undo()} title={api.undoLabel ? `Desfazer: ${api.undoLabel}` : ""}>↶ Desfazer{api.undoLabel ? `: ${api.undoLabel}` : ""}</Button>
+            </div>
+          )}
           {targets.length === 0 ? <EmptyState icon={Users} title="Nenhum alvo no dossiê">Vincule alvos do banco de alvos ou cadastre novos ao lado.</EmptyState>
-            : orgView === "quadro" ? <OrgBoard targets={targets} links={links} groups={inv.orgGroups} people={boardPeople} selectedId={selected} onSelect={(t) => setSelected(t.id)} onOpen={(t) => setFicha(authorOf(t) || null)}
+            : orgView === "quadro" ? <OrgBoard targets={targets} links={links} groups={inv.orgGroups} autoLinks={autoLinks} people={boardPeople} selectedId={selected} onSelect={(t) => setSelected(t.id)} onOpen={(t) => (authorOf(t) ? setFicha(authorOf(t)!) : setIdentify(t))}
+                dragMode={dragMode} onLinkDrop={(t, to) => setLinkPair({ from: t.id, to })}
                 onDropOnTarget={(t, parentId) => api.updateTarget(t, { parentId })}
                 onDropOnGroup={(t, key) => key.startsWith("c:") ? api.updateTarget(t, { cluster: key.slice(2) }) : api.updateTarget(t, { cluster: "", role: roleOfAutoGroup(key.slice(2)) || t.role })} />
             : <Organogram targets={targets} links={links} authors={data.authors} photos={data.authorPhotos} photoUrl={data.getIntelFileUrl} selectedId={selected} onSelect={(t) => setSelected(t.id)}
@@ -529,13 +569,14 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
             <div className="grid gap-2">
               {targets.map((t) => {
                 const a = authorOf(t);
-                const photo = data.authorPhotos.find((p) => p.authorId === t.authorId);
+                const photo = t.authorId ? data.authorPhotos.find((p) => p.authorId === t.authorId) : undefined;
                 return (
                   <div key={t.id} className={`grid gap-3 rounded-sm border bg-white p-3 md:grid-cols-[56px_minmax(0,1fr)_150px_180px_auto] md:items-center ${selected === t.id ? "border-pm-black ring-2 ring-pm-gold" : "border-pm-line"}`} onClick={() => setSelected(t.id)}>
                     <div className="grid h-14 w-14 place-items-center overflow-hidden rounded-sm bg-pm-sand">{photo ? <img src={data.getIntelFileUrl(photo.filePath)} alt="" className="h-full w-full object-cover" /> : <Users className="h-5 w-5 text-pm-muted" />}</div>
                     <div className="min-w-0">
-                      <p className="break-words font-black uppercase leading-tight">{a?.name || "Alvo removido"}</p>
-                      <p className="truncate text-xs text-pm-muted">{a?.alias ? `"${a.alias}" · ` : ""}{a?.crimes || a?.status}</p>
+                      {a ? <p className="break-words font-black uppercase leading-tight">{a.name}{groupStatus(t) && <span className="ml-2 rounded-sm bg-pm-black px-1.5 py-0.5 text-[10px] text-pm-gold-light">{groupStatus(t)}</span>}</p>
+                        : <div className="grid gap-1"><Input className="h-8 w-full font-black uppercase" defaultValue={t.label} key={t.label} onBlur={(e) => e.target.value.trim() && e.target.value.toUpperCase() !== t.label && api.updateTarget(t, { label: e.target.value.toUpperCase() })} /><Button size="sm" variant="gold" onClick={(e) => { e.stopPropagation(); setIdentify(t); }}>Identificar no banco</Button></div>}
+                      <p className="truncate text-xs text-pm-muted">{a ? <>{a.alias ? `"${a.alias}" · ` : ""}{a.crimes || a.status}</> : "Não identificado — sem card no banco de alvos"}</p>
                       <Input className="mt-1.5 h-8 text-xs" placeholder="Observação nesta investigação" defaultValue={t.notes} onBlur={(e) => e.target.value !== t.notes && api.updateTarget(t, { notes: e.target.value })} />
                     </div>
                     <Field label="Papel"><Select className="h-9" value={t.role} onChange={(e) => api.updateTarget(t, { role: e.target.value })}>{TARGET_ROLES.map((r) => <option key={r}>{r}</option>)}</Select></Field>
@@ -595,7 +636,7 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
 
           <Card>
             <CardContent>
-              <SectionHeader icon={Link2} title="Vínculos" subtitle="Relações fora da hierarquia (parentesco, fornecedor, comprador…)." />
+              <SectionHeader icon={Link2} title="Vínculos" subtitle="Relações fora da hierarquia (parentesco, fornecedor, comprador…). Dica: no organograma, escolha “cria vínculo” e arraste um alvo sobre o outro." />
               {targets.length < 2 ? <p className="text-sm text-pm-muted">Vincule ao menos dois alvos.</p> : (
                 <div className="grid gap-2">
                   <Select value={link.from} onChange={(e) => setLink({ ...link, from: e.target.value })}><option value="">Alvo…</option>{targets.map((x) => <option key={x.id} value={x.id}>{nameOf(x.id)}</option>)}</Select>
@@ -613,11 +654,25 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
                   </div>
                 ))}
               </div>
+              <div className="mt-3 border-t border-pm-line pt-3">
+                <p className="pm-label mb-1">Telefones e veículos em comum</p>
+                <SharedContactsPanel data={data} api={api} inv={inv} targets={targets} links={links} />
+              </div>
             </CardContent>
           </Card>
         </div>
       </div>
+      {targets.length > 0 && (
+        <Card>
+          <CardContent>
+            <SectionHeader icon={History} title="Linha do tempo do grupo" subtitle="Quem entrou, saiu, foi preso e quem assumiu a função de quem. Mudanças de função, superior e núcleo feitas no organograma entram sozinhas; BOs e indícios também." />
+            <GroupTimeline data={data} api={api} inv={inv} targets={targets} />
+          </CardContent>
+        </Card>
+      )}
       <BoAuthorModal open={boOpen} data={data} api={api} investigationId={inv.id} onClose={() => setBoOpen(false)} />
+      <LinkDropModal pair={linkPair} onClose={() => setLinkPair(null)} data={data} api={api} inv={inv} targets={targets} />
+      <UnknownModal open={unknownOpen || Boolean(identify)} identify={identify} onClose={() => { setUnknownOpen(false); setIdentify(null); }} data={data} api={api} inv={inv} targets={targets} />
       <GroupsModal open={groupsOpen} onClose={() => setGroupsOpen(false)} data={data} api={api} inv={inv} targets={targets} />
       <EvidenceModal target={evidenceOf} onClose={() => setEvidenceOf(null)} data={data} api={api} inv={inv} />
       <HierarchyModal open={hierOpen} onClose={() => setHierOpen(false)} data={data} api={api} inv={inv} targets={targets} />

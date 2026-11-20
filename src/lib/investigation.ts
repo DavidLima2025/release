@@ -83,9 +83,14 @@ export type Investigation = {
   orgGroups: OrgGroup[];
 };
 
-export type OrgGroup = { name: string; activities: string; color: string };
+export type OrgGroup = { name: string; activities: string; color: string; /** linha no quadro: 0 = topo */ level?: number };
 /** Indício da função/atuação: fonte da investigação, foto de levantamento ou anotação livre. */
-export type Evidence = { id: string; source: string; note: string; date: string; role?: string; area?: string };
+export type Confidence = "confirmado" | "provavel" | "a confirmar";
+export const CONFIDENCE: [Confidence, string, string][] = [["confirmado", "Confirmado", "#2E6B3A"], ["provavel", "Provável", "#C28A12"], ["a confirmar", "A confirmar", "#8C877C"]];
+export type Evidence = { id: string; source: string; note: string; date: string; role?: string; area?: string; confidence?: Confidence };
+/** Fato da vida do grupo: entrada, saída, prisão, troca de função (automática ou lançada pelo analista). */
+export type GroupEvent = { id: string; date: string; kind: string; note: string; auto?: boolean };
+export const GROUP_EVENT_KINDS = ["Entrou no grupo", "Saiu do grupo", "Preso", "Solto", "Assumiu função", "Mudou de área", "Morto", "Foragido", "Outro"];
 
 export type InvestigationItem = {
   id: string; investigationId: string; kind: string; title: string; itemDate: string; source: string; reference: string; url: string;
@@ -99,6 +104,8 @@ export type InvestigationTarget = {
   id: string; investigationId: string; authorId: string; role: string; parentId: string; notes: string; position: number;
   /** Núcleo no organograma ("" = automático pela função), área de atuação e indícios. */
   cluster: string; area: string; evidence: Evidence[];
+  /** Nome do "não identificado" (sem card no banco de alvos). */
+  label: string; history: GroupEvent[]; createdAt: string;
 };
 export type InvestigationLink = { id: string; investigationId: string; fromTarget: string; toTarget: string; relation: string; notes: string };
 
@@ -111,7 +118,7 @@ export function normalizeInvestigation(row: any): Investigation {
     stages: row.stages && typeof row.stages === "object" ? row.stages : {}, priority: row.priority || "Média", nature: row.nature || "",
     area: row.area || "", responsibleId: row.responsible_id || "", team: Array.isArray(row.team) ? row.team : [], openedAt: row.opened_at || "",
     dueDate: row.due_date || "", closedAt: row.closed_at || "", createdAt: row.created_at || "", updatedAt: row.updated_at || "",
-    orgGroups: Array.isArray(row.org_groups) ? row.org_groups.filter((g: any) => g && g.name).map((g: any) => ({ name: String(g.name), activities: String(g.activities || ""), color: String(g.color || "") })) : [],
+    orgGroups: Array.isArray(row.org_groups) ? row.org_groups.filter((g: any) => g && g.name).map((g: any) => ({ name: String(g.name), activities: String(g.activities || ""), color: String(g.color || ""), ...(Number.isFinite(g.level) ? { level: Number(g.level) } : {}) })) : [],
   };
 }
 
@@ -127,8 +134,9 @@ export function normalizeItem(row: any): InvestigationItem {
 
 export function normalizeTarget(row: any): InvestigationTarget {
   return {
-    id: row.id, investigationId: row.investigation_id, authorId: row.author_id, role: row.role || "Associado", parentId: row.parent_id || "", notes: row.notes || "", position: row.position || 0,
+    id: row.id, investigationId: row.investigation_id, authorId: row.author_id || "", role: row.role || "Associado", parentId: row.parent_id || "", notes: row.notes || "", position: row.position || 0,
     cluster: row.cluster || "", area: row.area || "", evidence: Array.isArray(row.evidence) ? row.evidence : [],
+    label: row.label || "", history: Array.isArray(row.history) ? row.history : [], createdAt: row.created_at || "",
   };
 }
 
@@ -201,3 +209,13 @@ function roleRank(role: string) {
 export function slug(text: string) {
   return text.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60);
 }
+
+/** Situação atual do alvo no grupo pelo histórico (preso, saiu, morto, foragido). */
+export function groupStatus(t: InvestigationTarget) {
+  const ev = [...t.history].filter((e) => ["Preso", "Solto", "Saiu do grupo", "Entrou no grupo", "Morto", "Foragido"].includes(e.kind))
+    .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  const last = ev[ev.length - 1];
+  if (!last || last.kind === "Solto" || last.kind === "Entrou no grupo") return "";
+  return last.kind === "Saiu do grupo" ? "SAIU" : last.kind.toUpperCase();
+}
+export const newId = () => (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`);

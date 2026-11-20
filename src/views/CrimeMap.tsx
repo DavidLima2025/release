@@ -23,7 +23,15 @@ type Event = {
   hour: number | null; weekday: number | null; authorIds: string[]; place: string; reference: string;
 };
 type Base = "satelite" | "hibrido" | "ruas" | "claro";
-type LayerKey = "pontos" | "calor" | "areas" | "centro" | "perfil" | "canter" | "sequencia" | "residencias" | "hotspots";
+type LayerKey = "pontos" | "calor" | "areas" | "centro" | "perfil" | "canter" | "sequencia" | "residencias" | "hotspots" | "nucleos";
+/** Núcleo do organograma com a área de atuação declarada de cada alvo. */
+export type MapNucleo = { name: string; color: string; members: { authorId: string; name: string; area: string }[] };
+const normTxt = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+/** O local do fato fica dentro da área declarada? (bairro/ponto escrito no endereço do BO) */
+export function inArea(place: string, area: string) {
+  const p = normTxt(place);
+  return normTxt(area).split(/[\/,;]| E /).map((x) => x.trim()).filter((x) => x.length >= 3).some((x) => p.includes(x));
+}
 type Placing = { kind: "item"; item: InvestigationItem } | { kind: "home"; author: Author } | null;
 
 const LAYERS: [LayerKey, string, string][] = [
@@ -67,16 +75,18 @@ type Props = {
   /** No mapa geral, permite filtrar por investigação. */
   investigations?: Investigation[];
   height?: string;
+  /** Núcleos do organograma (mapa da investigação): pinta a área de cada núcleo e compara com a área declarada. */
+  nucleos?: MapNucleo[];
 };
 
-export default function CrimeMap({ data, api, items, investigations, height = "70vh" }: Props) {
+export default function CrimeMap({ data, api, items, investigations, height = "70vh", nucleos }: Props) {
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const baseRef = useRef<L.Layer[]>([]);
   const overlayRef = useRef<L.LayerGroup | null>(null);
   const [ready, setReady] = useState(false);
   const [base, setBase] = useState<Base>("hibrido");
-  const [layers, setLayers] = useState<Set<LayerKey>>(new Set(["pontos", "calor", "residencias"]));
+  const [layers, setLayers] = useState<Set<LayerKey>>(new Set(nucleos?.length ? ["pontos", "nucleos"] : ["pontos", "calor", "residencias"]));
   const [colorBy, setColorBy] = useState<"crime" | "autor">("autor");
   const [fCrimes, setFCrimes] = useState<Set<string>>(new Set());
   const [fAuthors, setFAuthors] = useState<Set<string>>(new Set());
@@ -143,6 +153,19 @@ export default function CrimeMap({ data, api, items, investigations, height = "7
     return ids.map((id, i) => ({ author: authorById.get(id), color: COLORS[i % COLORS.length], events: events.filter((e) => e.authorIds.includes(id)) }))
       .filter((g) => g.author && g.events.length);
   }, [events, fAuthors, authorById]);
+  // Núcleos × área declarada: fatos de cada núcleo e quem agiu fora da área que se atribui a ele.
+  const nucleoAnalysis = useMemo(() => (nucleos || []).map((n) => {
+    const ids = new Set(n.members.map((m) => m.authorId));
+    const evs = events.filter((e) => e.authorIds.some((id) => ids.has(id)));
+    const people = n.members.filter((m) => m.area).map((m) => {
+      const mine = evs.filter((e) => e.authorIds.includes(m.authorId) && e.place);
+      const out = mine.filter((e) => !inArea(e.place, m.area));
+      return { ...m, total: mine.length, out };
+    });
+    return { ...n, events: evs, people };
+  }), [nucleos, events]);
+  const outside = new Map<string, string[]>();
+  nucleoAnalysis.forEach((n) => n.people.forEach((p) => p.out.forEach((e) => outside.set(e.id, [...(outside.get(e.id) || []), `${p.name} (área: ${p.area})`]))));
   const colorOfAuthor = (id: string) => authorGroups.find((g) => g.author!.id === id)?.color || "#6B655A";
   const colorOfCrime = (c: string) => COLORS[Math.max(0, crimes.indexOf(c)) % COLORS.length];
   const colorOf = (e: Event) => (colorBy === "crime" ? colorOfCrime(e.crime) : e.authorIds.length ? colorOfAuthor(e.authorIds[0]) : "#3D3D3D");
@@ -204,6 +227,24 @@ export default function CrimeMap({ data, api, items, investigations, height = "7
     const pts = events.map((e) => ({ lat: e.lat, lng: e.lng }));
 
     if (layers.has("calor") && events.length) group.addLayer(createHeatLayer(L, events.map((e) => [e.lat, e.lng, 1]), { radiusMeters: 220 }));
+
+    if (layers.has("nucleos")) {
+      for (const n of nucleoAnalysis) {
+        const pts2 = n.events.map((e) => ({ lat: e.lat, lng: e.lng }));
+        if (!pts2.length) continue;
+        const hull = convexHull(pts2);
+        const label = `<b>${esc(n.name)}</b> — ${n.events.length} fato(s)${n.people.length ? `<br>Área declarada: ${n.people.map((p) => `${esc(p.name.split(" ")[0])}: ${esc(p.area)}`).join("; ")}` : ""}`;
+        if (hull.length >= 3) group.addLayer(L.polygon(hull.map((p) => [p.lat, p.lng]), { color: n.color, weight: 3, fillColor: n.color, fillOpacity: 0.16 }).bindTooltip(label, { sticky: true }));
+        else pts2.forEach((p) => group.addLayer(L.circle([p.lat, p.lng], { radius: 180, color: n.color, weight: 3, fillOpacity: 0.14, renderer }).bindTooltip(label, { sticky: true })));
+        const c = centroid(pts2);
+        if (c) group.addLayer(L.marker([c.lat, c.lng], { interactive: false, icon: L.divIcon({ className: "", iconSize: [0, 0], html: `<div style="transform:translate(-50%,-50%);white-space:nowrap;background:${n.color};color:#fff;font:800 11px/1 Raleway,system-ui;padding:4px 6px;border-radius:2px;box-shadow:0 1px 4px #0007">${esc(n.name)}</div>` }) }));
+      }
+      for (const e of events) {
+        const who = outside.get(e.id);
+        if (who) group.addLayer(L.circleMarker([e.lat, e.lng], { renderer, radius: 15, color: "#E11D48", weight: 3, dashArray: "4 3", fill: false })
+          .bindTooltip(`Fora da área declarada: ${who.map(esc).join("; ")}`, { sticky: true }));
+      }
+    }
 
     if (layers.has("perfil")) {
       const groupsForProfile = authorGroups.length === 1 || fAuthors.size ? authorGroups.map((g) => g.events) : [events];
@@ -308,7 +349,7 @@ export default function CrimeMap({ data, api, items, investigations, height = "7
         }
       }
     }
-  }, [events, layers, authorGroups, colorBy, moving, ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [events, layers, authorGroups, colorBy, moving, ready, nucleoAnalysis]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- Ações de localização ----------
   async function readFromReds(list: InvestigationItem[]) {
@@ -440,12 +481,29 @@ ${authorGroups.filter((g) => g.author!.homeLat != null).map((g) => `<Placemark><
               <p className="pm-label">Mapa base</p>
               <div className="grid grid-cols-4 gap-1">{(Object.keys(BASES) as Base[]).map((b) => <button key={b} type="button" className={chip(base === b)} onClick={() => setBase(b)}>{BASES[b].label}</button>)}</div>
               <p className="pm-label pt-2">Camadas de análise</p>
-              {LAYERS.map(([key, label, hint]) => (
+              {[...(nucleos?.length ? [["nucleos", "Núcleos × área de atuação", "Pinta a área de cada núcleo e circula em vermelho os fatos fora da área declarada do alvo."] as [LayerKey, string, string]] : []), ...LAYERS].map(([key, label, hint]) => (
                 <label key={key} className="flex cursor-pointer items-start gap-2 rounded-sm px-1 py-1 hover:bg-pm-cream">
                   <input type="checkbox" className="mt-0.5 h-4 w-4 accent-[#7A6C45]" checked={layers.has(key)} onChange={() => toggle(layers, key, setLayers)} />
                   <span><b className="block text-sm">{label}</b><span className="text-xs text-pm-muted">{hint}</span></span>
                 </label>
               ))}
+              {nucleos?.length ? (
+                <div className="mt-2 space-y-2 border-t border-pm-line pt-2">
+                  <p className="pm-label">Área declarada × onde agiu</p>
+                  {nucleoAnalysis.every((n) => !n.people.length) && <p className="text-xs text-pm-muted">Preencha a "Área de atuação" dos alvos no organograma para comparar.</p>}
+                  {nucleoAnalysis.filter((n) => n.people.length).map((n) => (
+                    <div key={n.name} className="rounded-sm border-l-4 bg-pm-cream/60 p-2 text-xs" style={{ borderColor: n.color }}>
+                      <p className="font-black uppercase">{n.name}</p>
+                      {n.people.map((p) => (
+                        <div key={p.authorId} className="mt-1">
+                          <p><b>{p.name}</b> · área {p.area}: {p.total ? <>{p.total - p.out.length} de {p.total} fato(s) dentro{p.out.length ? <b className="text-status-late"> · {p.out.length} fora</b> : ""}</> : "sem fato no mapa"}</p>
+                          {p.out.slice(0, 4).map((e) => <p key={e.id} className="pl-2 text-pm-muted">↳ {e.date ? formatBR(e.date) : "s/ data"} — {e.place}</p>)}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               <p className="pt-1 text-[11px] text-pm-muted">Perfil geográfico e círculo de Canter precisam de 3+ fatos do mesmo autor (filtre por autor para o resultado individual).</p>
             </div>
           )}
