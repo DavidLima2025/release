@@ -13,6 +13,8 @@ const GAP_GROUP = 40;
 const GAP_ROW = 92;
 const MARGIN = 26;
 const LANE = 10;
+/** Faixa à esquerda com o grau de cada linha. */
+const LEFT = 46;
 
 /** Núcleo automático de cada função e a linha em que fica (0 = topo). */
 export const AUTO_GROUPS: Record<string, { name: string; level: number }> = {
@@ -27,22 +29,28 @@ export const AUTO_GROUPS: Record<string, { name: string; level: number }> = {
   "Vítima": { name: "VÍTIMAS E TESTEMUNHAS", level: 4 },
   "Testemunha": { name: "VÍTIMAS E TESTEMUNHAS", level: 4 },
 };
-export const LEVEL_LABELS = ["1 — Topo (liderança)", "2 — Gerência / finanças", "3 — Execução / apoio", "4 — Associados", "5 — Vítimas / testemunhas"];
+export const LEVEL_LABELS = ["1º — Topo (liderança)", "2º — Gerência / finanças", "3º — Execução / apoio", "4º — Associados", "5º — Vítimas / testemunhas", "6º", "7º"];
 export const roleOfAutoGroup = (name: string) => Object.entries(AUTO_GROUPS).find(([, g]) => g.name === name)?.[0] || "";
 export const GROUP_COLORS = ["#B3261E", "#C28A12", "#7A6C45", "#231F20", "#2F5D7C", "#5B3E8A", "#2E6B3A", "#8A3B12", "#0F6E6E"];
 export const autoLevel = (role: string) => (AUTO_GROUPS[role] || AUTO_GROUPS["Associado"]).level;
+export const MAX_GRADE = 7;
+/** Grau do alvo (0 = topo): o definido pelo analista ou o da função. */
+export const levelOf = (t: InvestigationTarget) => (t.grade ? Math.min(MAX_GRADE, t.grade) - 1 : autoLevel(t.role));
+/** Nome do núcleo a partir da chave ("a:EXECUTORES|2" → "EXECUTORES"). */
+export const groupNameOfKey = (key: string) => key.slice(2).split("|")[0];
 
 export type BoardCard = { targetId: string; x: number; y: number };
 export type BoardGroup = { key: string; name: string; custom: boolean; color: string; activities: string[]; level: number; order: number; x: number; y: number; w: number; h: number; cards: BoardCard[]; lanesTop: number; actTop: number };
 export type BoardArrow = { d: string; kind: "chefia" | "vinculo" | "auto"; label?: string; lx?: number; ly?: number; id: string };
 export type AutoLink = { a: string; b: string; label: string };
-export type Board = { width: number; height: number; groups: BoardGroup[]; arrows: BoardArrow[]; groupOf: Map<string, string> };
+export type Board = { width: number; height: number; groups: BoardGroup[]; arrows: BoardArrow[]; groupOf: Map<string, string>; rows: { level: number; top: number; bottom: number }[] };
 
 const rank = (role: string) => { const i = TARGET_ROLES.indexOf(role); return i < 0 ? 99 : i; };
 
 export function groupKeyOf(t: InvestigationTarget, custom: OrgGroup[]) {
   if (t.cluster && custom.some((g) => g.name === t.cluster)) return `c:${t.cluster}`;
-  return `a:${(AUTO_GROUPS[t.role] || AUTO_GROUPS["Associado"]).name}`;
+  // Mesmo núcleo da função em graus diferentes vira um quadro por grau.
+  return `a:${(AUTO_GROUPS[t.role] || AUTO_GROUPS["Associado"]).name}|${levelOf(t)}`;
 }
 
 /** Quebra o texto em linhas de até `max` caracteres. */
@@ -66,18 +74,18 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
     groupOf.set(t.id, key);
     if (!groups.has(key)) {
       const ci = custom.findIndex((g) => `c:${g.name}` === key); const c = ci >= 0 ? custom[ci] : undefined;
-      const autoName = key.slice(2); const autoRole = roleOfAutoGroup(autoName);
+      const autoName = groupNameOfKey(key); const autoRole = roleOfAutoGroup(autoName);
       groups.set(key, {
         key, name: c ? c.name : autoName, custom: Boolean(c), color: c?.color || ROLE_COLOR[autoRole] || "#6B655A",
         activities: (c?.activities || "").split("\n").map((s) => s.trim()).filter(Boolean),
-        level: c ? (Number.isFinite(c.level) ? c.level! : -1) : autoLevel(autoRole), order: c ? 100 + ci : rank(autoRole),
+        level: c ? (Number.isFinite(c.level) ? c.level! : -1) : levelOf(t), order: c ? 100 + ci : rank(autoRole),
         x: 0, y: 0, w: 0, h: 0, cards: [], lanesTop: 0, actTop: 0,
       });
     }
     groups.get(key)!.cards.push({ targetId: t.id, x: 0, y: 0 });
   }
   // Núcleo do analista sem nível escolhido: fica na linha da função mais alta entre os membros.
-  for (const g of groups.values()) if (g.level < 0) g.level = Math.min(...g.cards.map((c) => autoLevel(byId.get(c.targetId)!.role)));
+  for (const g of groups.values()) if (g.level < 0) g.level = Math.min(...g.cards.map((c) => levelOf(byId.get(c.targetId)!)));
 
   // Ligações dentro do mesmo quadro usam "faixas" embaixo dos cartões.
   type Inner = { kind: "chefia" | "vinculo" | "auto"; a: string; b: string; label?: string; id: string };
@@ -112,20 +120,20 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
 
   // Linhas fixas por nível, quadros em ordem fixa (função; núcleos do analista na ordem da lista).
   const levels = [...new Set([...groups.values()].map((g) => g.level))].sort((a, b) => a - b);
-  const rows: { groups: BoardGroup[]; top: number; bottom: number }[] = [];
+  const rows: { groups: BoardGroup[]; top: number; bottom: number; level: number }[] = [];
   let y = MARGIN;
   for (const lv of levels) {
     const row = [...groups.values()].filter((g) => g.level === lv).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
     let x = MARGIN;
     for (const g of row) { g.x = x; g.y = y; x += g.w + GAP_GROUP; }
     const h = Math.max(...row.map((g) => g.h));
-    rows.push({ groups: row, top: y, bottom: y + h });
+    rows.push({ groups: row, top: y, bottom: y + h, level: lv });
     y += h + GAP_ROW;
   }
-  const width = Math.max(360, ...rows.map((r) => r.groups.reduce((s, g) => s + g.w, 0) + GAP_GROUP * (r.groups.length - 1) + MARGIN * 2));
+  const width = LEFT + Math.max(360, ...rows.map((r) => r.groups.reduce((s, g) => s + g.w, 0) + GAP_GROUP * (r.groups.length - 1) + MARGIN * 2));
   for (const r of rows) {
     const rw = r.groups.reduce((s, g) => s + g.w, 0) + GAP_GROUP * (r.groups.length - 1);
-    const off = (width - rw) / 2 - MARGIN;
+    const off = LEFT + (width - LEFT - rw) / 2 - MARGIN;
     r.groups.forEach((g) => { g.x += off; });
   }
   const height = y - GAP_ROW + MARGIN + 24;
@@ -145,8 +153,8 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
   };
   /** Corredor livre (entre quadros ou nas margens) mais perto de x. */
   const corridor = (x: number, y1: number, y2: number, skip: BoardGroup[]) => {
-    const xs = [MARGIN / 2, width - MARGIN / 2, ...all.flatMap((g) => [g.x - GAP_GROUP / 2, g.x + g.w + GAP_GROUP / 2])];
-    return xs.filter((cx) => clear(cx, y1, y2, skip)).sort((m, n) => Math.abs(m - x) - Math.abs(n - x))[0] ?? MARGIN / 2;
+    const xs = [LEFT + MARGIN / 2, width - MARGIN / 2, ...all.flatMap((g) => [g.x - GAP_GROUP / 2, g.x + g.w + GAP_GROUP / 2])];
+    return xs.filter((cx) => clear(cx, y1, y2, skip)).sort((m, n) => Math.abs(m - x) - Math.abs(n - x))[0] ?? LEFT + MARGIN / 2;
   };
   /** Seta de comando entre quadros diferentes, sempre por fora dos quadros (contorna os do meio). */
   const route = (sx: number, pg: BoardGroup, tx: number, tg: BoardGroup, id: string) => {
@@ -205,5 +213,5 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
   };
   for (const l of links) if (byId.has(l.fromTarget) && byId.has(l.toTarget) && groupOf.get(l.fromTarget) !== groupOf.get(l.toTarget)) straight(l.fromTarget, l.toTarget, "vinculo", l.relation, `l-${l.id}`);
   autoLinks.forEach((l, i) => { if (byId.has(l.a) && byId.has(l.b) && groupOf.get(l.a) !== groupOf.get(l.b)) straight(l.a, l.b, "auto", l.label, `x-${i}`); });
-  return { width, height, groups: [...groups.values()], arrows, groupOf };
+  return { width, height, groups: [...groups.values()], arrows, groupOf, rows: rows.map((r) => ({ level: r.level, top: r.top, bottom: r.bottom })) };
 }

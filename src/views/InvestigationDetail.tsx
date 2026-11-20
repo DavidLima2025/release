@@ -15,7 +15,7 @@ import { CompareModal, EvidenceModal, GroupTimeline, GroupsModal, HierarchyModal
 import { autoLinksFor } from "../lib/sharedContacts";
 import { groupStatus, type Confidence } from "../lib/investigation";
 import { OrgBoard, type BoardPerson } from "../components/OrgBoard";
-import { AUTO_GROUPS, groupKeyOf, roleOfAutoGroup } from "../lib/orgBoard";
+import { AUTO_GROUPS, LEVEL_LABELS, MAX_GRADE, autoLevel, groupKeyOf, groupNameOfKey, levelOf, roleOfAutoGroup } from "../lib/orgBoard";
 import { redsCount } from "../lib/companions";
 import { TargetFichaModal } from "../components/TargetFichaModal";
 import { ShareTargetModal } from "../components/ShareTargetModal";
@@ -51,7 +51,7 @@ export function InvestigationDetail({ data, api, investigation: inv, onBack }: P
     const by = new Map<string, { name: string; color: string; members: { authorId: string; name: string; area: string }[] }>();
     for (const t of targets) {
       if (!t.authorId) continue;
-      const key = groupKeyOf(t, inv.orgGroups); const name = key.slice(2);
+      const key = groupKeyOf(t, inv.orgGroups); const name = groupNameOfKey(key);
       const custom = inv.orgGroups.find((g) => g.name === name && key.startsWith("c:"));
       const color = custom?.color || ROLE_COLOR[roleOfAutoGroup(name)] || "#6B655A";
       const g = by.get(key) || { name, color, members: [] };
@@ -498,6 +498,27 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
     }
     return m;
   }, [targets, data.authors, data.authorPhotos, data.authorReports, api.items]); // eslint-disable-line react-hooks/exhaustive-deps
+  const selT = targets.find((t) => t.id === selected);
+  /** Grau escolhido (0 = topo). Igual ao da função → volta a "pela função". */
+  const setGrade = (t: InvestigationTarget, lv: number) => api.updateTarget(t, { grade: lv === autoLevel(t.role) ? null : lv + 1 });
+  /** Uma vez, quando o analista pede: cada chefe fica um grau acima dos subordinados. */
+  const gradesByCommand = () => {
+    const byId = new Map(targets.map((t) => [t.id, t]));
+    const lv = new Map<string, number>();
+    const level = (t: InvestigationTarget, seen = new Set<string>()): number => {
+      if (lv.has(t.id)) return lv.get(t.id)!;
+      const p = t.parentId && byId.get(t.parentId);
+      // Chefe do topo: sobe para logo acima do subordinado mais alto (os subordinados ficam onde estão).
+      const kids = targets.filter((x) => x.parentId === t.id);
+      const top = kids.length ? Math.max(0, Math.min(levelOf(t), Math.min(...kids.map(levelOf)) - 1)) : levelOf(t);
+      const v = p && !seen.has(t.id) ? Math.min(MAX_GRADE - 1, level(p, new Set([...seen, t.id])) + 1) : top;
+      lv.set(t.id, v); return v;
+    };
+    const changes = targets.map((t) => ({ t, v: level(t) })).filter(({ t, v }) => v !== levelOf(t))
+      .map(({ t, v }) => ({ target: t, role: t.role, parentId: t.parentId, grade: v === autoLevel(t.role) ? null : v + 1 }));
+    if (!changes.length) { window.alert("Os chefes já estão acima dos subordinados."); return; }
+    api.applyTargets(changes, "graus pela chefia");
+  };
   const autoLinks = useMemo(() => autoLinksFor(targets, data.authors), [targets, data.authors]);
   const clusterOptions = (t: InvestigationTarget) => [
     ["", `Automático (${(AUTO_GROUPS[t.role] || AUTO_GROUPS["Associado"]).name.toLowerCase()})`],
@@ -528,7 +549,16 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
                 <button type="button" onClick={() => setDragMode("superior")} className={`px-3 py-1.5 ${dragMode === "superior" ? "bg-[#C0201A] text-white" : "bg-white"}`}>▼ define o superior</button>
                 <button type="button" onClick={() => setDragMode("vinculo")} className={`px-3 py-1.5 ${dragMode === "vinculo" ? "bg-[#2E6B3A] text-white" : "bg-white"}`}>⇢ cria vínculo</button>
               </div>
-              <span className="text-pm-muted">Os quadros não mudam de lugar ao ligar alvos: a linha depende só da função (ou do nível do núcleo).</span>
+              <span className="text-pm-muted">A altura de cada alvo é o <b>grau</b>: pela função ou o que você definir.</span>
+              {selT && (
+                <span className="flex items-center gap-1 rounded-sm border border-pm-gold bg-white px-2 py-1">
+                  <b className="max-w-[160px] truncate uppercase">{nameOf(selT.id)}</b>: {levelOf(selT) + 1}º grau
+                  <button type="button" title="Subir um grau" disabled={levelOf(selT) === 0} onClick={() => setGrade(selT, levelOf(selT) - 1)} className="rounded-sm bg-pm-black px-2 py-0.5 font-black text-white disabled:opacity-30">▲</button>
+                  <button type="button" title="Descer um grau" disabled={levelOf(selT) >= MAX_GRADE - 1} onClick={() => setGrade(selT, levelOf(selT) + 1)} className="rounded-sm bg-pm-black px-2 py-0.5 font-black text-white disabled:opacity-30">▼</button>
+                  {selT.grade && <button type="button" className="underline" onClick={() => api.updateTarget(selT, { grade: null })}>pela função</button>}
+                </span>
+              )}
+              <Button size="sm" disabled={!targets.some((t) => t.parentId)} onClick={gradesByCommand} title="Põe cada chefe um grau acima dos subordinados (só quando você clicar)">⇅ Graus pela chefia</Button>
               <Button size="sm" className="ml-auto" disabled={!api.undoCount} onClick={() => api.undo()} title={api.undoLabel ? `Desfazer: ${api.undoLabel}` : ""}>↶ Desfazer{api.undoLabel ? `: ${api.undoLabel}` : ""}</Button>
             </div>
           )}
@@ -536,7 +566,11 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
             : orgView === "quadro" ? <OrgBoard targets={targets} links={links} groups={inv.orgGroups} autoLinks={autoLinks} people={boardPeople} selectedId={selected} onSelect={(t) => setSelected(t.id)} onOpen={(t) => (authorOf(t) ? setFicha(authorOf(t)!) : setIdentify(t))}
                 dragMode={dragMode} onLinkDrop={(t, to) => setLinkPair({ from: t.id, to })}
                 onDropOnTarget={(t, parentId) => api.updateTarget(t, { parentId })}
-                onDropOnGroup={(t, key) => key.startsWith("c:") ? api.updateTarget(t, { cluster: key.slice(2) }) : api.updateTarget(t, { cluster: "", role: roleOfAutoGroup(key.slice(2)) || t.role })} />
+                onDropOnGroup={(t, key) => {
+                  if (key.startsWith("c:")) return api.updateTarget(t, { cluster: groupNameOfKey(key) });
+                  const role = roleOfAutoGroup(groupNameOfKey(key)) || t.role; const lv = Number(key.split("|")[1]);
+                  return api.updateTarget(t, { cluster: "", role, grade: Number.isFinite(lv) && lv !== autoLevel(role) ? lv + 1 : null });
+                }} />
             : <Organogram targets={targets} links={links} authors={data.authors} photos={data.authorPhotos} photoUrl={data.getIntelFileUrl} selectedId={selected} onSelect={(t) => setSelected(t.id)}
                 onReparent={(t, parentId) => api.updateTarget(t, { parentId })} onOpen={(t) => setFicha(authorOf(t) || null)} />}
           {orgView === "quadro" && targets.length > 0 && (
@@ -586,7 +620,10 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
                       <Button size="icon" variant="ghost" title="Ver ficha completa" disabled={!a} onClick={(e) => { e.stopPropagation(); setFicha(a || null); }}><UserRound /></Button>
                       <Button size="icon" variant="ghost" title="Desvincular" onClick={() => api.removeTarget(t)}><Trash2 /></Button>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] md:col-span-full md:col-start-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="grid gap-2 sm:grid-cols-[150px_1fr_1fr_auto] md:col-span-full md:col-start-2" onClick={(e) => e.stopPropagation()}>
+                      <Field label="Grau na hierarquia"><Select className="h-9" value={t.grade ?? ""} onChange={(e) => api.updateTarget(t, { grade: e.target.value ? Number(e.target.value) : null })}>
+                        <option value="">Pela função ({autoLevel(t.role) + 1}º)</option>{LEVEL_LABELS.map((l, i) => <option key={i} value={i + 1}>{l.split(" — ")[0]} grau</option>)}
+                      </Select></Field>
                       <Field label="Núcleo"><Select className="h-9" value={t.cluster} onChange={(e) => api.updateTarget(t, { cluster: e.target.value })}>{clusterOptions(t).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>
                       <Field label="Área de atuação"><div className="relative"><MapPin className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-pm-muted" /><Input className="h-9 pl-8 uppercase" placeholder="bairro / ponto" defaultValue={t.area} key={t.area} onBlur={(e) => e.target.value.toUpperCase() !== t.area && api.updateTarget(t, { area: e.target.value.toUpperCase() })} /></div></Field>
                       <button type="button" onClick={() => setEvidenceOf(t)} className="self-end rounded-sm border border-pm-line px-3 py-2 text-xs font-bold hover:border-pm-gold">{t.evidence.length ? `${t.evidence.length} indício(s)` : "+ indício"}</button>
