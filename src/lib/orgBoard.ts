@@ -14,7 +14,7 @@ const GAP_ROW = 92;
 const MARGIN = 26;
 const LANE = 10;
 /** Faixa à esquerda com o grau de cada linha. */
-const LEFT = 46;
+const LEFT = 0;
 
 /** Núcleo automático de cada função e a linha em que fica (0 = topo). */
 export const AUTO_GROUPS: Record<string, { name: string; level: number }> = {
