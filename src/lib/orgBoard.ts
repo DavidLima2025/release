@@ -42,7 +42,7 @@ export const groupNameOfKey = (key: string) => key.slice(2).split("|")[0];
 export type BoardCard = { targetId: string; x: number; y: number };
 export type BoardGroup = { key: string; name: string; custom: boolean; color: string; activities: string[]; level: number; order: number; x: number; y: number; w: number; h: number; cards: BoardCard[]; lanesTop: number; actTop: number };
 /** from/to: alvos ligados pela seta (para destacar a cadeia de comando do alvo selecionado). */
-export type BoardArrow = { d: string; kind: "chefia" | "vinculo" | "auto"; label?: string; lx?: number; ly?: number; id: string; from?: string; to?: string[] };
+export type BoardArrow = { d: string; kind: "chefia" | "vinculo" | "auto"; label?: string; lx?: number; ly?: number; id: string; from?: string; to?: string[]; ends?: { x: number; y: number }[] };
 export type AutoLink = { a: string; b: string; label: string };
 export type Board = { width: number; height: number; groups: BoardGroup[]; arrows: BoardArrow[]; groupOf: Map<string, string>; rows: { level: number; top: number; bottom: number }[] };
 
@@ -201,16 +201,38 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
       const a = cardBox(v.a); const b = cardBox(v.b);
       const ly = g.y + g.lanesTop + 10 + i * LANE;
       const ax = a.cx - 8 + (i % 3) * 8; const bx = b.cx + 8 - (i % 3) * 8;
-      const d = `M${ax},${a.y + CARD_H} V${ly} H${bx} V${b.y + CARD_H + (v.kind === "chefia" ? 2 : 0)}`;
-      arrows.push({ id: v.id, kind: v.kind, d, label: v.label, lx: (ax + bx) / 2, ly, from: v.a, to: [v.b] });
+      const d = `M${ax},${a.y + CARD_H - 4} V${ly} H${bx} V${b.y + CARD_H - 2 + (v.kind === "chefia" ? 2 : 0)}`;
+      arrows.push({ id: v.id, kind: v.kind, d, label: v.label, lx: (ax + bx) / 2, ly, from: v.a, to: [v.b], ends: v.kind === "chefia" ? [{ x: ax, y: a.y + CARD_H - 4 }] : [{ x: ax, y: a.y + CARD_H - 4 }, { x: bx, y: b.y + CARD_H - 4 }] });
     });
   }
-  // Vínculos entre quadros: linha reta entre os cartões, com o rótulo no meio.
+  // Vínculos entre quadros: linha reta de foto a foto (encosta na borda da foto), rótulo no meio.
+  const PH = { x: 18, y: 7, w: 76, h: 92 };
+  /** Ponto onde a reta que sai do centro da foto em direção a (tx,ty) cruza a borda da foto. */
+  const edge = (bx: number, by: number, tx: number, ty: number) => {
+    const cx = bx + PH.x + PH.w / 2; const cy = by + PH.y + PH.h / 2;
+    const dx = tx - cx; const dy = ty - cy;
+    if (!dx && !dy) return { x: cx, y: cy };
+    const k = Math.min(dx ? (PH.w / 2) / Math.abs(dx) : Infinity, dy ? (PH.h / 2) / Math.abs(dy) : Infinity);
+    return { x: cx + dx * k, y: cy + dy * k };
+  };
   const straight = (ida: string, idb: string, kind: "vinculo" | "auto", label: string, id: string) => {
     const a = cardBox(ida); const b = cardBox(idb);
-    const ay = a.y + 52; const by = b.y + 52;
-    const x1 = a.cx + (b.cx > a.cx ? CARD_W / 2 : -CARD_W / 2); const x2 = b.cx + (a.cx > b.cx ? CARD_W / 2 : -CARD_W / 2);
-    arrows.push({ id, kind, label, d: `M${x1},${ay} L${x2},${by}`, lx: (x1 + x2) / 2, ly: (ay + by) / 2, from: ida, to: [idb] });
+    const ac = { x: a.x + PH.x + PH.w / 2, y: a.y + PH.y + PH.h / 2 }; const bc = { x: b.x + PH.x + PH.w / 2, y: b.y + PH.y + PH.h / 2 };
+    const p1 = edge(a.x, a.y, bc.x, bc.y); const p2 = edge(b.x, b.y, ac.x, ac.y);
+    // Se a reta passar por cima de outro alvo, vai por baixo dos quadros (não fica ambíguo).
+    const others = all.flatMap((g) => g.cards.filter((c) => c.targetId !== ida && c.targetId !== idb).map((c) => ({ x: g.x + c.x, y: g.y + c.y })));
+    const steps = Math.ceil(Math.hypot(p2.x - p1.x, p2.y - p1.y) / 6);
+    const blocked = others.some((o) => Array.from({ length: steps + 1 }, (_, i) => i / steps).some((t) => {
+      const x = p1.x + (p2.x - p1.x) * t; const y = p1.y + (p2.y - p1.y) * t;
+      return x > o.x + 6 && x < o.x + CARD_W - 6 && y > o.y && y < o.y + CARD_H - 10;
+    }));
+    if (blocked) {
+      const yL = Math.max(a.g.y + a.g.h, b.g.y + b.g.h) + 12 + lane(`lk${rowOf(a.g)}`);
+      const s1 = { x: ac.x, y: a.y + CARD_H - 4 }; const s2 = { x: bc.x, y: b.y + CARD_H - 4 };
+      arrows.push({ id, kind, label, d: `M${s1.x},${s1.y} V${yL} H${s2.x} V${s2.y}`, lx: (s1.x + s2.x) / 2, ly: yL, from: ida, to: [idb], ends: [s1, s2] });
+      return;
+    }
+    arrows.push({ id, kind, label, d: `M${p1.x},${p1.y} L${p2.x},${p2.y}`, lx: (p1.x + p2.x) / 2, ly: (p1.y + p2.y) / 2, from: ida, to: [idb], ends: [p1, p2] });
   };
   for (const l of links) if (byId.has(l.fromTarget) && byId.has(l.toTarget) && groupOf.get(l.fromTarget) !== groupOf.get(l.toTarget)) straight(l.fromTarget, l.toTarget, "vinculo", l.relation, `l-${l.id}`);
   autoLinks.forEach((l, i) => { if (byId.has(l.a) && byId.has(l.b) && groupOf.get(l.a) !== groupOf.get(l.b)) straight(l.a, l.b, "auto", l.label, `x-${i}`); });

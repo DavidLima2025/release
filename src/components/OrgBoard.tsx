@@ -173,6 +173,10 @@ export function OrgBoard({ targets, links, groups: custom, autoLinks = [], peopl
           </g>
         );
       })}
+      {/* Pontos onde a linha encosta no alvo */}
+      {board.arrows.filter((a) => a.ends).flatMap((a) => a.ends!.map((e, i) => (
+        <circle key={`${a.id}e${i}`} cx={e.x} cy={e.y} r={3.2} fill={lineColor[a.kind]} stroke="#fff" strokeWidth={1} opacity={arrowOn(a) ? 1 : 0.12} />
+      )))}
       {/* Rótulos dos vínculos por cima */}
       {board.arrows.filter((a) => a.kind !== "chefia" && a.label).map((a) => {
         const w = a.label!.length * 6.2 + 14;
