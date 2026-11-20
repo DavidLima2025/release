@@ -102,7 +102,7 @@ export function Organogram({ targets, links, authors, photos, photoUrl, selected
           const selected = selectedId === target.id;
           const dragging = drag?.id === target.id;
           const isOver = Boolean(drag && drag.over === target.id);
-          const name = author?.name || "Alvo removido";
+          const name = author?.name || target.label || "NÃO IDENTIFICADO";
           const textX = photo ? 56 : 10;
           const maxChars = photo ? 17 : 22;
           const line1 = name.length > maxChars ? name.slice(0, name.lastIndexOf(" ", maxChars) > 4 ? name.lastIndexOf(" ", maxChars) : maxChars) : name;

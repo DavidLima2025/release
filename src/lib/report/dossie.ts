@@ -110,6 +110,8 @@ export async function renderDossie(input: DossieInput): Promise<Uint8Array> {
     T("comando / hierarquia", lx + 28, ly, 7.5); lx += 120;
     page.drawLine({ start: { x: lx, y: ly + 3 }, end: { x: lx + 24, y: ly + 3 }, thickness: 1.4, color: rgb(0.18, 0.42, 0.23), dashArray: [4, 3] });
     T("vínculo (parentesco, namoro, fornecedor…)", lx + 28, ly, 7.5); lx += 200;
+    page.drawLine({ start: { x: lx, y: ly + 3 }, end: { x: lx + 24, y: ly + 3 }, thickness: 1.4, color: rgb(0.12, 0.44, 0.7), dashArray: [1.5, 2.5] });
+    T("mesmo telefone/veículo", lx + 28, ly, 7.5); lx += 125;
     page.drawCircle({ x: lx + 5, y: ly + 3, size: 5, color: GOLD }); T("nº de indícios da função", lx + 14, ly, 7.5); lx += 110;
     T("◉ área de atuação".replace("◉", "o"), lx, ly, 7.5, regular, rgb(0.18, 0.36, 0.49));
     footer("Organograma");
