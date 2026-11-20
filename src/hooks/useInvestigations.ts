@@ -274,6 +274,25 @@ export function useInvestigations(data: AppData, notify: Notify) {
     if (error) { load(); fail(error, "Erro ao atualizar o alvo."); }
   }
 
+  /** Aplica várias mudanças de papel/superior de uma vez (proposta já conferida, sem ciclos). */
+  async function applyTargets(changes: { target: InvestigationTarget; role: string; parentId: string }[]) {
+    if (!changes.length) return true;
+    const ids = new Set(changes.map((c) => c.target.id));
+    // Confere ciclos no resultado final.
+    const final = new Map(targets.map((t) => [t.id, t.parentId]));
+    changes.forEach((c) => final.set(c.target.id, c.parentId));
+    for (const id of ids) {
+      const seen = new Set<string>(); let cur = final.get(id) || "";
+      while (cur) { if (cur === id || seen.has(cur)) { notify("A hierarquia proposta tem um ciclo. Ajuste antes de aplicar.", "error"); return false; } seen.add(cur); cur = final.get(cur) || ""; }
+    }
+    setTargets((list) => list.map((t) => { const c = changes.find((x) => x.target.id === t.id); return c ? { ...t, role: c.role, parentId: c.parentId } : t; }));
+    const results = await Promise.all(changes.map((c) => supabase.from("investigation_targets").update({ role: c.role, parent_id: c.parentId || null }).eq("id", c.target.id)));
+    const err = results.find((r) => r.error)?.error;
+    if (err) { load(); fail(err, "Erro ao aplicar a hierarquia."); return false; }
+    notify(`Organograma atualizado (${changes.length} alvo(s)).`, "success");
+    return true;
+  }
+
   async function removeTarget(target: InvestigationTarget) {
     const author = data.authors.find((a) => a.id === target.authorId);
     if (!window.confirm(`Desvincular ${author?.name || "este alvo"} da investigação? (O card no banco de alvos continua.)`)) return;
@@ -338,7 +357,7 @@ export function useInvestigations(data: AppData, notify: Notify) {
   return {
     investigations, items, targets, links, loaded, reload: load,
     createInvestigation, updateInvestigation, toggleStageItem, setStage, deleteInvestigation,
-    saveItem, deleteItem, openItemFile, setItemLocation, itemFileUrl, addTarget, createAndAddTarget, updateTarget, removeTarget, addLink, deleteLink, generateReport,
+    saveItem, deleteItem, openItemFile, setItemLocation, itemFileUrl, addTarget, createAndAddTarget, updateTarget, applyTargets, removeTarget, addLink, deleteLink, generateReport,
   };
 }
 

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import { InvestigationLink, InvestigationTarget, ROLE_COLOR, layoutOrganogram } from "../lib/investigation";
 import type { Author, AuthorFile } from "../lib/domain";
 
@@ -10,6 +10,10 @@ type Props = {
   photoUrl: (path: string) => string;
   selectedId?: string;
   onSelect?: (target: InvestigationTarget) => void;
+  /** Arrastar um alvo sobre outro define o superior; soltar no vazio leva ao topo. */
+  onReparent?: (target: InvestigationTarget, parentId: string) => void;
+  /** Clique duplo abre a ficha. */
+  onOpen?: (target: InvestigationTarget) => void;
 };
 
 const BOX_W = 168;
@@ -18,17 +22,51 @@ const GAP_X = 22;
 const GAP_Y = 46;
 const PAD = 16;
 
-export function Organogram({ targets, links, authors, photos, photoUrl, selectedId, onSelect }: Props) {
+export function Organogram({ targets, links, authors, photos, photoUrl, selectedId, onSelect, onReparent, onOpen }: Props) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const start = useRef<{ id: string; x: number; y: number; pointer: number } | null>(null);
+  const [drag, setDrag] = useState<{ id: string; dx: number; dy: number; over: string } | null>(null);
   const layout = useMemo(() => layoutOrganogram(targets), [targets]);
   const width = layout.width * (BOX_W + GAP_X) - GAP_X + PAD * 2;
   const height = layout.depth * (BOX_H + GAP_Y) - GAP_Y + PAD * 2;
   const pos = new Map(layout.nodes.map((n) => [n.id, { cx: PAD + n.x * (BOX_W + GAP_X) + BOX_W / 2, ty: PAD + n.y * (BOX_H + GAP_Y) }]));
   const byId = new Map(targets.map((t) => [t.id, t]));
 
+  const toSvg = (e: RPointerEvent) => {
+    const svg = svgRef.current!; const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    return pt.matrixTransform(svg.getScreenCTM()!.inverse());
+  };
+  const descendants = (id: string) => {
+    const out = new Set<string>([id]); let grew = true;
+    while (grew) { grew = false; for (const t of targets) if (t.parentId && out.has(t.parentId) && !out.has(t.id)) { out.add(t.id); grew = true; } }
+    return out;
+  };
+  const hit = (x: number, y: number, skip: Set<string>) => layout.nodes.find((n) => {
+    if (skip.has(n.id)) return false; const p = pos.get(n.id)!;
+    return x >= p.cx - BOX_W / 2 && x <= p.cx + BOX_W / 2 && y >= p.ty && y <= p.ty + BOX_H;
+  })?.id || "";
+  const down = (e: RPointerEvent, id: string) => {
+    if (e.button !== 0) return;
+    const p = toSvg(e); start.current = { id, x: p.x, y: p.y, pointer: e.pointerId };
+    if (onReparent) (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+  };
+  const move = (e: RPointerEvent) => {
+    const s0 = start.current; if (!s0 || !onReparent) return;
+    const p = toSvg(e); const dx = p.x - s0.x; const dy = p.y - s0.y;
+    if (!drag && Math.hypot(dx, dy) < 8) return;
+    setDrag({ id: s0.id, dx, dy, over: hit(p.x, p.y, descendants(s0.id)) });
+  };
+  const up = (target: InvestigationTarget) => {
+    const d = drag; start.current = null; setDrag(null);
+    if (!d) { onSelect?.(target); return; }
+    const newParent = d.over;
+    if (newParent !== (target.parentId || "")) onReparent?.(target, newParent);
+  };
+
   if (!targets.length) return null;
   return (
     <div className="overflow-auto rounded-sm border border-pm-line bg-[radial-gradient(circle,#d8d0ba_1px,transparent_1px)] [background-size:18px_18px]">
-      <svg width={Math.max(width, 320)} height={height} viewBox={`0 0 ${Math.max(width, 320)} ${height}`} className="mx-auto block" role="img" aria-label="Organograma dos alvos">
+      <svg ref={svgRef} width={Math.max(width, 320)} height={height} viewBox={`0 0 ${Math.max(width, 320)} ${height}`} className="mx-auto block select-none" role="img" aria-label="Organograma dos alvos">
         <defs>
           {authors.length > 0 && layout.nodes.map((n) => <clipPath key={n.id} id={`clip-${n.id}`}><rect x={0} y={0} width={44} height={52} rx={2} /></clipPath>)}
         </defs>
@@ -54,7 +92,7 @@ export function Organogram({ targets, links, authors, photos, photoUrl, selected
             </g>
           );
         })}
-        {layout.nodes.map((n) => {
+        {[...layout.nodes].sort((a, b) => Number(a.id === drag?.id) - Number(b.id === drag?.id)).map((n) => {
           const target = byId.get(n.id)!;
           const author = authors.find((a) => a.id === target.authorId);
           const photo = photos.find((p) => p.authorId === target.authorId);
@@ -62,6 +100,8 @@ export function Organogram({ targets, links, authors, photos, photoUrl, selected
           const color = ROLE_COLOR[target.role] || "#6B655A";
           const x = p.cx - BOX_W / 2;
           const selected = selectedId === target.id;
+          const dragging = drag?.id === target.id;
+          const isOver = Boolean(drag && drag.over === target.id);
           const name = author?.name || "Alvo removido";
           const textX = photo ? 56 : 10;
           const maxChars = photo ? 17 : 22;
@@ -69,7 +109,12 @@ export function Organogram({ targets, links, authors, photos, photoUrl, selected
           const rest = name.slice(line1.length).trim();
           const line2 = rest.length > maxChars ? `${rest.slice(0, maxChars - 1)}…` : rest;
           return (
-            <g key={n.id} transform={`translate(${x},${p.ty})`} className="cursor-pointer" onClick={() => onSelect?.(target)}>
+            <g key={n.id} transform={`translate(${x + (dragging ? drag!.dx : 0)},${p.ty + (dragging ? drag!.dy : 0)})`}
+              className={onReparent ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"} style={{ touchAction: onReparent ? "none" : undefined, opacity: dragging ? 0.85 : 1 }}
+              data-target={target.id}
+              onPointerDown={(e) => down(e, target.id)} onPointerMove={move} onPointerUp={() => up(target)} onPointerCancel={() => { start.current = null; setDrag(null); }}
+              onDoubleClick={() => onOpen?.(target)}>
+              {isOver && <rect x={-5} y={-5} width={BOX_W + 10} height={BOX_H + 10} rx={5} fill="none" stroke="#9B8A5C" strokeWidth={3} strokeDasharray="6 3" />}
               <rect width={BOX_W} height={BOX_H} rx={3} fill="#fff" stroke={selected ? "#0B0B0C" : color} strokeWidth={selected ? 2.5 : 1.5} />
               <rect width={BOX_W} height={5} fill={color} />
               {photo && (
@@ -84,6 +129,11 @@ export function Organogram({ targets, links, authors, photos, photoUrl, selected
           );
         })}
       </svg>
+      {drag && (
+        <p className="sticky bottom-0 left-0 bg-pm-black/85 px-3 py-1.5 text-center text-xs font-semibold text-white">
+          {drag.over ? <>Soltar: fica subordinado a <b className="text-pm-gold-light">{authors.find((a) => a.id === byId.get(drag.over)?.authorId)?.name}</b></> : "Soltar no vazio: vai para o topo (sem superior)"}
+        </p>
+      )}
     </div>
   );
 }

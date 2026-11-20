@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowLeft, Check, ChevronRight, Download, Edit3, ExternalLink, FileSearch, FileText, GitFork, History, Link2, Loader2,
-  Map as MapIcon, Paperclip, Plus, Presentation, Save, ScanText, Search, Trash2, UserPlus, Users,
+  Map as MapIcon, Paperclip, Plus, Presentation, Save, ScanText, Search, Sparkles, Trash2, UserRound, UserPlus, Users,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, EmptyState, SectionHeader } from "../components/ui/card";
@@ -11,6 +11,10 @@ import { Modal } from "../components/ui/modal";
 import { LinkChart, Organogram } from "../components/Organogram";
 import { BoAuthorModal } from "../components/BoAuthorModal";
 import { DossieModal } from "../components/DossieModal";
+import { CompareModal, HierarchyModal } from "../components/OrgTools";
+import { TargetFichaModal } from "../components/TargetFichaModal";
+import { ShareTargetModal } from "../components/ShareTargetModal";
+import type { Author } from "../lib/domain";
 import { companionsOf } from "../lib/companions";
 
 const CrimeMap = lazy(() => import("./CrimeMap"));
@@ -363,6 +367,10 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
   const [selected, setSelected] = useState<string>("");
   const [picked, setPicked] = useState<string[]>([]);
   const [dossieOpen, setDossieOpen] = useState(false);
+  const [hierOpen, setHierOpen] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [ficha, setFicha] = useState<Author | null>(null);
+  const [sharing, setSharing] = useState<Author | null>(null);
   const [adding, setAdding] = useState(false);
   const [autoLink, setAutoLink] = useState(true);
   const [search, setSearch] = useState("");
@@ -453,10 +461,15 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
     <div className="space-y-5">
       <Card>
         <CardContent>
-          <SectionHeader icon={GitFork} title="Organograma" subtitle="Linhas cheias: hierarquia (superior → subordinado). Tracejadas: demais vínculos. Clique num alvo para editar."
-            actions={<Button variant="primary" disabled={!targets.length} onClick={() => setDossieOpen(true)}><FileText />PDF: organograma + qualificações</Button>} />
+          <SectionHeader icon={GitFork} title="Organograma" subtitle="Arraste um alvo sobre outro para deixá-lo subordinado (no vazio vai para o topo). Clique seleciona; clique duplo abre a ficha. Linhas cheias: hierarquia; tracejadas: vínculos."
+            actions={<div className="flex flex-wrap gap-2">
+              <Button size="sm" disabled={targets.length < 2} onClick={() => setHierOpen(true)}><Sparkles />Sugerir funções e hierarquia</Button>
+              <Button size="sm" onClick={() => setCompareOpen(true)}><GitFork />Comparar investigações</Button>
+              <Button size="sm" variant="primary" disabled={!targets.length} onClick={() => setDossieOpen(true)}><FileText />PDF: organograma + qualificações</Button>
+            </div>} />
           {targets.length === 0 ? <EmptyState icon={Users} title="Nenhum alvo no dossiê">Vincule alvos do banco de alvos ou cadastre novos ao lado.</EmptyState>
-            : <Organogram targets={targets} links={links} authors={data.authors} photos={data.authorPhotos} photoUrl={data.getIntelFileUrl} selectedId={selected} onSelect={(t) => setSelected(t.id)} />}
+            : <Organogram targets={targets} links={links} authors={data.authors} photos={data.authorPhotos} photoUrl={data.getIntelFileUrl} selectedId={selected} onSelect={(t) => setSelected(t.id)}
+                onReparent={(t, parentId) => api.updateTarget(t, { parentId })} onOpen={(t) => setFicha(authorOf(t) || null)} />}
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-pm-muted">
             {TARGET_ROLES.map((r) => <span key={r} className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-[2px]" style={{ background: ROLE_COLOR[r] }} />{r}</span>)}
           </div>
@@ -490,7 +503,10 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
                     </div>
                     <Field label="Papel"><Select className="h-9" value={t.role} onChange={(e) => api.updateTarget(t, { role: e.target.value })}>{TARGET_ROLES.map((r) => <option key={r}>{r}</option>)}</Select></Field>
                     <Field label="Superior"><Select className="h-9" value={t.parentId} onChange={(e) => api.updateTarget(t, { parentId: e.target.value })}><option value="">— topo —</option>{targets.filter((x) => x.id !== t.id).map((x) => <option key={x.id} value={x.id}>{nameOf(x.id)}</option>)}</Select></Field>
-                    <Button size="icon" variant="ghost" title="Desvincular" onClick={() => api.removeTarget(t)}><Trash2 /></Button>
+                    <div className="flex gap-1">
+                      <Button size="icon" variant="ghost" title="Ver ficha completa" disabled={!a} onClick={(e) => { e.stopPropagation(); setFicha(a || null); }}><UserRound /></Button>
+                      <Button size="icon" variant="ghost" title="Desvincular" onClick={() => api.removeTarget(t)}><Trash2 /></Button>
+                    </div>
                   </div>
                 );
               })}
@@ -559,6 +575,10 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
         </div>
       </div>
       <BoAuthorModal open={boOpen} data={data} api={api} investigationId={inv.id} onClose={() => setBoOpen(false)} />
+      <HierarchyModal open={hierOpen} onClose={() => setHierOpen(false)} data={data} api={api} inv={inv} targets={targets} />
+      <CompareModal open={compareOpen} onClose={() => setCompareOpen(false)} data={data} api={api} inv={inv} targets={targets} onOpenAuthor={(id) => setFicha(data.authors.find((x) => x.id === id) || null)} />
+      <TargetFichaModal author={ficha} data={data} api={api} onClose={() => setFicha(null)} onShareMessage={(x) => setSharing(x)} onOpenAuthor={(x) => setFicha(x)} />
+      <ShareTargetModal author={sharing} data={data} onClose={() => setSharing(null)} />
       <DossieModal open={dossieOpen} onClose={() => setDossieOpen(false)} data={data} api={api} inv={inv} targets={targets} links={links} />
       <NewTargetModal open={newOpen} data={data} targets={targets} nameOf={nameOf} onClose={() => setNewOpen(false)}
         onSave={async (form, r, p) => { const t = await api.createAndAddTarget(inv, form, r, p); if (t) { setNewOpen(false); setSelected(t.id); } }} />
