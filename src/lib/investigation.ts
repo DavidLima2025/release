@@ -106,6 +106,8 @@ export type InvestigationTarget = {
   cluster: string; area: string; evidence: Evidence[];
   /** Nome do "não identificado" (sem card no banco de alvos). */
   label: string; history: GroupEvent[]; createdAt: string;
+  /** Grau na hierarquia (1 = topo). null = pela função. */
+  grade: number | null;
 };
 export type InvestigationLink = { id: string; investigationId: string; fromTarget: string; toTarget: string; relation: string; notes: string };
 
@@ -137,6 +139,7 @@ export function normalizeTarget(row: any): InvestigationTarget {
     id: row.id, investigationId: row.investigation_id, authorId: row.author_id || "", role: row.role || "Associado", parentId: row.parent_id || "", notes: row.notes || "", position: row.position || 0,
     cluster: row.cluster || "", area: row.area || "", evidence: Array.isArray(row.evidence) ? row.evidence : [],
     label: row.label || "", history: Array.isArray(row.history) ? row.history : [], createdAt: row.created_at || "",
+    grade: Number.isFinite(row.grade) && row.grade > 0 ? Number(row.grade) : null,
   };
 }
 

@@ -270,6 +270,7 @@ export function useInvestigations(data: AppData, notify: Notify) {
     if ("parentId" in v && (v.parentId || "") !== (t.parentId || "")) notes.push(`Superior: ${t.parentId ? tName(t.parentId) : "nenhum"} → ${v.parentId ? tName(v.parentId) : "nenhum"}`);
     if ("cluster" in v && (v.cluster || "") !== (t.cluster || "")) notes.push(`Núcleo: ${t.cluster || "automático"} → ${v.cluster || "automático"}`);
     if ("area" in v && (v.area || "") !== (t.area || "") && v.area) notes.push(`Área: ${t.area || "—"} → ${v.area}`);
+    if ("grade" in v && (v.grade ?? null) !== (t.grade ?? null)) notes.push(`Grau: ${t.grade ? `${t.grade}º` : "pela função"} → ${v.grade ? `${v.grade}º` : "pela função"}`);
     if (!notes.length) return undefined;
     return [...t.history, { id: newId(), date: today(), kind: "role" in v && v.role !== t.role ? "Assumiu função" : "Outro", note: notes.join(" · "), auto: true }];
   };
@@ -285,6 +286,7 @@ export function useInvestigations(data: AppData, notify: Notify) {
     if ("label" in values) row.label = values.label || "";
     if ("history" in values) row.history = values.history || [];
     if ("authorId" in values) row.author_id = values.authorId || null;
+    if ("grade" in values) row.grade = values.grade ?? null;
     return row;
   };
 
@@ -299,7 +301,7 @@ export function useInvestigations(data: AppData, notify: Notify) {
         cursor = targets.find((t) => t.id === cursor!.parentId);
       }
     }
-    const structural = ["role", "parentId", "cluster", "area"].some((k) => k in values);
+    const structural = ["role", "parentId", "cluster", "area", "grade"].some((k) => k in values);
     const v = { ...values };
     if (structural && !("history" in values)) { const h = logChanges(current, values); if (h) v.history = h; }
     if (structural && opts.undo !== false) pushUndo({ label: `${tName(target.id)}`, targets: [current] });
@@ -309,7 +311,7 @@ export function useInvestigations(data: AppData, notify: Notify) {
   }
 
   /** Aplica várias mudanças de papel/superior de uma vez (proposta já conferida, sem ciclos). */
-  async function applyTargets(changes: { target: InvestigationTarget; role: string; parentId: string; area?: string }[]) {
+  async function applyTargets(changes: { target: InvestigationTarget; role: string; parentId: string; area?: string; grade?: number | null }[], undoLabel = "") {
     if (!changes.length) return true;
     const ids = new Set(changes.map((c) => c.target.id));
     // Confere ciclos no resultado final.
@@ -320,10 +322,10 @@ export function useInvestigations(data: AppData, notify: Notify) {
       while (cur) { if (cur === id || seen.has(cur)) { notify("A hierarquia proposta tem um ciclo. Ajuste antes de aplicar.", "error"); return false; } seen.add(cur); cur = final.get(cur) || ""; }
     }
     const before = changes.map((c) => targets.find((t) => t.id === c.target.id) || c.target);
-    pushUndo({ label: `sugestão aplicada (${changes.length})`, targets: before });
+    pushUndo({ label: undoLabel || `sugestão aplicada (${changes.length})`, targets: before });
     const rows = changes.map((c) => {
       const cur = targets.find((t) => t.id === c.target.id) || c.target;
-      const v: Partial<InvestigationTarget> = { role: c.role, parentId: c.parentId, ...(c.area !== undefined ? { area: c.area } : {}) };
+      const v: Partial<InvestigationTarget> = { role: c.role, parentId: c.parentId, ...(c.area !== undefined ? { area: c.area } : {}), ...(c.grade !== undefined ? { grade: c.grade } : {}) };
       const h = logChanges(cur, v); if (h) v.history = h;
       return { id: c.target.id, v };
     });
@@ -340,8 +342,8 @@ export function useInvestigations(data: AppData, notify: Notify) {
     const u = undoStack.current.pop(); setUndoCount(undoStack.current.length);
     if (!u) return;
     if (u.targets) {
-      setTargets((list) => list.map((t) => { const o = u.targets!.find((x) => x.id === t.id); return o ? { ...t, role: o.role, parentId: o.parentId, cluster: o.cluster, area: o.area, history: o.history } : t; }));
-      await Promise.all(u.targets.map((o) => supabase.from("investigation_targets").update(toRowT({ role: o.role, parentId: o.parentId, cluster: o.cluster, area: o.area, history: o.history })).eq("id", o.id)));
+      setTargets((list) => list.map((t) => { const o = u.targets!.find((x) => x.id === t.id); return o ? { ...t, role: o.role, parentId: o.parentId, cluster: o.cluster, area: o.area, history: o.history, grade: o.grade } : t; }));
+      await Promise.all(u.targets.map((o) => supabase.from("investigation_targets").update(toRowT({ role: o.role, parentId: o.parentId, cluster: o.cluster, area: o.area, history: o.history, grade: o.grade })).eq("id", o.id)));
     }
     if (u.linkAdded) {
       setLinks((list) => list.filter((l) => l.id !== u.linkAdded));

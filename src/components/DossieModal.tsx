@@ -8,7 +8,7 @@ import type { Investigation, InvestigationLink, InvestigationTarget } from "../l
 import type { ReportImage } from "../lib/report/model";
 import { buildFichaInput, cropPortrait, fileSlug } from "../lib/fichaInput";
 import { redsCount } from "../lib/companions";
-import { groupKeyOf } from "../lib/orgBoard";
+import { groupKeyOf, groupNameOfKey } from "../lib/orgBoard";
 import { autoLinksFor } from "../lib/sharedContacts";
 import { groupStatus } from "../lib/investigation";
 import { formatBR } from "../lib/dates";
@@ -36,7 +36,7 @@ export function DossieModal({ open, onClose, data, api, inv, targets, links }: P
       const a = authorOf(t);
       if (!a) {
         const parent = targets.find((x) => x.id === t.parentId);
-        people.set(t.id, { name: t.label || "NÃO IDENTIFICADO", alias: "", role: t.role, status: "Não identificado", document: "", parent: parent ? authorOf(parent)?.name || parent.label : "", bos: 0, group: groupKeyOf(t, inv.orgGroups).slice(2), area: t.area, evidence: t.evidence.map((e) => ({ source: e.source, note: e.note, date: e.date ? formatBR(e.date) : "" })) });
+        people.set(t.id, { name: t.label || "NÃO IDENTIFICADO", alias: "", role: t.role, status: "Não identificado", document: "", parent: parent ? authorOf(parent)?.name || parent.label : "", bos: 0, group: groupNameOfKey(groupKeyOf(t, inv.orgGroups)), area: t.area, evidence: t.evidence.map((e) => ({ source: e.source, note: e.note, date: e.date ? formatBR(e.date) : "" })) });
         boardPeople.set(t.id, { name: t.label || "NÃO IDENTIFICADO", alias: "", role: t.role, area: t.area, evidence: t.evidence.length, bos: 0, unknown: true, status: groupStatus(t) });
         continue;
       }
@@ -47,7 +47,7 @@ export function DossieModal({ open, onClose, data, api, inv, targets, links }: P
       people.set(t.id, {
         name: a.name, alias: a.alias, role: t.role, status: a.status, document: a.document, photo: img,
         parent: parent ? authorOf(parent)?.name || "" : "", bos,
-        group: groupKeyOf(t, inv.orgGroups).slice(2), area: t.area,
+        group: groupNameOfKey(groupKeyOf(t, inv.orgGroups)), area: t.area,
         evidence: t.evidence.map((e) => ({ source: e.source, note: e.note, date: e.date ? formatBR(e.date) : "" })),
       });
       const ev = t.evidence.filter((e) => !e.role || e.role === t.role);
