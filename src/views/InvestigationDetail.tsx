@@ -552,7 +552,9 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
               <span className="text-pm-muted">A altura de cada alvo é o <b>grau</b>: pela função ou o que você definir.</span>
               {selT && (
                 <span className="flex items-center gap-1 rounded-sm border border-pm-gold bg-white px-2 py-1">
-                  <b className="max-w-[160px] truncate uppercase">{nameOf(selT.id)}</b>: {levelOf(selT) + 1}º grau
+                  <b className="max-w-[160px] truncate uppercase">{nameOf(selT.id)}</b>: {levelOf(selT) + 1}º grau ·
+                  <span className="text-[#C0201A]">chefe: {selT.parentId ? nameOf(selT.parentId) : "nenhum"}</span> ·
+                  comanda {targets.filter((x) => x.parentId === selT.id).length} direto
                   <button type="button" title="Subir um grau" disabled={levelOf(selT) === 0} onClick={() => setGrade(selT, levelOf(selT) - 1)} className="rounded-sm bg-pm-black px-2 py-0.5 font-black text-white disabled:opacity-30">▲</button>
                   <button type="button" title="Descer um grau" disabled={levelOf(selT) >= MAX_GRADE - 1} onClick={() => setGrade(selT, levelOf(selT) + 1)} className="rounded-sm bg-pm-black px-2 py-0.5 font-black text-white disabled:opacity-30">▼</button>
                   {selT.grade && <button type="button" className="underline" onClick={() => api.updateTarget(selT, { grade: null })}>pela função</button>}
@@ -563,7 +565,7 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
             </div>
           )}
           {targets.length === 0 ? <EmptyState icon={Users} title="Nenhum alvo no dossiê">Vincule alvos do banco de alvos ou cadastre novos ao lado.</EmptyState>
-            : orgView === "quadro" ? <OrgBoard targets={targets} links={links} groups={inv.orgGroups} autoLinks={autoLinks} people={boardPeople} selectedId={selected} onSelect={(t) => setSelected(t.id)} onOpen={(t) => (authorOf(t) ? setFicha(authorOf(t)!) : setIdentify(t))}
+            : orgView === "quadro" ? <OrgBoard targets={targets} links={links} groups={inv.orgGroups} autoLinks={autoLinks} people={boardPeople} selectedId={selected} onSelect={(t) => setSelected((cur) => (cur === t.id ? "" : t.id))} onOpen={(t) => (authorOf(t) ? setFicha(authorOf(t)!) : setIdentify(t))}
                 dragMode={dragMode} onLinkDrop={(t, to) => setLinkPair({ from: t.id, to })}
                 onDropOnTarget={(t, parentId) => api.updateTarget(t, { parentId })}
                 onDropOnGroup={(t, key) => {

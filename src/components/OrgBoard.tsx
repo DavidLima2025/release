@@ -82,6 +82,17 @@ export function OrgBoard({ targets, links, groups: custom, autoLinks = [], peopl
     if (t.parentId) onDropOnTarget?.(t, "");
   };
 
+  // Cadeia de comando do selecionado: chefes acima e todos abaixo dele ficam em destaque.
+  const chain = (() => {
+    if (!selectedId || !byId.has(selectedId) || exportMode) return null;
+    const set = new Set(descendants(selectedId));
+    let cur = byId.get(selectedId); const seen = new Set<string>();
+    while (cur?.parentId && byId.has(cur.parentId) && !seen.has(cur.id)) { seen.add(cur.id); set.add(cur.parentId); cur = byId.get(cur.parentId); }
+    return set;
+  })();
+  const arrowOn = (a: (typeof board.arrows)[number]) => !chain || (a.kind === "chefia" ? Boolean(a.from && chain.has(a.from) && a.to?.some((x) => chain.has(x))) : Boolean((a.from === selectedId) || a.to?.includes(selectedId!)));
+  const chiefOf = (t: InvestigationTarget) => { const p = t.parentId && byId.has(t.parentId) ? people.get(t.parentId) : undefined; return p ? (p.alias || p.name.split(" ")[0]).toUpperCase() : ""; };
+
   if (!targets.length) return null;
   const W = board.width; const H = board.height;
   const dragName = (id: string) => people.get(id)?.name || "";
@@ -117,7 +128,7 @@ export function OrgBoard({ targets, links, groups: custom, autoLinks = [], peopl
       })}
       {/* Linhas: comando (vermelho, com seta), vínculo (verde) e detectado (azul) */}
       {board.arrows.map((a) => (
-        <path key={a.id} d={a.d} fill="none" stroke={lineColor[a.kind]} strokeWidth={a.kind === "chefia" ? 2.4 : 1.8}
+        <path key={a.id} d={a.d} fill="none" stroke={lineColor[a.kind]} strokeWidth={(a.kind === "chefia" ? 2.4 : 1.8) * (chain && arrowOn(a) ? 1.5 : 1)} opacity={arrowOn(a) ? 1 : 0.12}
           strokeDasharray={a.kind === "vinculo" ? "6 4" : a.kind === "auto" ? "2 3" : undefined} markerEnd={a.kind === "chefia" ? "url(#seta-chefia)" : undefined} />
       ))}
       {/* Cartões */}
@@ -132,7 +143,7 @@ export function OrgBoard({ targets, links, groups: custom, autoLinks = [], peopl
         let yy = by + 112 + lines.length * 10.5;
         return (
           <g key={c.targetId} data-target={t.id} transform={moving ? `translate(${drag!.dx},${drag!.dy})` : undefined}
-            style={interactive ? { touchAction: "none", cursor: "grab", opacity: moving ? 0.85 : 1 } : undefined}
+            style={interactive ? { touchAction: "none", cursor: "grab", opacity: moving ? 0.85 : chain && !chain.has(t.id) ? 0.3 : 1 } : undefined}
             onPointerDown={(e) => down(e, t.id)} onPointerMove={move} onPointerUp={() => up(t)} onPointerCancel={() => { start.current = null; setDrag(null); }}
             onClick={!interactive ? () => onSelect?.(t) : undefined} onDoubleClick={() => onOpen?.(t)}>
             {(sel || over) && <rect x={bx - 4} y={by - 4} width={CARD_W + 8} height={CARD_H + 8} rx={4} fill="none" stroke={over ? (dragMode === "vinculo" ? "#2E6B3A" : "#9B8A5C") : "#0B0B0C"} strokeWidth={over ? 3 : 2} strokeDasharray={over ? "6 3" : undefined} />}
@@ -157,7 +168,8 @@ export function OrgBoard({ targets, links, groups: custom, autoLinks = [], peopl
             )}
             {lines.map((l, i) => <text key={i} x={bx + CARD_W / 2} y={by + 112 + i * 10.5} textAnchor="middle" fontSize={8.8} fontWeight={800} fill="#0B0B0C">{l}</text>)}
             {p?.alias && (() => { const el = <text key="a" x={bx + CARD_W / 2} y={yy} textAnchor="middle" fontSize={8.2} fontStyle="italic" fill="#3A352C">{`vulgo ${p.alias}`.slice(0, 24)}</text>; yy += 10; return el; })()}
-            {p?.area && <text x={bx + CARD_W / 2} y={yy} textAnchor="middle" fontSize={7.8} fontWeight={700} fill="#2F5D7C">{`◉ ${p.area}`.slice(0, 26)}</text>}
+            {p?.area && (() => { const el = <text key="r" x={bx + CARD_W / 2} y={yy} textAnchor="middle" fontSize={7.8} fontWeight={700} fill="#2F5D7C">{`◉ ${p.area}`.slice(0, 26)}</text>; yy += 10; return el; })()}
+            {chiefOf(t) && <text x={bx + CARD_W / 2} y={yy} textAnchor="middle" fontSize={7.6} fontWeight={800} fill="#C0201A">{`▲ chefe: ${chiefOf(t)}`.slice(0, 24)}</text>}
           </g>
         );
       })}
@@ -166,7 +178,7 @@ export function OrgBoard({ targets, links, groups: custom, autoLinks = [], peopl
         const w = a.label!.length * 6.2 + 14;
         const auto = a.kind === "auto";
         return (
-          <g key={`t${a.id}`}>
+          <g key={`t${a.id}`} opacity={arrowOn(a) ? 1 : 0.15}>
             <rect x={a.lx! - w / 2} y={a.ly! - 8} width={w} height={15} rx={2} fill={auto ? "#E3EEF8" : "#E6F0E7"} stroke={auto ? "#1F6FB2" : "#2E6B3A"} strokeWidth={0.8} />
             <text x={a.lx!} y={a.ly! + 3.5} textAnchor="middle" fontSize={9} fontWeight={800} fill={auto ? "#164E7F" : "#1F4D29"}>{a.label!.toUpperCase()}</text>
           </g>
