@@ -5,7 +5,7 @@
 import { TARGET_ROLES, ROLE_COLOR, type InvestigationLink, type InvestigationTarget, type OrgGroup } from "./investigation";
 
 export const CARD_W = 112;
-export const CARD_H = 156;
+export const CARD_H = 166;
 const PAD = 12;
 const HEAD = 28;
 const GAP_CARD = 12;
@@ -41,7 +41,8 @@ export const groupNameOfKey = (key: string) => key.slice(2).split("|")[0];
 
 export type BoardCard = { targetId: string; x: number; y: number };
 export type BoardGroup = { key: string; name: string; custom: boolean; color: string; activities: string[]; level: number; order: number; x: number; y: number; w: number; h: number; cards: BoardCard[]; lanesTop: number; actTop: number };
-export type BoardArrow = { d: string; kind: "chefia" | "vinculo" | "auto"; label?: string; lx?: number; ly?: number; id: string };
+/** from/to: alvos ligados pela seta (para destacar a cadeia de comando do alvo selecionado). */
+export type BoardArrow = { d: string; kind: "chefia" | "vinculo" | "auto"; label?: string; lx?: number; ly?: number; id: string; from?: string; to?: string[] };
 export type AutoLink = { a: string; b: string; label: string };
 export type Board = { width: number; height: number; groups: BoardGroup[]; arrows: BoardArrow[]; groupOf: Map<string, string>; rows: { level: number; top: number; bottom: number }[] };
 
@@ -157,7 +158,7 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
     return xs.filter((cx) => clear(cx, y1, y2, skip)).sort((m, n) => Math.abs(m - x) - Math.abs(n - x))[0] ?? LEFT + MARGIN / 2;
   };
   /** Seta de comando entre quadros diferentes, sempre por fora dos quadros (contorna os do meio). */
-  const route = (sx: number, pg: BoardGroup, tx: number, tg: BoardGroup, id: string) => {
+  const route = (sx: number, pg: BoardGroup, tx: number, tg: BoardGroup, id: string, from: string, to: string[]) => {
     const pr = rowOf(pg); const tr = rowOf(tg);
     const skip = [pg, tg];
     let d: string;
@@ -176,7 +177,7 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
       const yA = rows[pr].bottom + 16 + lane(`gap${pr + 1}`);
       d = `M${sx},${pg.y + pg.h} V${yA} H${tx} V${tg.y + tg.h + 2}`;
     }
-    arrows.push({ id, kind: "chefia", d });
+    arrows.push({ id, kind: "chefia", d, from, to });
   };
   const handled = new Set<string>();
   // Um superior que comanda o quadro inteiro: uma seta só, até o quadro.
@@ -186,13 +187,13 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
     const pid = [...parents][0];
     if (!pid || !byId.has(pid) || groupOf.get(pid) === g.key) continue;
     const p = cardBox(pid);
-    route(p.cx, p.g, g.x + g.w / 2, g, `g-${g.key}`);
+    route(p.cx, p.g, g.x + g.w / 2, g, `g-${g.key}`, pid, g.cards.map((c) => c.targetId));
     g.cards.forEach((c) => handled.add(c.targetId));
   }
   for (const t of targets) {
     if (!t.parentId || !byId.has(t.parentId) || handled.has(t.id) || groupOf.get(t.parentId) === groupOf.get(t.id)) continue;
     const p = cardBox(t.parentId); const c = cardBox(t.id);
-    route(p.cx, p.g, c.cx, c.g, `h-${t.id}`);
+    route(p.cx, p.g, c.cx, c.g, `h-${t.id}`, t.parentId, [t.id]);
   }
   // Ligações dentro do quadro: faixas embaixo dos cartões.
   for (const g of groups.values()) {
@@ -201,7 +202,7 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
       const ly = g.y + g.lanesTop + 10 + i * LANE;
       const ax = a.cx - 8 + (i % 3) * 8; const bx = b.cx + 8 - (i % 3) * 8;
       const d = `M${ax},${a.y + CARD_H} V${ly} H${bx} V${b.y + CARD_H + (v.kind === "chefia" ? 2 : 0)}`;
-      arrows.push({ id: v.id, kind: v.kind, d, label: v.label, lx: (ax + bx) / 2, ly });
+      arrows.push({ id: v.id, kind: v.kind, d, label: v.label, lx: (ax + bx) / 2, ly, from: v.a, to: [v.b] });
     });
   }
   // Vínculos entre quadros: linha reta entre os cartões, com o rótulo no meio.
@@ -209,7 +210,7 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
     const a = cardBox(ida); const b = cardBox(idb);
     const ay = a.y + 52; const by = b.y + 52;
     const x1 = a.cx + (b.cx > a.cx ? CARD_W / 2 : -CARD_W / 2); const x2 = b.cx + (a.cx > b.cx ? CARD_W / 2 : -CARD_W / 2);
-    arrows.push({ id, kind, label, d: `M${x1},${ay} L${x2},${by}`, lx: (x1 + x2) / 2, ly: (ay + by) / 2 });
+    arrows.push({ id, kind, label, d: `M${x1},${ay} L${x2},${by}`, lx: (x1 + x2) / 2, ly: (ay + by) / 2, from: ida, to: [idb] });
   };
   for (const l of links) if (byId.has(l.fromTarget) && byId.has(l.toTarget) && groupOf.get(l.fromTarget) !== groupOf.get(l.toTarget)) straight(l.fromTarget, l.toTarget, "vinculo", l.relation, `l-${l.id}`);
   autoLinks.forEach((l, i) => { if (byId.has(l.a) && byId.has(l.b) && groupOf.get(l.a) !== groupOf.get(l.b)) straight(l.a, l.b, "auto", l.label, `x-${i}`); });
