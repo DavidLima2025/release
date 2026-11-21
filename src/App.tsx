@@ -31,6 +31,7 @@ import { IntakePublicView } from "./views/IntakePublicView";
 import { NetworkView } from "./views/NetworkView";
 
 const CrimeMap = lazy(() => import("./views/CrimeMap"));
+const FaceCompareView = lazy(() => import("./views/FaceCompareView").then((m) => ({ default: m.FaceCompareView })));
 import { reportsAsItems } from "./lib/reportItems";
 
 const TITLES: Record<View, [string, string]> = {
@@ -39,6 +40,7 @@ const TITLES: Record<View, [string, string]> = {
   workflow: ["Workflow", "Etapas das demandas"],
   investigacoes: ["Investigações", "Linhas de investigação e dossiês de inteligência"],
   rede: ["Rede de vínculos", "Alvos ligados por BOs em comum e pelas investigações"],
+  faces: ["Comparar faces", "Semelhança entre os rostos de duas fotos (auxílio à análise)"],
   mapa: ["Mapa criminal", "Fatos de todas as investigações, com filtros e análises espaciais"],
   dashboard: ["Dashboard", "Indicadores de produtividade e prazos"],
   alvos: ["Banco de alvos", "Autores e suspeitos por modalidade"],
@@ -95,7 +97,7 @@ function AuthenticatedApp() {
 
   // Garante que um perfil sem permissão não fique numa tela restrita.
   const allowed: Record<View, boolean> = {
-    painel: true, tarefas: true, workflow: true, investigacoes: data.permissions.investigations, mapa: data.permissions.investigations, rede: data.permissions.targets, dashboard: data.permissions.dashboard, alvos: data.permissions.targets,
+    painel: true, tarefas: true, workflow: true, investigacoes: data.permissions.investigations, mapa: data.permissions.investigations, rede: data.permissions.targets, faces: data.permissions.targets, dashboard: data.permissions.dashboard, alvos: data.permissions.targets,
     usuarios: data.permissions.users, auditoria: data.permissions.audit,
   };
   const current: View = allowed[view] ? view : "painel";
@@ -147,6 +149,7 @@ function AuthenticatedApp() {
             {current === "rede" && <NetworkView data={data} api={data.permissions.investigations ? investigations : undefined}
               onOpenInTargets={(id) => { setTargetFocus(id); setView("alvos"); }}
               onOpenInvestigation={(id) => { setView("investigacoes"); setOpenInvestigationId(id); window.scrollTo({ top: 0 }); }} />}
+            {current === "faces" && <Suspense fallback={<div className="flex items-center gap-3 py-20 text-pm-muted"><Loader2 className="h-5 w-5 animate-spin" />Carregando…</div>}><FaceCompareView data={data} /></Suspense>}
             {current === "dashboard" && <DashboardView data={data} />}
             {current === "alvos" && <TargetsView focusId={targetFocus} onFocusDone={() => setTargetFocus("")} notify={notify} data={data} api={data.permissions.investigations ? investigations : undefined} onOpenInvestigation={(id) => { setView("investigacoes"); setOpenInvestigationId(id); window.scrollTo({ top: 0 }); }} />}
             {current === "usuarios" && <UsersView data={data} />}
