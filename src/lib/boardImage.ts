@@ -3,17 +3,17 @@ import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { OrgBoard, type BoardPerson } from "../components/OrgBoard";
-import type { InvestigationLink, InvestigationTarget, OrgGroup } from "./investigation";
+import type { BoardLayout, InvestigationLink, InvestigationTarget, OrgGroup } from "./investigation";
 import type { AutoLink } from "./orgBoard";
 import type { ReportImage } from "./report/model";
 
-export async function renderBoardImage(targets: InvestigationTarget[], links: InvestigationLink[], groups: OrgGroup[], people: Map<string, BoardPerson>, autoLinks: AutoLink[] = [], scale = 2): Promise<ReportImage | undefined> {
+export async function renderBoardImage(targets: InvestigationTarget[], links: InvestigationLink[], groups: OrgGroup[], people: Map<string, BoardPerson>, autoLinks: AutoLink[] = [], layout?: BoardLayout, scale = 2): Promise<ReportImage | undefined> {
   const host = document.createElement("div");
   host.style.cssText = "position:fixed;left:-99999px;top:0;";
   document.body.appendChild(host);
   const root = createRoot(host);
   try {
-    flushSync(() => root.render(createElement(OrgBoard, { targets, links, groups, people, autoLinks, exportMode: true })));
+    flushSync(() => root.render(createElement(OrgBoard, { targets, links, groups, people, autoLinks, layout, exportMode: true })));
     const svg = host.querySelector("svg");
     if (!svg) return undefined;
     const w = Number(svg.getAttribute("width")); const h = Number(svg.getAttribute("height"));

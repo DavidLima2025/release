@@ -81,7 +81,28 @@ export type Investigation = {
   responsibleId: string; team: string[]; openedAt: string; dueDate: string; closedAt: string; createdAt: string; updatedAt: string;
   /** Núcleos do organograma definidos pelo analista. */
   orgGroups: OrgGroup[];
+  /** Posições que o analista arrastou à mão no quadro por núcleos (o resto fica no automático). */
+  orgLayout: BoardLayout;
 };
+
+/** Posição (em px do quadro) de núcleos e cartões movidos à mão. O cartão guarda o núcleo em que estava: se mudar de núcleo, volta ao automático. */
+export type BoardLayout = { groups: Record<string, { x: number; y: number }>; cards: Record<string, { x: number; y: number; g: string }> };
+export const emptyLayout = (): BoardLayout => ({ groups: {}, cards: {} });
+export const layoutIsEmpty = (l?: BoardLayout) => !l || (!Object.keys(l.groups).length && !Object.keys(l.cards).length);
+export function normalizeLayout(raw: any): BoardLayout {
+  const out = emptyLayout();
+  if (!raw || typeof raw !== "object") return out;
+  const num = (v: any) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  for (const [k, v] of Object.entries(raw.groups && typeof raw.groups === "object" ? raw.groups : {})) {
+    const x = num((v as any)?.x); const y = num((v as any)?.y);
+    if (k !== "__proto__" && x !== null && y !== null) out.groups[k] = { x, y };
+  }
+  for (const [k, v] of Object.entries(raw.cards && typeof raw.cards === "object" ? raw.cards : {})) {
+    const x = num((v as any)?.x); const y = num((v as any)?.y);
+    if (k !== "__proto__" && x !== null && y !== null) out.cards[k] = { x, y, g: String((v as any)?.g || "") };
+  }
+  return out;
+}
 
 export type OrgGroup = { name: string; activities: string; color: string; /** linha no quadro: 0 = topo */ level?: number };
 /** Indício da função/atuação: fonte da investigação, foto de levantamento ou anotação livre. */
@@ -121,6 +142,7 @@ export function normalizeInvestigation(row: any): Investigation {
     area: row.area || "", responsibleId: row.responsible_id || "", team: Array.isArray(row.team) ? row.team : [], openedAt: row.opened_at || "",
     dueDate: row.due_date || "", closedAt: row.closed_at || "", createdAt: row.created_at || "", updatedAt: row.updated_at || "",
     orgGroups: Array.isArray(row.org_groups) ? row.org_groups.filter((g: any) => g && g.name).map((g: any) => ({ name: String(g.name), activities: String(g.activities || ""), color: String(g.color || ""), ...(Number.isFinite(g.level) ? { level: Number(g.level) } : {}) })) : [],
+    orgLayout: normalizeLayout(row.org_layout),
   };
 }
 
