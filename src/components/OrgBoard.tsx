@@ -164,7 +164,7 @@ export function OrgBoard({ targets, links, groups: custom, autoLinks = [], peopl
       {...(exportMode || !scale ? { width: W, height: H } : scale === "fit" ? { width: W, height: H, style: { width: "100%", height: "auto", maxWidth: W * 1.25 } } : { width: W * scale, height: H * scale })}
       className={exportMode ? undefined : "mx-auto block select-none"} role="img" aria-label="Organograma por núcleos">
       <defs>
-        <marker id="seta-chefia" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C0201A" /></marker>
+        <marker id="seta-chefia" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C0201A" /></marker>
         {board.groups.flatMap((g) => g.cards.map((c) => <clipPath key={c.targetId} id={`ph-${c.targetId}`}><rect x={g.x + c.x + 19} y={g.y + c.y + 8} width={74} height={90} rx={3} /></clipPath>))}
       </defs>
       <rect width={W} height={H} fill="#FFFFFF" />
@@ -188,9 +188,11 @@ export function OrgBoard({ targets, links, groups: custom, autoLinks = [], peopl
         );
       })}
       {/* Linhas: comando (vermelho, com seta), vínculo (verde) e detectado (azul) */}
-      {board.arrows.map((a) => (
-        <path key={a.id} d={a.d} fill="none" pointerEvents="none" stroke={lineColor[a.kind]} strokeWidth={(a.kind === "chefia" ? 2.4 : 1.8) * (chain && arrowOn(a) ? 1.5 : 1)} opacity={arrowOn(a) ? 1 : 0.12}
-          strokeDasharray={a.kind === "vinculo" ? "6 4" : a.kind === "auto" ? "2 3" : undefined} markerEnd={a.kind === "chefia" ? "url(#seta-chefia)" : undefined} />
+      {/* Com um alvo selecionado, o caminho dele é desenhado por último (fica por cima das linhas apagadas). */}
+      {(chain ? [...board.arrows].sort((a, b) => Number(arrowOn(a)) - Number(arrowOn(b))) : board.arrows).map((a) => (
+        <path key={a.id} d={a.d} fill="none" pointerEvents="none" stroke={lineColor[a.kind]} strokeWidth={(a.kind === "chefia" ? 2.1 : 1.8) * (chain && arrowOn(a) ? 1.5 : 1)} opacity={arrowOn(a) ? 1 : 0.12}
+          strokeLinecap={a.kind === "chefia" ? "square" : undefined} strokeLinejoin="round"
+          strokeDasharray={a.kind === "vinculo" ? "6 4" : a.kind === "auto" ? "2 3" : undefined} markerEnd={a.kind === "chefia" && a.head !== false ? "url(#seta-chefia)" : undefined} />
       ))}
       {/* Cartões */}
       {board.groups.flatMap((g) => g.cards.map((c) => ({ g, c }))).sort((a, b) => Number(a.c.targetId === (drag?.id ?? mv?.id)) - Number(b.c.targetId === (drag?.id ?? mv?.id))).map(({ g, c }) => {

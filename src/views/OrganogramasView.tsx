@@ -12,8 +12,10 @@ import type { Author } from "../lib/domain";
 import { matchesText } from "../lib/domain";
 import { redsCount } from "../lib/companions";
 import { roleCatalogVersion } from "../lib/roles";
-import { ROLE_COLOR, TARGET_ROLES, groupStatus, type Confidence, type Investigation, type InvestigationLink, type InvestigationTarget } from "../lib/investigation";
-import { groupKeyOf, groupNameOfKey, levelOf } from "../lib/orgBoard";
+import type { BoardLayout } from "../lib/investigation";
+import { ROLE_COLOR, TARGET_ROLES, emptyLayout, groupStatus, layoutIsEmpty, type Confidence, type Investigation, type InvestigationLink, type InvestigationTarget } from "../lib/investigation";
+import { groupDropPatch, groupKeyOf, groupNameOfKey, levelOf } from "../lib/orgBoard";
+import { LinkDropModal } from "../components/OrgTools";
 import { autoLinksFor } from "../lib/sharedContacts";
 
 type Props = { data: AppData; api?: InvestigationsApi; onOpenInTargets: (authorId: string) => void; onOpenInvestigation?: (id: string) => void };
@@ -165,7 +167,7 @@ export function OrganogramasView({ data, api, onOpenInTargets, onOpenInvestigati
         <div className="flex flex-wrap items-center gap-2 rounded-sm bg-pm-cream/70 px-2 py-1.5 text-xs">
           <Network className="h-4 w-4 shrink-0" />
           <span className="font-bold uppercase text-pm-muted">{current === "all" ? `${withTargets.length} organogramas` : "Organograma"}</span>
-          <span className="text-pm-muted">Clique num alvo para ver a cadeia de comando; clique duplo abre a ficha. Para editar, abra a investigação (aba Alvos).</span>
+          <span className="text-pm-muted">Clique num alvo para ver a cadeia de comando; clique duplo abre a ficha. Para definir superior, criar vínculo ou mover, use <b>✎ Editar</b> em cada organograma.</span>
           <div className="ml-auto flex items-center gap-1">
             <Button size="icon" disabled={zi <= 0} onClick={() => setZoom(ZOOMS[Math.max(0, zi - 1)])} aria-label="Afastar"><ZoomOut /></Button>
             <span className="w-14 text-center font-bold">{zoomLabel}</span>
@@ -209,6 +211,23 @@ function InvBoard({ row, data, api, zoom, crossOf, pick, onPick, onOpenFicha, on
   const boss = t?.parentId ? targets.find((x) => x.id === t.parentId) : undefined;
   const others = t && a ? (crossOf.get(a.id)?.at || []).filter((x) => x.inv.id !== inv.id) : [];
   const level = Math.max(...targets.map(levelOf)) + 1;
+  // Edição direto no organograma (os mesmos gestos da aba Alvos da investigação).
+  const [edit, setEdit] = useState(false);
+  const [mode, setMode] = useState<"superior" | "vinculo" | "mover">("vinculo");
+  const [linkPair, setLinkPair] = useState<{ from: string; to: string } | null>(null);
+  const nameOf = (id: string) => { const x = targets.find((y) => y.id === id); return x ? nameOfTarget(x, data.authors) : ""; };
+  const editProps = edit ? {
+    dragMode: mode,
+    onLinkDrop: (x: InvestigationTarget, to: string) => setLinkPair({ from: x.id, to }),
+    onDropOnTarget: (x: InvestigationTarget, parentId: string) => api.updateTarget(x, { parentId }),
+    onDropOnGroup: (x: InvestigationTarget, key: string) => api.updateTarget(x, groupDropPatch(x, key)),
+    onLayoutChange: (next: BoardLayout, what: { kind: "card" | "group"; id: string }) => {
+      // Só guarda posições de alvos que ainda existem no dossiê.
+      const ids = new Set(targets.map((x) => x.id));
+      const cards = Object.fromEntries(Object.entries(next.cards).filter(([id]) => ids.has(id)));
+      api.setOrgLayout(inv, { ...next, cards }, what.kind === "card" ? `posição de ${nameOf(what.id)}` : `posição do núcleo ${groupNameOfKey(what.id)}`);
+    },
+  } : {};
 
   return (
     <section className="overflow-hidden rounded-sm border border-pm-line bg-white shadow-sm">
@@ -228,7 +247,26 @@ function InvBoard({ row, data, api, zoom, crossOf, pick, onPick, onOpenFicha, on
       </header>
 
       <div className="p-2">
-        <OrgBoard targets={targets} links={links} groups={inv.orgGroups} autoLinks={autoLinks} people={people} layout={inv.orgLayout} scale={zoom}
+        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-sm bg-pm-cream/70 px-2 py-1.5 text-xs">
+          <Button size="sm" variant={edit ? "primary" : "outline"} onClick={() => setEdit(!edit)} aria-pressed={edit} title="Liga o arrastar neste organograma: definir superior, criar vínculo ou mover">{edit ? "✓ Editando" : "✎ Editar"}</Button>
+          {edit ? (
+            <>
+              <div className="flex overflow-hidden rounded-sm border border-pm-line font-bold">
+                <button type="button" onClick={() => setMode("vinculo")} className={`px-3 py-1.5 ${mode === "vinculo" ? "bg-[#2E6B3A] text-white" : "bg-white"}`}>⇢ cria vínculo</button>
+                <button type="button" onClick={() => setMode("superior")} className={`px-3 py-1.5 ${mode === "superior" ? "bg-[#C0201A] text-white" : "bg-white"}`}>▼ define o superior</button>
+                <button type="button" onClick={() => setMode("mover")} className={`px-3 py-1.5 ${mode === "mover" ? "bg-[#2F5D7C] text-white" : "bg-white"}`}>✥ move livremente</button>
+              </div>
+              <span className="min-w-[200px] flex-1 text-pm-muted">
+                {mode === "vinculo" ? <>Arraste um alvo e <b>solte sobre outro</b> para registrar o vínculo (parente, comparsa, fornecedor…).</>
+                  : mode === "superior" ? <>Arraste um alvo e <b>solte sobre o chefe</b> dele; no vazio, fica sem chefe; sobre um núcleo, muda de núcleo.</>
+                    : <>Arraste um <b>cartão</b> ou um <b>núcleo</b> para onde quiser — a posição fica salva.</>}
+              </span>
+              {mode === "mover" && <Button size="sm" disabled={layoutIsEmpty(inv.orgLayout)} onClick={() => api.setOrgLayout(inv, emptyLayout(), "posições soltas → automático")} title="Volta ao desenho automático (dá para desfazer)">⟲ Reorganizar automático</Button>}
+              <Button size="sm" className="ml-auto" disabled={!api.undoCount} onClick={() => api.undo()} title={api.undoLabel ? `Desfazer: ${api.undoLabel}` : ""}>↶ Desfazer{api.undoLabel ? `: ${api.undoLabel}` : ""}</Button>
+            </>
+          ) : <span className="text-pm-muted">Para criar vínculo, definir o superior ou mover os cartões, clique em <b>Editar</b>.</span>}
+        </div>
+        <OrgBoard targets={targets} links={links} groups={inv.orgGroups} autoLinks={autoLinks} people={people} layout={inv.orgLayout} scale={zoom} {...editProps}
           selectedId={pick} onSelect={(x) => onPick(pick === x.id ? "" : x.id)} onOpen={(x) => { const au = data.authors.find((y) => y.id === x.authorId); if (au) onOpenFicha(au); }} />
         <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 px-1 text-[11px] font-semibold text-pm-muted">
           <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-6 bg-[#C0201A]" />▶ comanda / hierarquia</span>
@@ -260,6 +298,7 @@ function InvBoard({ row, data, api, zoom, crossOf, pick, onPick, onOpenFicha, on
           </div>
         </div>
       )}
+      <LinkDropModal pair={linkPair} onClose={() => setLinkPair(null)} data={data} api={api} inv={inv} targets={targets} />
     </section>
   );
 }

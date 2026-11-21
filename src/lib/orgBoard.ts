@@ -45,7 +45,8 @@ export const groupNameOfKey = (key: string) => key.slice(2).split("|")[0];
 export type BoardCard = { targetId: string; x: number; y: number; manual?: boolean };
 export type BoardGroup = { key: string; name: string; custom: boolean; color: string; activities: string[]; level: number; order: number; x: number; y: number; w: number; h: number; cards: BoardCard[]; lanesTop: number; actTop: number; manual?: boolean };
 /** from/to: alvos ligados pela seta (para destacar a cadeia de comando do alvo selecionado). */
-export type BoardArrow = { d: string; kind: "chefia" | "vinculo" | "auto"; label?: string; lx?: number; ly?: number; id: string; from?: string; to?: string[]; ends?: { x: number; y: number }[] };
+/** head=false: trecho do tronco/barra de uma "árvore" de comando (sem ponta de seta). */
+export type BoardArrow = { d: string; kind: "chefia" | "vinculo" | "auto"; head?: boolean; label?: string; lx?: number; ly?: number; id: string; from?: string; to?: string[]; ends?: { x: number; y: number }[] };
 export type AutoLink = { a: string; b: string; label: string };
 export type Board = { width: number; height: number; groups: BoardGroup[]; arrows: BoardArrow[]; groupOf: Map<string, string>; rows: { level: number; top: number; bottom: number }[] };
 
@@ -66,6 +67,13 @@ export function wrapText(text: string, max: number) {
   }
   if (line) out.push(line);
   return out;
+}
+
+/** O que muda no alvo quando ele é solto sobre um núcleo do quadro (núcleo do analista, ou a função/grau do núcleo automático). */
+export function groupDropPatch(t: InvestigationTarget, key: string): Partial<InvestigationTarget> {
+  if (key.startsWith("c:")) return { cluster: groupNameOfKey(key) };
+  const role = roleOfAutoGroup(groupNameOfKey(key)) || t.role; const lv = Number(key.split("|")[1]);
+  return { cluster: "", role, grade: Number.isFinite(lv) && lv !== autoLevel(role) ? lv + 1 : null };
 }
 
 /** Arredonda a posição arrastada (grade de 4 px: alinha sem "travar"). */
@@ -194,29 +202,59 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
   /** Corredor livre (entre quadros ou nas margens) mais perto de x. */
   const corridor = (x: number, y1: number, y2: number, skip: BoardGroup[]) => {
     const xs = [LEFT + MARGIN / 2, width - MARGIN / 2, ...all.flatMap((g) => [g.x - GAP_GROUP / 2, g.x + g.w + GAP_GROUP / 2])];
-    return xs.filter((cx) => clear(cx, y1, y2, skip)).sort((m, n) => Math.abs(m - x) - Math.abs(n - x))[0] ?? LEFT + MARGIN / 2;
+    // Prefere corredor com folga (não encostado na quina de um quadro); sem folga, aceita o que estiver livre.
+    const near = (list: number[]) => list.sort((m, n) => Math.abs(m - x) - Math.abs(n - x))[0];
+    for (const m of [GAP_ROW, 30, 0]) { const c = near(xs.filter((cx) => clear(cx, y1 - m, y2 + m, skip))); if (c !== undefined) return c; }
+    return LEFT + MARGIN / 2;
   };
-  /** Seta de comando entre quadros diferentes, sempre por fora dos quadros (contorna os do meio). */
-  const route = (sx: number, pg: BoardGroup, tx: number, tg: BoardGroup, id: string, from: string, to: string[]) => {
-    const pr = rowOf(pg); const tr = rowOf(tg);
-    const skip = [pg, tg];
-    let d: string;
-    if (tr > pr) {
-      const yA = rows[pr].bottom + GAP_ROW / 2 - 14 + lane(`gap${pr + 1}`);
-      const yB = tr === pr + 1 ? yA : rows[tr].top - GAP_ROW / 2 - 14 + lane(`gap${tr}`);
-      if (tr === pr + 1 || clear(tx, yA, tg.y, skip)) d = `M${sx},${pg.y + pg.h} V${yA} H${tx} V${tg.y - 2}`;
-      else { const cx = corridor((sx + tx) / 2, yA, yB, skip); d = `M${sx},${pg.y + pg.h} V${yA} H${cx} V${yB} H${tx} V${tg.y - 2}`; }
-    } else if (tr < pr) {
-      // Subordinado acima do chefe (função mais alta que a do chefe): sobe pelo vão.
-      const yA = rows[pr].top - GAP_ROW / 2 + 14 - lane(`up${pr}`);
-      const yB = tr === pr - 1 ? yA : rows[tr].bottom + GAP_ROW / 2 + 14 - lane(`up${tr + 1}`);
-      if (tr === pr - 1 || clear(tx, yA, tg.y + tg.h, skip)) d = `M${sx},${pg.y} V${yA} H${tx} V${tg.y + tg.h + 2}`;
-      else { const cx = corridor((sx + tx) / 2, yA, yB, skip); d = `M${sx},${pg.y} V${yA} H${cx} V${yB} H${tx} V${tg.y + tg.h + 2}`; }
-    } else {
-      const yA = rows[pr].bottom + 16 + lane(`gap${pr + 1}`);
-      d = `M${sx},${pg.y + pg.h} V${yA} H${tx} V${tg.y + tg.h + 2}`;
+  /**
+   * Setas de comando de um chefe para um quadro, em "árvore": um tronco que sai do chefe, uma barra
+   * na faixa livre logo acima (ou abaixo) do quadro de destino e uma descida curta, com seta, por subordinado.
+   * Vários subordinados do mesmo quadro deixam de empilhar uma seta inteira cada. Sempre por fora dos quadros.
+   */
+  type Kid = { tx: number; ids: string[]; id: string };
+  const lanes = new Map<string, number>();
+  const sharedLane = (key: string, group: string) => { const k = `${group}|${key}`; if (!lanes.has(k)) lanes.set(k, lane(group)); return lanes.get(k)!; };
+  // Chefes diferentes que descem pelo mesmo corredor ganham colunas vizinhas (6 px), para as verticais não se confundirem.
+  const used = new Map<number, string[]>(); const spreadAt = new Map<string, number>();
+  const spread = (from: string, cx: number, y1: number, y2: number, skip: BoardGroup[]) => {
+    const key = `${from}|${cx}`; if (spreadAt.has(key)) return spreadAt.get(key)!;
+    const who = used.get(cx) || []; const n = who.length; who.push(from); used.set(cx, who);
+    const edge = cx <= LEFT + MARGIN / 2 + 0.5 ? 1 : cx >= width - MARGIN / 2 - 0.5 ? -1 : 0;
+    const off = edge ? edge * (n % 5) * 6 : (n % 2 ? 1 : -1) * Math.ceil((n % 5) / 2) * 6;
+    const out = clear(cx + off, y1, y2, skip) ? cx + off : cx;
+    spreadAt.set(key, out); return out;
+  };
+  const routeBundle = (sx: number, pg: BoardGroup, tg: BoardGroup, kids: Kid[], from: string) => {
+    const pr = rowOf(pg); const tr = rowOf(tg); const skip = [pg, tg];
+    const sorted = [...kids].sort((a, b) => a.tx - b.tx);
+    const dir = tr > pr ? 1 : tr < pr ? -1 : 0;
+    const start = dir < 0 ? pg.y : pg.y + pg.h;
+    const endY = dir > 0 ? tg.y - 2 : tg.y + tg.h + 2;
+    // A barra fica perto do destino; o mesmo chefe reaproveita a mesma barra para os quadros da mesma linha.
+    const bl = sharedLane(from, `in${tr}`);
+    const yBus = dir > 0 ? tg.y - 24 - bl : dir < 0 ? tg.y + tg.h + 24 + bl : rows[pr].bottom + 16 + bl;
+    let busX = sx; let trunk = `M${sx},${start} V${yBus}`;
+    if (dir !== 0 && !clear(sx, start, yBus, skip)) {
+      // Há quadros no caminho do tronco: sai pelo vão logo depois da linha do chefe e desce por um corredor livre.
+      const pl = sharedLane(from, `out${pr}${dir}`);
+      const yA = dir > 0 ? rows[pr].bottom + 16 + pl : rows[pr].top - 16 - pl;
+      busX = spread(from, corridor((sx + (sorted[0].tx + sorted[sorted.length - 1].tx) / 2) / 2, yA, yBus, skip), yA, yBus, skip);
+      trunk = `M${sx},${start} V${yA} H${busX} V${yBus}`;
     }
-    arrows.push({ id, kind: "chefia", d, from, to });
+    if (sorted.length === 1) { const k = sorted[0]; arrows.push({ id: k.id, kind: "chefia", d: `${trunk} H${k.tx} V${endY}`, from, to: k.ids }); return; }
+    arrows.push({ id: `t-${from}-${tg.key}`, kind: "chefia", d: trunk, from, to: sorted.flatMap((k) => k.ids), head: false });
+    // Barra em trechos (um por subordinado, do tronco para fora), para o destaque acender só o caminho do selecionado.
+    const outward = (list: Kid[]) => {
+      let prev = busX;
+      list.forEach((k, i) => {
+        if (Math.abs(k.tx - prev) > 0.5) arrows.push({ id: `b-${k.id}`, kind: "chefia", d: `M${prev},${yBus} H${k.tx}`, from, to: list.slice(i).flatMap((o) => o.ids), head: false });
+        prev = k.tx;
+      });
+    };
+    outward(sorted.filter((k) => k.tx >= busX));
+    outward(sorted.filter((k) => k.tx < busX).reverse());
+    for (const k of sorted) arrows.push({ id: k.id, kind: "chefia", d: `M${k.tx},${yBus} V${endY}`, from, to: k.ids });
   };
   /** Seta de comando quando um dos lados foi movido à mão: cotovelo que tenta não atravessar quadros nem cartões soltos. */
   let freeN = 0;
@@ -270,15 +308,20 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
     if (g.cards.some((c) => movedCards.has(c.targetId))) continue;
     const p = cardBox(pid);
     if (moved(pid) || movedGroups.has(g.key)) freeRoute(pid, null, g, `g-${g.key}`, g.cards.map((c) => c.targetId));
-    else route(p.cx, p.g, g.x + g.w / 2, g, `g-${g.key}`, pid, g.cards.map((c) => c.targetId));
+    else routeBundle(p.cx, p.g, g, [{ tx: g.x + g.w / 2, ids: g.cards.map((c) => c.targetId), id: `g-${g.key}` }], pid);
     g.cards.forEach((c) => handled.add(c.targetId));
   }
+  // Subordinados do mesmo chefe no mesmo quadro saem numa "árvore" só.
+  const bundles = new Map<string, { pid: string; tg: BoardGroup; kids: Kid[] }>();
   for (const t of targets) {
     if (!t.parentId || !byId.has(t.parentId) || handled.has(t.id) || sameBox(t.parentId, t.id)) continue;
-    const p = cardBox(t.parentId); const c = cardBox(t.id);
-    if (moved(t.parentId) || moved(t.id)) freeRoute(t.parentId, t.id, c.g, `h-${t.id}`, [t.id]);
-    else route(p.cx, p.g, c.cx, c.g, `h-${t.id}`, t.parentId, [t.id]);
+    const c = cardBox(t.id);
+    if (moved(t.parentId) || moved(t.id)) { freeRoute(t.parentId, t.id, c.g, `h-${t.id}`, [t.id]); continue; }
+    const key = `${t.parentId}|${c.g.key}`;
+    const b = bundles.get(key) || { pid: t.parentId, tg: c.g, kids: [] };
+    b.kids.push({ tx: c.cx, ids: [t.id], id: `h-${t.id}` }); bundles.set(key, b);
   }
+  for (const b of bundles.values()) { const p = cardBox(b.pid); routeBundle(p.cx, p.g, b.tg, b.kids, b.pid); }
   // Ligações dentro do quadro: faixas embaixo dos cartões.
   for (const g of groups.values()) {
     (inner.get(g.key) || []).forEach((v, i) => {

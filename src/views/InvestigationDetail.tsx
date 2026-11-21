@@ -16,7 +16,7 @@ import { CompareModal, EvidenceModal, GroupTimeline, GroupsModal, HierarchyModal
 import { autoLinksFor } from "../lib/sharedContacts";
 import { emptyLayout, groupStatus, layoutIsEmpty, type Confidence } from "../lib/investigation";
 import { OrgBoard, type BoardPerson } from "../components/OrgBoard";
-import { LEVEL_LABELS, MAX_GRADE, autoGroupOf, autoLevel, groupKeyOf, groupNameOfKey, levelOf, roleOfAutoGroup } from "../lib/orgBoard";
+import { LEVEL_LABELS, MAX_GRADE, autoGroupOf, autoLevel, groupDropPatch, groupKeyOf, groupNameOfKey, levelOf, roleOfAutoGroup } from "../lib/orgBoard";
 import { redsCount } from "../lib/companions";
 import { TargetFichaModal } from "../components/TargetFichaModal";
 import { ShareTargetModal } from "../components/ShareTargetModal";
@@ -579,11 +579,7 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
                 }} onSelect={(t) => setSelected((cur) => (cur === t.id ? "" : t.id))} onOpen={(t) => (authorOf(t) ? setFicha(authorOf(t)!) : setIdentify(t))}
                 dragMode={dragMode} onLinkDrop={(t, to) => setLinkPair({ from: t.id, to })}
                 onDropOnTarget={(t, parentId) => api.updateTarget(t, { parentId })}
-                onDropOnGroup={(t, key) => {
-                  if (key.startsWith("c:")) return api.updateTarget(t, { cluster: groupNameOfKey(key) });
-                  const role = roleOfAutoGroup(groupNameOfKey(key)) || t.role; const lv = Number(key.split("|")[1]);
-                  return api.updateTarget(t, { cluster: "", role, grade: Number.isFinite(lv) && lv !== autoLevel(role) ? lv + 1 : null });
-                }} />
+                onDropOnGroup={(t, key) => api.updateTarget(t, groupDropPatch(t, key))} />
             : <Organogram targets={targets} links={links} authors={data.authors} photos={data.authorPhotos} photoUrl={data.getIntelFileUrl} selectedId={selected} onSelect={(t) => setSelected(t.id)}
                 onReparent={(t, parentId) => api.updateTarget(t, { parentId })} onOpen={(t) => setFicha(authorOf(t) || null)} />}
           {orgView === "quadro" && targets.length > 0 && (
