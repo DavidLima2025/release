@@ -6,6 +6,14 @@ import { Input } from "../components/ui/input";
 import type { AppData } from "../hooks/useAppData";
 import { matchesText, type Author } from "../lib/domain";
 import { detectAnyOrientation, faceDistance, loadFaceApi, similarity, verdict, type FaceFound } from "../lib/face";
+import { arcEmbedding, arcIndex, arcVerdict, cosine, loadArc } from "../lib/arcface";
+
+type Engine = "dlib" | "arc";
+const ENGINES: { id: Engine; name: string; desc: string }[] = [
+  { id: "dlib", name: "Padrão · face-api", desc: "Leve (poucos MB) e rápido. Bom em foto de frente e boa; mais fraco em foto de lado, baixa qualidade ou rosto inclinado." },
+  { id: "arc", name: "buffalo_l · ArcFace ResNet-50", desc: "Modelo mais forte (InsightFace), melhor em foto difícil. Na primeira vez baixa o modelo (cerca de 170 MB) e guarda no aparelho; depois abre rápido. Cada comparação demora alguns segundos." },
+];
+const mb = (n: number) => (n / 1_000_000).toFixed(n >= 100_000_000 ? 0 : 1);
 
 type Side = {
   url: string; name: string; author?: Author;
@@ -26,11 +34,28 @@ export function FaceCompareView({ data }: { data: AppData }) {
   const [model, setModel] = useState<"" | "carregando" | "ok" | "erro">("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState("");
+  const [engine, setEngine] = useState<Engine>(() => { try { return localStorage.getItem("faceEngine") === "arc" ? "arc" : "dlib"; } catch { return "dlib"; } });
+  const [arc, setArc] = useState<{ status: "" | "baixando" | "iniciando" | "pronto" | "erro"; loaded: number; total: number; cached: boolean; msg: string }>({ status: "", loaded: 0, total: 0, cached: false, msg: "" });
+  const [sim, setSim] = useState<number | null>(null);
+  const [calc, setCalc] = useState(false);
 
   useEffect(() => {
     setModel("carregando");
     loadFaceApi().then(() => setModel("ok")).catch((e) => { console.error(e); setModel("erro"); });
   }, []);
+
+  function startArc() {
+    setArc({ status: "baixando", loaded: 0, total: 0, cached: false, msg: "" });
+    let last = 0;
+    loadArc((p) => {
+      if (p.phase === "cache") setArc((x) => ({ ...x, status: "iniciando", cached: true }));
+      else if (p.phase === "download") { const l = p.loaded || 0; if (l - last < 1_000_000 && l !== p.total) return; last = l; setArc((x) => ({ ...x, status: "baixando", loaded: l, total: p.total || 0 })); }
+      else setArc((x) => ({ ...x, status: "iniciando" }));
+    }).then(() => setArc((x) => ({ ...x, status: "pronto" })))
+      .catch((e) => { console.error(e); setArc((x) => ({ ...x, status: "erro", msg: String(e?.message || e) })); });
+  }
+  const pickEngine = (e: Engine) => { setEngine(e); try { localStorage.setItem("faceEngine", e); } catch { /* ok */ } };
+  useEffect(() => { if (engine === "arc" && arc.status === "") startArc(); }, [engine]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (which: "a" | "b", v: Side) => (which === "a" ? setA(v) : setB(v));
 
@@ -63,19 +88,36 @@ export function FaceCompareView({ data }: { data: AppData }) {
   const dist = fa && fb ? faceDistance(fa.emb, fb.emb) : null;
   const rawDist = fa && fb ? faceDistance(fa.descriptor, fb.descriptor) : null;
   const hard = !!fa && !!fb && (fa.warnings.length > 0 || fb.warnings.length > 0);
-  const v = dist !== null ? verdict(dist, hard) : null;
-  const score = dist !== null ? similarity(dist) : null;
+  type Res = { key: string; score: number; v: { label: string; tone: "done" | "risk" | "late" | "muted" }; engineName: string; value: string; imageNote: string };
+  const res: Res | null = engine === "arc"
+    ? (sim !== null ? { key: `arc:${sim.toFixed(3)}`, score: arcIndex(sim), v: arcVerdict(sim, hard), engineName: "buffalo_l (ArcFace ResNet-50)", value: `semelhança de cosseno ${sim.toFixed(3)}`, imageNote: `Semelhança de cosseno ${sim.toFixed(3)} (ponto de decisão usual ≈ 0,30–0,35)` } : null)
+    : (dist !== null ? { key: `dlib:${dist.toFixed(3)}`, score: similarity(dist), v: verdict(dist, hard), engineName: "face-api (padrão)", value: `distância ${dist.toFixed(3)}`, imageNote: `Distância ${dist.toFixed(3)} (limiar do modelo 0,60)` } : null);
+  const v = res ? res.v : null;
+  const score = res ? res.score : null;
   const toneCls: Record<string, string> = { done: "bg-status-done text-white", risk: "bg-status-risk text-white", late: "bg-status-late text-white", muted: "bg-pm-sand text-pm-ink" };
 
+  // buffalo_l: lê os dois rostos (alinhados e espelhados) e calcula o cosseno.
   useEffect(() => {
-    if (dist === null) return;
-    data.addAudit("Comparação facial", `${a.name || "foto A"} × ${b.name || "foto B"}: índice ${score}% (distância ${dist.toFixed(3)}; sem alinhar ${rawDist !== null ? rawDist.toFixed(3) : "-"}).`);
-  }, [dist]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (engine !== "arc" || arc.status !== "pronto" || !fa || !fb || !a.img || !b.img) { setSim(null); setCalc(false); return; }
+    let dead = false; setCalc(true);
+    (async () => {
+      try { const ea = await arcEmbedding(a.img!, fa); const eb = await arcEmbedding(b.img!, fb); if (!dead) setSim(cosine(ea, eb)); }
+      catch (e) { console.error(e); if (!dead) { setSim(null); setArc((x) => ({ ...x, status: "erro", msg: "Falha ao ler o rosto com o buffalo_l: " + String((e as Error)?.message || e) })); } }
+      finally { if (!dead) setCalc(false); }
+    })();
+    return () => { dead = true; };
+  }, [engine, arc.status, fa, fb, a.img, b.img]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!res) return;
+    const extra = engine === "arc" ? (dist !== null ? `; padrão: distância ${dist.toFixed(3)}` : "") : (rawDist !== null ? `; sem alinhar ${rawDist.toFixed(3)}` : "");
+    data.addAudit("Comparação facial", `${a.name || "foto A"} × ${b.name || "foto B"} [${res.engineName}]: índice ${res.score}% (${res.value}${extra}).`);
+  }, [res?.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Junta as duas fotos (rostos recortados) com o resultado numa imagem. */
   async function resultImage() {
-    if (!fa || !fb || !a.img || !b.img || dist === null || !v) return null;
-    const W = 900; const H = 560; const c = document.createElement("canvas"); c.width = W; c.height = H;
+    if (!fa || !fb || !a.img || !b.img || !res || !v) return null;
+    const W = 900; const H = 584; const c = document.createElement("canvas"); c.width = W; c.height = H;
     const ctx = c.getContext("2d")!;
     ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = "#0B0B0C"; ctx.fillRect(0, 0, W, 54);
@@ -91,7 +133,8 @@ export function FaceCompareView({ data }: { data: AppData }) {
     ctx.fillText((a.name || "Foto A").slice(0, 44), 40, 472); ctx.fillText((b.name || "Foto B").slice(0, 44), 460, 472);
     ctx.font = "800 22px Arial"; ctx.fillText(`Índice de semelhança: ${score}% — ${v.label}`, 40, 510);
     ctx.font = "13px Arial"; ctx.fillStyle = "#6B655A";
-    ctx.fillText(`Distância ${dist.toFixed(3)} (limiar do modelo 0,60). Auxílio à análise — não é identificação. ${new Date().toLocaleString("pt-BR")} · ${data.currentUser?.warName || data.currentUser?.name || ""}`, 40, 538);
+    ctx.fillText(`${res.imageNote} · Modelo: ${res.engineName}`, 40, 538);
+    ctx.fillText(`Auxílio à análise — não é identificação. ${new Date().toLocaleString("pt-BR")} · ${data.currentUser?.warName || data.currentUser?.name || ""}`, 40, 558);
     return new Promise<File | null>((res) => c.toBlob((bl) => res(bl ? new File([bl], `comparacao-facial-${Date.now()}.png`, { type: "image/png" }) : null), "image/png"));
   }
   async function download() {
@@ -118,9 +161,53 @@ export function FaceCompareView({ data }: { data: AppData }) {
       {model === "carregando" && <p className="flex items-center gap-2 text-sm text-pm-muted"><Loader2 className="h-4 w-4 animate-spin" />Carregando o modelo de reconhecimento (só na primeira vez, alguns MB)…</p>}
       {model === "erro" && <p className="rounded-sm bg-status-late/10 p-3 text-sm font-semibold text-status-late">Não foi possível carregar o modelo de reconhecimento. Atualize a página; se continuar, me avise.</p>}
 
+      <Card>
+        <CardContent>
+          <SectionHeader icon={ScanFace} title="Modelo de comparação" />
+          <div role="radiogroup" aria-label="Modelo de comparação" className="grid gap-3 md:grid-cols-2">
+            {ENGINES.map((e) => (
+              <button key={e.id} type="button" role="radio" aria-checked={engine === e.id} onClick={() => pickEngine(e.id)}
+                className={`rounded-sm border-2 p-3 text-left text-sm transition-colors ${engine === e.id ? "border-pm-gold bg-pm-cream/60" : "border-pm-line hover:border-pm-gold/60"}`}>
+                <span className="flex items-center gap-2">
+                  <span className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${engine === e.id ? "border-pm-gold" : "border-pm-line"}`}>{engine === e.id && <span className="h-2 w-2 rounded-full bg-pm-gold" />}</span>
+                  <b className="uppercase">{e.name}</b>
+                </span>
+                <span className="mt-1 block text-xs text-pm-muted">{e.desc}</span>
+              </button>
+            ))}
+          </div>
+          {engine === "arc" && (
+            <div className="mt-3 space-y-2 text-sm">
+              {arc.status === "baixando" && (
+                <div>
+                  <p className="flex items-center gap-2 text-pm-muted"><Loader2 className="h-4 w-4 animate-spin" />Baixando o modelo (só na primeira vez): <b>{mb(arc.loaded)}{arc.total ? ` de ${mb(arc.total)}` : ""} MB</b>. Pode continuar nesta tela.</p>
+                  {arc.total > 0 && <div className="mt-1 h-2 overflow-hidden rounded-full bg-pm-line"><div className="h-2 rounded-full bg-pm-gold" style={{ width: `${Math.min(100, (arc.loaded / arc.total) * 100)}%` }} /></div>}
+                </div>
+              )}
+              {arc.status === "iniciando" && <p className="flex items-center gap-2 text-pm-muted"><Loader2 className="h-4 w-4 animate-spin" />Preparando o modelo no aparelho{arc.cached ? " (já estava guardado)" : ""}…</p>}
+              {arc.status === "pronto" && <p className="text-xs font-semibold text-status-done">buffalo_l pronto — o modelo fica guardado neste aparelho.</p>}
+              {arc.status === "erro" && (
+                <div className="rounded-sm bg-status-late/10 p-3">
+                  <p className="font-semibold text-status-late">Não foi possível usar o buffalo_l. {arc.msg}</p>
+                  <div className="mt-2 flex flex-wrap gap-2"><Button size="sm" onClick={startArc}>Tentar de novo</Button><Button size="sm" variant="ghost" onClick={() => pickEngine("dlib")}>Voltar ao modelo padrão</Button></div>
+                </div>
+              )}
+              <p className="text-[11px] text-pm-muted">O modelo é baixado do Hugging Face (as fotos não são enviadas). É um modelo do InsightFace, de licença só para pesquisa não comercial: confirme o enquadramento antes de uso operacional. Os limiares do índice são iniciais e devem ser ajustados com testes reais.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="grid gap-5 lg:grid-cols-2">{slot("a", a)}{slot("b", b)}</div>
 
-      {(a.status === "pronto" && b.status === "pronto") && dist !== null && v && score !== null && (
+      {engine === "arc" && a.status === "pronto" && b.status === "pronto" && !res && (
+        <p className="flex items-center gap-2 text-sm text-pm-muted">
+          {arc.status === "erro" ? <span className="font-semibold text-status-late">buffalo_l indisponível — veja o aviso acima ou volte ao modelo padrão.</span>
+            : <><Loader2 className="h-4 w-4 animate-spin" />{calc ? "Lendo os rostos com o buffalo_l…" : "Aguardando o modelo buffalo_l ficar pronto…"}</>}
+        </p>
+      )}
+
+      {(a.status === "pronto" && b.status === "pronto") && res && v && score !== null && (
         <Card>
           <CardContent>
             <SectionHeader icon={ScanFace} title="Resultado" />
@@ -135,10 +222,16 @@ export function FaceCompareView({ data }: { data: AppData }) {
                   <span className="absolute -top-1 h-5 w-1.5 rounded-sm bg-pm-black" style={{ left: `calc(${score}% - 3px)` }} />
                 </div>
                 <div className="flex justify-between text-[10px] font-bold uppercase text-pm-muted"><span>diferentes</span><span>inconclusivo</span><span>mesma pessoa</span></div>
-                <p className="text-xs text-pm-muted">Distância entre as "impressões" dos rostos: <b>{dist.toFixed(3)}</b> (quanto menor, mais parecidos; limiar usual do modelo: 0,60).</p>
-                <p className="text-[11px] text-pm-muted">{fa!.aligned && fb!.aligned ? <>Rostos endireitados pela linha dos olhos e comparados também espelhados. Sem esse ajuste a distância seria <b>{rawDist!.toFixed(3)}</b>.</> : <>Não foi possível endireitar {fa!.aligned ? "o rosto B" : fb!.aligned ? "o rosto A" : "os rostos"}; usada a leitura direta do modelo{rawDist !== null ? ` (${rawDist.toFixed(3)})` : ""}.</>}</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-pm-muted">Modelo: {res.engineName}</p>
+                {engine === "arc" ? (<>
+                  <p className="text-xs text-pm-muted">Semelhança entre as "impressões" dos rostos (cosseno): <b>{sim!.toFixed(3)}</b> (quanto maior, mais parecidos; o ponto de decisão usual deste tipo de modelo fica perto de 0,30–0,35).</p>
+                  <p className="text-[11px] text-pm-muted">Rostos alinhados pelos olhos, nariz e boca e comparados também espelhados.{dist !== null ? <> Para comparar, o modelo padrão deu distância <b>{dist.toFixed(3)}</b> ({similarity(dist)}%).</> : null}</p>
+                </>) : (<>
+                  <p className="text-xs text-pm-muted">Distância entre as "impressões" dos rostos: <b>{dist!.toFixed(3)}</b> (quanto menor, mais parecidos; limiar usual do modelo: 0,60).</p>
+                  <p className="text-[11px] text-pm-muted">{fa!.aligned && fb!.aligned ? <>Rostos endireitados pela linha dos olhos e comparados também espelhados. Sem esse ajuste a distância seria <b>{rawDist!.toFixed(3)}</b>.</> : <>Não foi possível endireitar {fa!.aligned ? "o rosto B" : fb!.aligned ? "o rosto A" : "os rostos"}; usada a leitura direta do modelo{rawDist !== null ? ` (${rawDist.toFixed(3)})` : ""}.</>}</p>
+                </>)}
                 {[...fa!.warnings.map((w) => `Foto A: ${w}`), ...fb!.warnings.map((w) => `Foto B: ${w}`)].length > 0 && (
-                  <p className="rounded-sm bg-status-risk/10 px-2 py-1 text-xs font-semibold text-status-risk">Atenção à qualidade — {[...fa!.warnings.map((w) => `A: ${w}`), ...fb!.warnings.map((w) => `B: ${w}`)].join("; ")}. Com foto assim a distância sobe mesmo para a mesma pessoa: o resultado é menos confiável e "diferentes" só vale com distância bem alta.</p>
+                  <p className="rounded-sm bg-status-risk/10 px-2 py-1 text-xs font-semibold text-status-risk">Atenção à qualidade — {[...fa!.warnings.map((w) => `A: ${w}`), ...fb!.warnings.map((w) => `B: ${w}`)].join("; ")}. Com foto assim a leitura piora mesmo para a mesma pessoa: o resultado é menos confiável e "diferentes" só vale com folga grande.</p>
                 )}
                 <div className="flex flex-wrap gap-2 pt-1">
                   <Button size="sm" onClick={download}><Download />Baixar resultado (imagem)</Button>
