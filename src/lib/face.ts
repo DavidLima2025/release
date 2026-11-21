@@ -35,9 +35,9 @@ function brightness(img: HTMLImageElement | HTMLCanvasElement, box: FaceFound["b
   return { mean: sum / (d.length / 4), blown: over / (d.length / 4) };
 }
 
-export async function detectFaces(img: HTMLImageElement): Promise<FaceFound[]> {
+export async function detectFaces(img: HTMLImageElement, minConfidence = 0.35): Promise<FaceFound[]> {
   const faceapi = await loadFaceApi();
-  const res = await faceapi.detectAllFaces(img, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.35 })).withFaceLandmarks().withFaceDescriptors();
+  const res = await faceapi.detectAllFaces(img, new faceapi.SsdMobilenetv1Options({ minConfidence })).withFaceLandmarks().withFaceDescriptors();
   return res.map((r: any) => {
     const b = r.detection.box; const pts: FacePoint[] = r.landmarks.positions.map((p: any) => ({ x: p.x, y: p.y }));
     const box = { x: b.x, y: b.y, width: b.width, height: b.height };
@@ -72,4 +72,33 @@ export function verdict(distance: number): { label: string; tone: "done" | "risk
   if (distance <= 0.6) return { label: "Inconclusivo — semelhança moderada", tone: "risk" };
   if (distance <= 0.68) return { label: "Inconclusivo — tende a pessoas diferentes", tone: "muted" };
   return { label: "Provavelmente pessoas diferentes", tone: "late" };
+}
+
+/** Gira a imagem (90, 180 ou 270 graus) num canvas. */
+export function rotateImage(img: HTMLImageElement, deg: number) {
+  const c = document.createElement("canvas");
+  const w = img.naturalWidth; const h = img.naturalHeight;
+  const swap = deg % 180 !== 0;
+  c.width = swap ? h : w; c.height = swap ? w : h;
+  const ctx = c.getContext("2d")!;
+  ctx.translate(c.width / 2, c.height / 2); ctx.rotate((deg * Math.PI) / 180); ctx.drawImage(img, -w / 2, -h / 2);
+  return c.toDataURL("image/jpeg", 0.95);
+}
+const asImage = (src: string) => new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+
+/**
+ * Procura o rosto também com a foto girada (pessoa deitada, celular de lado) e, se precisar,
+ * com uma régua mais tolerante. Devolve a imagem na posição em que o rosto foi achado.
+ */
+export async function detectAnyOrientation(img: HTMLImageElement, start = 0): Promise<{ img: HTMLImageElement; url?: string; faces: FaceFound[]; rotation: number }> {
+  const order = [0, 90, 270, 180].map((d) => (d + start) % 360);
+  for (const tolerant of [false, true]) {
+    for (const deg of order) {
+      const url = deg ? rotateImage(img, deg) : undefined;
+      const im = url ? await asImage(url) : img;
+      const faces = await detectFaces(im, tolerant ? 0.18 : 0.35);
+      if (faces.length) return { img: im, url, faces: tolerant ? faces.map((f) => ({ ...f, warnings: [...f.warnings, "rosto achado com régua tolerante"] })) : faces, rotation: deg };
+    }
+  }
+  return { img, faces: [], rotation: 0 };
 }
