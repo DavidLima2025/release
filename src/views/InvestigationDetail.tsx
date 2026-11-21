@@ -10,12 +10,13 @@ import { Badge } from "../components/ui/badge";
 import { Modal } from "../components/ui/modal";
 import { LinkChart, Organogram } from "../components/Organogram";
 import { BoAuthorModal } from "../components/BoAuthorModal";
+import { RoleSelect } from "../components/RoleTools";
 import { DossieModal } from "../components/DossieModal";
 import { CompareModal, EvidenceModal, GroupTimeline, GroupsModal, HierarchyModal, LinkDropModal, SharedContactsPanel, UnknownModal } from "../components/OrgTools";
 import { autoLinksFor } from "../lib/sharedContacts";
 import { emptyLayout, groupStatus, layoutIsEmpty, type Confidence } from "../lib/investigation";
 import { OrgBoard, type BoardPerson } from "../components/OrgBoard";
-import { AUTO_GROUPS, LEVEL_LABELS, MAX_GRADE, autoLevel, groupKeyOf, groupNameOfKey, levelOf, roleOfAutoGroup } from "../lib/orgBoard";
+import { LEVEL_LABELS, MAX_GRADE, autoGroupOf, autoLevel, groupKeyOf, groupNameOfKey, levelOf, roleOfAutoGroup } from "../lib/orgBoard";
 import { redsCount } from "../lib/companions";
 import { TargetFichaModal } from "../components/TargetFichaModal";
 import { ShareTargetModal } from "../components/ShareTargetModal";
@@ -521,7 +522,7 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
   };
   const autoLinks = useMemo(() => autoLinksFor(targets, data.authors), [targets, data.authors]);
   const clusterOptions = (t: InvestigationTarget) => [
-    ["", `Automático (${(AUTO_GROUPS[t.role] || AUTO_GROUPS["Associado"]).name.toLowerCase()})`],
+    ["", `Automático (${autoGroupOf(t.role).name.toLowerCase()})`],
     ...inv.orgGroups.map((g) => [g.name, g.name]),
   ];
 
@@ -634,7 +635,7 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
                     </div>
                     {/* Linha 2: campos — se ajustam à largura disponível */}
                     <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-2" onClick={(e) => e.stopPropagation()}>
-                      <Field label="Papel"><Select className="h-9" value={t.role} onChange={(e) => api.updateTarget(t, { role: e.target.value })}>{TARGET_ROLES.map((r) => <option key={r}>{r}</option>)}</Select></Field>
+                      <Field label="Papel"><RoleSelect className="h-9" value={t.role} onChange={(e) => api.updateTarget(t, { role: e.target.value })} /></Field>
                       <Field label="Superior"><Select className="h-9" value={t.parentId} onChange={(e) => api.updateTarget(t, { parentId: e.target.value })}><option value="">— topo —</option>{targets.filter((x) => x.id !== t.id).map((x) => <option key={x.id} value={x.id}>{nameOf(x.id)}</option>)}</Select></Field>
                       <Field label="Grau na hierarquia"><Select className="h-9" value={t.grade ?? ""} onChange={(e) => api.updateTarget(t, { grade: e.target.value ? Number(e.target.value) : null })}>
                         <option value="">Pela função ({autoLevel(t.role) + 1}º)</option>{LEVEL_LABELS.map((l, i) => <option key={i} value={i + 1}>{l.split(" — ")[0]} grau</option>)}
@@ -676,7 +677,7 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
                 )}
                 {!search.trim() && !suggestions.length && <p className="px-1 text-xs text-pm-muted">Digite para buscar no banco de alvos. Clique nos alvos para marcar vários, ou no + para vincular na hora.</p>}
                 <div className="grid grid-cols-2 gap-2">
-                  <Field label="Papel"><Select value={role} onChange={(e) => setRole(e.target.value)}>{TARGET_ROLES.map((r) => <option key={r}>{r}</option>)}</Select></Field>
+                  <Field label="Papel"><RoleSelect value={role} onChange={(e) => setRole(e.target.value)} /></Field>
                   <Field label="Superior"><Select value={parentId} onChange={(e) => setParentId(e.target.value)}><option value="">— topo —</option>{targets.map((x) => <option key={x.id} value={x.id}>{nameOf(x.id)}</option>)}</Select></Field>
                 </div>
                 <label className="flex items-center gap-2 text-xs"><input type="checkbox" className="h-4 w-4 accent-[#7A6C45]" checked={autoLink} onChange={(e) => setAutoLink(e.target.checked)} />Ligar no organograma a quem esteve no mesmo BO</label>
@@ -752,7 +753,7 @@ function NewTargetModal({ open, data, targets, nameOf, onClose, onSave }: { open
       <div className="grid gap-3 md:grid-cols-3">
         <Field label="Nome completo" className="md:col-span-2"><Input autoFocus value={form.name} onChange={(e) => set("name", e.target.value)} /></Field>
         <Field label="Vulgo"><Input value={form.alias} onChange={(e) => set("alias", e.target.value)} /></Field>
-        <Field label="Papel no grupo"><Select value={role} onChange={(e) => setRole(e.target.value)}>{TARGET_ROLES.map((r) => <option key={r}>{r}</option>)}</Select></Field>
+        <Field label="Papel no grupo"><RoleSelect value={role} onChange={(e) => setRole(e.target.value)} /></Field>
         <Field label="Superior"><Select value={parent} onChange={(e) => setParent(e.target.value)}><option value="">— topo —</option>{targets.map((x) => <option key={x.id} value={x.id}>{nameOf(x.id)}</option>)}</Select></Field>
         <Field label="Pasta"><Select value={form.categoryId} onChange={(e) => set("categoryId", e.target.value)}><option value="">Sem pasta</option>{data.authorCategories.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</Select></Field>
         <Field label="Nome da mãe"><Input value={form.motherName} onChange={(e) => set("motherName", e.target.value)} /></Field>

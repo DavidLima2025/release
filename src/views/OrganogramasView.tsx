@@ -11,6 +11,7 @@ import type { InvestigationsApi } from "../hooks/useInvestigations";
 import type { Author } from "../lib/domain";
 import { matchesText } from "../lib/domain";
 import { redsCount } from "../lib/companions";
+import { roleCatalogVersion } from "../lib/roles";
 import { ROLE_COLOR, TARGET_ROLES, groupStatus, type Confidence, type Investigation, type InvestigationLink, type InvestigationTarget } from "../lib/investigation";
 import { groupKeyOf, groupNameOfKey, levelOf } from "../lib/orgBoard";
 import { autoLinksFor } from "../lib/sharedContacts";
@@ -49,6 +50,7 @@ export function OrganogramasView({ data, api, onOpenInTargets, onOpenInvestigati
   const [ficha, setFicha] = useState<Author | null>(null);
   const [sharing, setSharing] = useState<Author | null>(null);
 
+  const catalog = roleCatalogVersion();
   const rows = useMemo<Row[]>(() => {
     if (!api) return [];
     const list = api.investigations.map((inv) => {
@@ -61,7 +63,7 @@ export function OrganogramasView({ data, api, onOpenInTargets, onOpenInvestigati
     });
     const live = (r: Row) => (r.inv.status === "Em andamento" || r.inv.status === "Suspensa" ? 0 : 1);
     return list.sort((a, b) => Number(!a.targets.length) - Number(!b.targets.length) || live(a) - live(b));
-  }, [api?.investigations, api?.targets, api?.links]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [api?.investigations, api?.targets, api?.links, catalog]); // eslint-disable-line react-hooks/exhaustive-deps
   const withTargets = rows.filter((r) => r.targets.length);
 
   const crossings = useMemo<Crossing[]>(() => {

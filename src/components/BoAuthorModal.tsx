@@ -6,7 +6,7 @@ import { Field, Input, Select, Textarea } from "./ui/input";
 import { Badge } from "./ui/badge";
 import type { Author } from "../lib/domain";
 import { formatBR } from "../lib/dates";
-import { TARGET_ROLES } from "../lib/investigation";
+import { RoleSelect } from "./RoleTools";
 import { companionsOf, redsCount } from "../lib/companions";
 import { AlertTriangle } from "lucide-react";
 import type { Boletim, BoEnvolvido } from "../lib/boletim";
@@ -407,7 +407,7 @@ export function BoAuthorModal({ open, data, api, onClose, onDone, investigationI
                     <Field label="Situação"><Select value={p.form.status} onChange={(e) => setField(p.key, "status", e.target.value)}>{["Suspeito", "Autor", "Monitorado", "Foragido", "Preso"].map((s) => <option key={s}>{s}</option>)}</Select></Field>
                     <Field label="Risco"><Select value={p.form.riskLevel} onChange={(e) => setField(p.key, "riskLevel", e.target.value)}>{["Baixo", "Médio", "Alto"].map((s) => <option key={s}>{s}</option>)}</Select></Field>
                     <Field label="Observação" className="md:col-span-3"><Textarea rows={2} value={p.form.notes} onChange={(e) => setField(p.key, "notes", e.target.value)} /></Field>
-                    {invId && <Field label="Papel na investigação"><Select value={p.role} onChange={(e) => update(p.key, { role: e.target.value })}>{TARGET_ROLES.map((r) => <option key={r}>{r}</option>)}</Select></Field>}
+                    {invId && <Field label="Papel na investigação"><RoleSelect value={p.role} onChange={(e) => update(p.key, { role: e.target.value })} /></Field>}
                   </div>
                 </div>
               )}

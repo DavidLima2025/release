@@ -13,7 +13,8 @@ import type { Author } from "../lib/domain";
 import { EXTRA_FIELDS, PHOTO_CATEGORIES, formatBytes, type AuthorFile } from "../lib/domain";
 import { BoAuthorModal } from "./BoAuthorModal";
 import { formatBR, formatDateTimeBR } from "../lib/dates";
-import { TARGET_ROLES, stageOf } from "../lib/investigation";
+import { stageOf } from "../lib/investigation";
+import { RoleSelect } from "./RoleTools";
 import type { ReportImage } from "../lib/report/model";
 import { buildFichaInput, fichaFacts, fileSlug } from "../lib/fichaInput";
 
@@ -189,7 +190,7 @@ export function TargetFichaModal({ author, data, api, onClose, onEdit, onMove, o
             {available.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
                 <Select className="h-9 w-64" value={linkInv.id} onChange={(e) => setLinkInv({ ...linkInv, id: e.target.value })}><option value="">Vincular a investigação…</option>{available.map((i) => <option key={i.id} value={i.id}>{i.code} — {i.title}</option>)}</Select>
-                <Select className="h-9 w-44" value={linkInv.role} onChange={(e) => setLinkInv({ ...linkInv, role: e.target.value })}>{TARGET_ROLES.map((r) => <option key={r}>{r}</option>)}</Select>
+                <RoleSelect className="h-9 w-44" value={linkInv.role} onChange={(e) => setLinkInv({ ...linkInv, role: e.target.value })} />
                 <Button size="sm" variant="primary" className="!h-9" disabled={!linkInv.id} onClick={async () => { const inv = api!.investigations.find((i) => i.id === linkInv.id); if (inv && await api!.addTarget(inv, a.id, linkInv.role)) { data.reload(); setLinkInv({ id: "", role: linkInv.role }); } }}><Link2 />Vincular</Button>
               </div>
             )}

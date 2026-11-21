@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, GitFork, Layers, Plus, Sparkles, Trash2, Users } from "lucide-react";
 import { Modal } from "./ui/modal";
+import { RoleSelect } from "./RoleTools";
 import { Button } from "./ui/button";
 import { Select } from "./ui/input";
 import { Badge } from "./ui/badge";
 import type { AppData } from "../hooks/useAppData";
 import type { InvestigationsApi } from "../hooks/useInvestigations";
-import { CONFIDENCE, GROUP_EVENT_KINDS, RELATIONS, ROLE_COLOR, TARGET_ROLES, newId, type Confidence, type Evidence, type GroupEvent, type Investigation, type InvestigationTarget, type OrgGroup } from "../lib/investigation";
+import { CONFIDENCE, GROUP_EVENT_KINDS, RELATIONS, ROLE_COLOR, newId, type Confidence, type Evidence, type GroupEvent, type Investigation, type InvestigationTarget, type OrgGroup } from "../lib/investigation";
 import { GROUP_COLORS, LEVEL_LABELS } from "../lib/orgBoard";
 import { indexReds } from "../lib/companions";
 import { sharedContacts } from "../lib/sharedContacts";
@@ -54,7 +55,7 @@ export function HierarchyModal({ open, onClose, data, api, targets }: Base & { o
                     <td className="p-2"><p className="font-black uppercase">{p.author?.name || p.target.label || "?"}</p><p className="text-pm-muted">pontuação {p.score}</p></td>
                     <td className="p-2 text-pm-muted">{p.reason}</td>
                     <td className="p-2">
-                      <Select className="h-8 text-xs" value={r.role} onChange={(e) => set(r.id, { role: e.target.value })} style={{ borderLeft: `4px solid ${ROLE_COLOR[r.role] || "#6B655A"}` }}>{TARGET_ROLES.map((x) => <option key={x}>{x}</option>)}</Select>
+                      <RoleSelect className="h-8 text-xs" value={r.role} onChange={(e) => set(r.id, { role: e.target.value })} style={{ borderLeft: `4px solid ${ROLE_COLOR[r.role] || "#6B655A"}` }} />
                       {roleChanged && <p className="mt-0.5 text-[10px] text-pm-muted">era: {p.target.role}</p>}
                     </td>
                     <td className="p-2">
@@ -272,7 +273,7 @@ export function EvidenceModal({ target, onClose, data, api, inv }: Omit<Base, "t
           <textarea className="min-h-[70px] rounded-sm border border-pm-line p-2" placeholder="O que foi observado. Ex.: levantamento de 12/11 flagrou o alvo de bicicleta avisando a chegada da viatura na Rua dos Caetés (olheiro)." value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
           <div className="grid gap-2 sm:grid-cols-3">
             <label className="grid gap-1 text-xs"><span className="pm-label">Data</span><input type="date" className="h-9 rounded-sm border border-pm-line px-2" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label>
-            <label className="grid gap-1 text-xs"><span className="pm-label">Indica a função</span><Select className="h-9" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="">—</option>{TARGET_ROLES.map((r) => <option key={r}>{r}</option>)}</Select></label>
+            <label className="grid gap-1 text-xs"><span className="pm-label">Indica a função</span><RoleSelect className="h-9" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} empty="—" /></label>
             <label className="grid gap-1 text-xs"><span className="pm-label">Indica local de atuação</span><input className="h-9 rounded-sm border border-pm-line px-2 uppercase" placeholder="bairro / ponto" value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} /></label>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs"><span className="pm-label">Confiança</span>
@@ -325,7 +326,7 @@ export function UnknownModal({ open, onClose, data, api, inv, targets, identify 
             <p className="text-pm-muted">Para quem aparece nos levantamentos mas ainda não tem nome — ex.: <i>"motorista do Gol prata"</i>, <i>"policial não identificado"</i>. Entra no organograma sem criar card no banco de alvos; quando descobrir quem é, use <b>Identificar</b>.</p>
             <input className="h-10 rounded-sm border border-pm-line px-2 font-bold uppercase" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Descrição (ex.: NÃO IDENTIFICADO — MOTORISTA DO GOL)" />
             <div className="grid gap-2 sm:grid-cols-3">
-              <Select value={role} onChange={(e) => setRole(e.target.value)}>{TARGET_ROLES.map((r) => <option key={r}>{r}</option>)}</Select>
+              <RoleSelect value={role} onChange={(e) => setRole(e.target.value)} />
               <Select value={parent} onChange={(e) => setParent(e.target.value)}><option value="">Superior: nenhum</option>{targets.map((t) => <option key={t.id} value={t.id}>{tName(data, t)}</option>)}</Select>
               <Select value={cluster} onChange={(e) => setCluster(e.target.value)}><option value="">Núcleo: pela função</option>{inv.orgGroups.map((g) => <option key={g.name}>{g.name}</option>)}</Select>
             </div>
@@ -421,7 +422,7 @@ export function GroupTimeline({ data, api, targets }: Base) {
         <Button variant="primary" onClick={add}><Plus />Lançar</Button>
         {form.kind === "Assumiu função" && (
           <div className="grid gap-2 sm:col-span-full sm:grid-cols-2">
-            <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="">Nova função…</option>{TARGET_ROLES.map((r) => <option key={r}>{r}</option>)}</Select>
+            <RoleSelect value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} empty="Nova função…" />
             <Select value={form.replaces} onChange={(e) => setForm({ ...form, replaces: e.target.value })}><option value="">No lugar de… (opcional)</option>{targets.filter((t) => t.id !== form.target).map((t) => <option key={t.id} value={t.id}>{tName(data, t)}</option>)}</Select>
           </div>
         )}

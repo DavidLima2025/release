@@ -3,6 +3,7 @@ import { FolderLock, Gavel, Loader2, Plus, ScanText } from "lucide-react";
 import { supabaseConfigured } from "./supabase";
 import { useAppData } from "./hooks/useAppData";
 import { useInvestigations } from "./hooks/useInvestigations";
+import { RolesProvider } from "./components/RoleTools";
 import { Status, Task } from "./lib/domain";
 import { formatBR, parseISODate, todayISO } from "./lib/dates";
 import { ToastStack, useToasts } from "./components/Toast";
@@ -124,7 +125,7 @@ function AuthenticatedApp() {
   };
 
   return (
-    <>
+    <RolesProvider api={investigations} enabled={data.permissions.investigations}>
       <Layout view={current} setView={(next) => { setView(next); setOpenInvestigationId(""); }} data={data} onOpenTv={() => setTvOpen(true)} onImportBo={() => setImportOpen(true)}
         onChangePassword={() => setPasswordOpen(true)} title={openInvestigation ? "Dossiê" : title} subtitle={current === "painel" ? `${subtitle} · hoje ${formatBR(data.today)}` : openInvestigation ? `${openInvestigation.code} · ${openInvestigation.classification}` : subtitle} actions={headerActions}>
         {!data.loading && <AudienciaBanner tasks={data.tasks} today={data.today} onOpen={(date) => { selectDate(date); setView("painel"); setOpenInvestigationId(""); }} />}
@@ -167,6 +168,6 @@ function AuthenticatedApp() {
       <ChangePasswordModal login={data.currentUser.login} open={passwordOpen} onClose={() => setPasswordOpen(false)} onSubmit={data.changeOwnPassword} />
       {tvOpen && <TVPanel data={data} onClose={closeTv} />}
       <ToastStack toasts={toasts} />
-    </>
+    </RolesProvider>
   );
 }
