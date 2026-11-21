@@ -115,10 +115,10 @@ export function faceDistance(a: Float32Array, b: Float32Array) {
 
 /**
  * Índice de semelhança (0–100) a partir da distância. O meio da escala (50) fica no limiar publicado do
- * modelo (0,60); não é probabilidade. Ex.: 0,45 ≈ 90; 0,60 = 50; 0,75 ≈ 10.
+ * modelo (0,60); curva íngreme; não é probabilidade. Ex.: 0,45 ≈ 95; 0,55 ≈ 73; 0,60 = 50; 0,75 ≈ 5.
  */
 export function similarity(distance: number) {
-  return Math.round(100 / (1 + Math.exp((distance - 0.6) / 0.07)));
+  return Math.round(100 / (1 + Math.exp((distance - 0.6) / 0.05)));
 }
 
 /** `hard`: foto difícil (de lado, fraca, pequena, escura, estourada) — a distância sobe mesmo para a mesma pessoa. */
