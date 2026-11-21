@@ -28,7 +28,7 @@ import { TVPanel } from "./views/TVPanel";
 import { InvestigationsView } from "./views/InvestigationsView";
 import { InvestigationDetail } from "./views/InvestigationDetail";
 import { IntakePublicView } from "./views/IntakePublicView";
-import { NetworkView } from "./views/NetworkView";
+import { OrganogramasView } from "./views/OrganogramasView";
 
 const CrimeMap = lazy(() => import("./views/CrimeMap"));
 const FaceCompareView = lazy(() => import("./views/FaceCompareView").then((m) => ({ default: m.FaceCompareView })));
@@ -39,7 +39,7 @@ const TITLES: Record<View, [string, string]> = {
   tarefas: ["Demandas", "Todas as demandas com filtros e pesquisa"],
   workflow: ["Workflow", "Etapas das demandas"],
   investigacoes: ["Investigações", "Linhas de investigação e dossiês de inteligência"],
-  rede: ["Rede de vínculos", "Alvos ligados por BOs em comum e pelas investigações"],
+  rede: ["Rede de vínculos", "Organogramas das investigações: quem comanda, quem faz o quê e quem aparece em mais de uma"],
   faces: ["Comparar faces", "Semelhança entre os rostos de duas fotos (auxílio à análise)"],
   mapa: ["Mapa criminal", "Fatos de todas as investigações, com filtros e análises espaciais"],
   dashboard: ["Dashboard", "Indicadores de produtividade e prazos"],
@@ -146,7 +146,7 @@ function AuthenticatedApp() {
                 <CrimeMap data={data} api={investigations} items={[...investigations.items, ...reportsAsItems(data.authorReports)]} investigations={investigations.investigations} height="72vh" />
               </Suspense>
             )}
-            {current === "rede" && <NetworkView data={data} api={data.permissions.investigations ? investigations : undefined}
+            {current === "rede" && <OrganogramasView data={data} api={data.permissions.investigations ? investigations : undefined}
               onOpenInTargets={(id) => { setTargetFocus(id); setView("alvos"); }}
               onOpenInvestigation={(id) => { setView("investigacoes"); setOpenInvestigationId(id); window.scrollTo({ top: 0 }); }} />}
             {current === "faces" && <Suspense fallback={<div className="flex items-center gap-3 py-20 text-pm-muted"><Loader2 className="h-5 w-5 animate-spin" />Carregando…</div>}><FaceCompareView data={data} /></Suspense>}
