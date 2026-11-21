@@ -28,6 +28,8 @@ type Props = {
   onDropOnGroup?: (t: InvestigationTarget, groupKey: string) => void;
   /** Versão para exportar (sem interação, fonte padrão). */
   exportMode?: boolean;
+  /** Zoom na tela: número (1 = tamanho real) ou "fit" = ajusta à largura disponível (sem passar de 125%). */
+  scale?: number | "fit";
 };
 
 const FONT = "Helvetica, Arial, sans-serif";
@@ -49,7 +51,7 @@ function splitName(name: string, max = 17) {
 
 type Moving = { kind: "card" | "group"; id: string; g: string; x: number; y: number };
 
-export function OrgBoard({ targets, links, groups: custom, autoLinks = [], people, selectedId, onSelect, onOpen, dragMode = "superior", layout, onLayoutChange, onDropOnTarget, onLinkDrop, onDropOnGroup, exportMode }: Props) {
+export function OrgBoard({ targets, links, groups: custom, autoLinks = [], people, selectedId, onSelect, onOpen, dragMode = "superior", layout, onLayoutChange, onDropOnTarget, onLinkDrop, onDropOnGroup, exportMode, scale }: Props) {
   const lay = layout || NO_LAYOUT;
   const [mv, setMv] = useState<Moving | null>(null);
   const baseBoard = useMemo(() => buildBoard(targets, links, custom, autoLinks, lay), [targets, links, custom, autoLinks, lay]);
@@ -155,7 +157,8 @@ export function OrgBoard({ targets, links, groups: custom, autoLinks = [], peopl
   const lineColor = { chefia: "#C0201A", vinculo: "#2E6B3A", auto: "#1F6FB2" } as const;
 
   const svg = (
-    <svg ref={svgRef} xmlns="http://www.w3.org/2000/svg" width={W} height={H} viewBox={`0 0 ${W} ${H}`} fontFamily={exportMode ? FONT : undefined}
+    <svg ref={svgRef} xmlns="http://www.w3.org/2000/svg" viewBox={`0 0 ${W} ${H}`} fontFamily={exportMode ? FONT : undefined}
+      {...(exportMode || !scale ? { width: W, height: H } : scale === "fit" ? { width: W, height: H, style: { width: "100%", height: "auto", maxWidth: W * 1.25 } } : { width: W * scale, height: H * scale })}
       className={exportMode ? undefined : "mx-auto block select-none"} role="img" aria-label="Organograma por núcleos">
       <defs>
         <marker id="seta-chefia" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C0201A" /></marker>
@@ -200,7 +203,7 @@ export function OrgBoard({ targets, links, groups: custom, autoLinks = [], peopl
           <g key={c.targetId} data-target={t.id} transform={moving ? `translate(${drag!.dx},${drag!.dy})` : undefined}
             style={interactive ? { touchAction: "none", cursor: moverOn ? "move" : "grab", opacity: moving ? 0.85 : chain && !chain.has(t.id) ? 0.3 : 1 } : undefined}
             onPointerDown={(e) => (moverOn ? startMove(e, "card", t.id, g.key, bx, by, () => onSelect?.(t)) : dragMode === "mover" ? undefined : down(e, t.id))}
-            onPointerMove={move} onPointerUp={() => (dragMode === "mover" ? undefined : up(t))} onPointerCancel={() => { start.current = null; setDrag(null); }}
+            onPointerMove={move} onPointerUp={interactive && dragMode !== "mover" ? () => up(t) : undefined} onPointerCancel={() => { start.current = null; setDrag(null); }}
             onClick={!interactive ? () => onSelect?.(t) : undefined} onDoubleClick={() => onOpen?.(t)}>
             {placing && <rect x={bx - 4} y={by - 4} width={CARD_W + 8} height={CARD_H + 8} rx={4} fill="none" stroke="#2F5D7C" strokeWidth={2.5} strokeDasharray="6 3" />}
             {(sel || over) && <rect x={bx - 4} y={by - 4} width={CARD_W + 8} height={CARD_H + 8} rx={4} fill="none" stroke={over ? (dragMode === "vinculo" ? "#2E6B3A" : "#9B8A5C") : "#0B0B0C"} strokeWidth={over ? 3 : 2} strokeDasharray={over ? "6 3" : undefined} />}
