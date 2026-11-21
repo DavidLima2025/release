@@ -35,7 +35,7 @@ export function FaceCompareView({ data }: { data: AppData }) {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState("");
   const [engine, setEngine] = useState<Engine>(() => { try { return localStorage.getItem("faceEngine") === "arc" ? "arc" : "dlib"; } catch { return "dlib"; } });
-  const [arc, setArc] = useState<{ status: "" | "baixando" | "iniciando" | "pronto" | "erro"; loaded: number; total: number; cached: boolean; msg: string }>({ status: "", loaded: 0, total: 0, cached: false, msg: "" });
+  const [arc, setArc] = useState<{ status: "" | "baixando" | "iniciando" | "pronto" | "erro"; loaded: number; total: number; cached: boolean; saved: boolean | null; msg: string }>({ status: "", loaded: 0, total: 0, cached: false, saved: null, msg: "" });
   const [sim, setSim] = useState<number | null>(null);
   const [calc, setCalc] = useState(false);
 
@@ -45,12 +45,12 @@ export function FaceCompareView({ data }: { data: AppData }) {
   }, []);
 
   function startArc() {
-    setArc({ status: "baixando", loaded: 0, total: 0, cached: false, msg: "" });
+    setArc({ status: "baixando", loaded: 0, total: 0, cached: false, saved: null, msg: "" });
     let last = 0;
     loadArc((p) => {
       if (p.phase === "cache") setArc((x) => ({ ...x, status: "iniciando", cached: true }));
       else if (p.phase === "download") { const l = p.loaded || 0; if (l - last < 1_000_000 && l !== p.total) return; last = l; setArc((x) => ({ ...x, status: "baixando", loaded: l, total: p.total || 0 })); }
-      else setArc((x) => ({ ...x, status: "iniciando" }));
+      else setArc((x) => ({ ...x, status: "iniciando", saved: p.saved ?? x.saved }));
     }).then(() => setArc((x) => ({ ...x, status: "pronto" })))
       .catch((e) => { console.error(e); setArc((x) => ({ ...x, status: "erro", msg: String(e?.message || e) })); });
   }
@@ -185,7 +185,8 @@ export function FaceCompareView({ data }: { data: AppData }) {
                 </div>
               )}
               {arc.status === "iniciando" && <p className="flex items-center gap-2 text-pm-muted"><Loader2 className="h-4 w-4 animate-spin" />Preparando o modelo no aparelho{arc.cached ? " (já estava guardado)" : ""}…</p>}
-              {arc.status === "pronto" && <p className="text-xs font-semibold text-status-done">buffalo_l pronto — o modelo fica guardado neste aparelho.</p>}
+              {arc.status === "pronto" && arc.saved !== false && <p className="text-xs font-semibold text-status-done">buffalo_l pronto — o modelo fica guardado neste navegador (não baixa de novo ao recarregar).</p>}
+              {arc.status === "pronto" && arc.saved === false && <p className="rounded-sm bg-status-risk/10 px-2 py-1 text-xs font-semibold text-status-risk">buffalo_l pronto, mas este navegador não deixou guardar o modelo: ele será baixado de novo ao recarregar a página. (Janela anônima ou armazenamento bloqueado?)</p>}
               {arc.status === "erro" && (
                 <div className="rounded-sm bg-status-late/10 p-3">
                   <p className="font-semibold text-status-late">Não foi possível usar o buffalo_l. {arc.msg}</p>
