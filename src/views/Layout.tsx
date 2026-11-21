@@ -2,12 +2,12 @@ import type * as React from "react";
 import { useState } from "react";
 import {
   Activity, CalendarDays, Map as MapIcon, Network, ChevronsLeft, ChevronsRight, FolderLock, FolderOpen, GitBranch, KeyRound, LayoutDashboard, ListChecks,
-  LogOut, Menu, MonitorPlay, ScanText, Users, X,
+  LogOut, Menu, MonitorPlay, ScanFace, ScanText, Users, X,
 } from "lucide-react";
 import { Brand, PmFooterRule, PmmgShield } from "../components/Brand";
 import type { AppData } from "../hooks/useAppData";
 
-export type View = "painel" | "tarefas" | "workflow" | "investigacoes" | "mapa" | "rede" | "dashboard" | "alvos" | "usuarios" | "auditoria";
+export type View = "painel" | "tarefas" | "workflow" | "investigacoes" | "mapa" | "rede" | "faces" | "dashboard" | "alvos" | "usuarios" | "auditoria";
 
 type NavItem = { id: View; label: string; icon: any; show: boolean };
 
@@ -50,6 +50,7 @@ export function Layout({ view, setView, data, onOpenTv, onImportBo, onChangePass
     { id: "investigacoes", label: "Investigações", icon: FolderLock, show: permissions.investigations },
     { id: "mapa", label: "Mapa criminal", icon: MapIcon, show: permissions.investigations },
     { id: "alvos", label: "Banco de alvos", icon: FolderOpen, show: permissions.targets },
+    { id: "faces", label: "Comparar faces", icon: ScanFace, show: permissions.targets },
     { id: "rede", label: "Rede de vínculos", icon: Network, show: permissions.targets },
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, show: permissions.dashboard },
     { id: "usuarios", label: "Usuários", icon: Users, show: permissions.users },
