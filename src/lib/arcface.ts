@@ -7,22 +7,22 @@ export const ARC_MODEL_URL = "https://huggingface.co/immich-app/buffalo_l/resolv
 const CACHE_NAME = "face-models-v1";
 const MIN_BYTES = 50_000_000; // abaixo disso não pode ser o modelo (página de erro, download cortado)
 
-export type ArcProgress = { phase: "cache" | "download" | "init"; loaded?: number; total?: number };
+export type ArcProgress = { phase: "cache" | "download" | "init"; loaded?: number; total?: number; /** o modelo ficou guardado no aparelho? */ saved?: boolean };
 
 async function openCache(): Promise<Cache | null> {
   try { return typeof caches === "undefined" ? null : await caches.open(CACHE_NAME); } catch { return null; }
 }
 
-/** Baixa o modelo (com progresso) ou lê do cache do aparelho. */
-async function modelBytes(onProgress?: (p: ArcProgress) => void): Promise<Uint8Array> {
+/** Baixa o modelo (com progresso) ou lê do cache do aparelho. `saved`: se ficou guardado para a próxima vez. */
+async function modelBytes(onProgress?: (p: ArcProgress) => void): Promise<{ bytes: Uint8Array; saved: boolean }> {
   const cache = await openCache();
   if (cache) {
     try {
       const hit = await cache.match(ARC_MODEL_URL);
       if (hit) {
-        onProgress?.({ phase: "cache" });
+        onProgress?.({ phase: "cache", saved: true });
         const b = new Uint8Array(await hit.arrayBuffer());
-        if (b.length >= MIN_BYTES) return b;
+        if (b.length >= MIN_BYTES) return { bytes: b, saved: true };
         await cache.delete(ARC_MODEL_URL);
       }
     } catch { /* segue para o download */ }
@@ -30,7 +30,6 @@ async function modelBytes(onProgress?: (p: ArcProgress) => void): Promise<Uint8A
   const resp = await fetch(ARC_MODEL_URL, { mode: "cors" });
   if (!resp.ok || !resp.body) throw new Error(`Falha ao baixar o modelo (HTTP ${resp.status}).`);
   const total = Number(resp.headers.get("content-length")) || 0;
-  const saving = cache ? cache.put(ARC_MODEL_URL, resp.clone()).catch(() => {}) : null;
   const reader = resp.body.getReader();
   let buf = total > 0 ? new Uint8Array(total) : null; const chunks: Uint8Array[] = []; let loaded = 0;
   for (;;) {
@@ -38,12 +37,21 @@ async function modelBytes(onProgress?: (p: ArcProgress) => void): Promise<Uint8A
     if (buf && loaded + value.length <= buf.length) buf.set(value, loaded); else { if (buf) { chunks.push(buf.subarray(0, loaded)); buf = null; } chunks.push(value); }
     loaded += value.length; onProgress?.({ phase: "download", loaded, total });
   }
-  if (saving) await saving;
   let bytes: Uint8Array;
   if (buf && loaded === buf.length) bytes = buf;
   else { bytes = new Uint8Array(loaded); let o = 0; for (const c of chunks) { bytes.set(c, o); o += c.length; } }
-  if (bytes.length < MIN_BYTES) { try { await cache?.delete(ARC_MODEL_URL); } catch { /* ok */ } throw new Error("O arquivo do modelo veio incompleto. Tente de novo."); }
-  return bytes;
+  if (bytes.length < MIN_BYTES) throw new Error("O arquivo do modelo veio incompleto. Tente de novo.");
+  // Guarda para a próxima vez. Atenção: o navegador recusa guardar a resposta direta do Hugging Face
+  // (redirecionamento entre domínios → "NetworkError"), mas aceita uma resposta nova montada com os mesmos bytes.
+  let saved = false;
+  if (cache) {
+    try {
+      await cache.put(ARC_MODEL_URL, new Response(bytes, { status: 200, headers: { "content-type": "application/octet-stream" } }));
+      saved = true;
+    } catch (e) { console.warn("[buffalo_l] não foi possível guardar o modelo neste navegador:", e); }
+  }
+  try { await navigator.storage?.persist?.(); } catch { /* pedido opcional: evita o navegador apagar o cache sozinho */ }
+  return { bytes, saved };
 }
 
 let session: Promise<any> | null = null;
@@ -57,8 +65,8 @@ export function loadArc(onProgress?: (p: ArcProgress) => void) {
       const ort: any = await import("onnxruntime-web/wasm");
       ort.env.wasm.wasmPaths = "/ort/"; // arquivos copiados no build (scripts/copy-ort.mjs)
       ort.env.wasm.numThreads = 1;
-      const bytes = await modelBytes(onProgress);
-      onProgress?.({ phase: "init" });
+      const { bytes, saved } = await modelBytes(onProgress);
+      onProgress?.({ phase: "init", saved });
       const s = await ort.InferenceSession.create(bytes, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
       ortMod = ort;
       return s;
