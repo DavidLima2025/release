@@ -5,11 +5,13 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import type { AppData } from "../hooks/useAppData";
 import { matchesText, type Author } from "../lib/domain";
-import { detectFaces, faceDistance, loadFaceApi, similarity, verdict, type FaceFound } from "../lib/face";
+import { detectAnyOrientation, faceDistance, loadFaceApi, similarity, verdict, type FaceFound } from "../lib/face";
 
 type Side = {
   url: string; name: string; author?: Author;
   img?: HTMLImageElement; faces: FaceFound[]; pick: number; status: "" | "lendo" | "pronto" | "sem-rosto" | "erro";
+  /** Foto original (para girar de novo) e quanto foi girada para achar o rosto. */
+  original?: string; rotation?: number;
 };
 const EMPTY: Side = { url: "", name: "", faces: [], pick: 0, status: "" };
 
@@ -32,13 +34,13 @@ export function FaceCompareView({ data }: { data: AppData }) {
 
   const set = (which: "a" | "b", v: Side) => (which === "a" ? setA(v) : setB(v));
 
-  async function load(which: "a" | "b", src: string, name: string, author?: Author) {
+  async function load(which: "a" | "b", src: string, name: string, author?: Author, start = 0) {
     setSaved("");
-    set(which, { ...EMPTY, url: src, name, author, status: "lendo" });
+    set(which, { ...EMPTY, url: src, name, author, status: "lendo", original: src });
     try {
-      const img = await toImage(src);
-      const faces = await detectFaces(img);
-      set(which, { url: src, name, author, img, faces, pick: 0, status: faces.length ? "pronto" : "sem-rosto" });
+      const base = await toImage(src);
+      const r = await detectAnyOrientation(base, start);
+      set(which, { url: r.url || src, name, author, img: r.img, faces: r.faces, pick: 0, status: r.faces.length ? "pronto" : "sem-rosto", original: src, rotation: r.rotation });
     } catch (e) {
       console.error(e);
       set(which, { ...EMPTY, url: src, name, author, status: "erro" });
@@ -102,7 +104,8 @@ export function FaceCompareView({ data }: { data: AppData }) {
   }
 
   const slot = (which: "a" | "b", s: Side) => <FaceSlot side={s} label={which === "a" ? "Foto A" : "Foto B"} data={data} busy={busy}
-    onFile={(f) => fromFile(which, f)} onAuthor={(au) => fromAuthor(which, au)} onPick={(i) => set(which, { ...s, pick: i })} onClear={() => set(which, EMPTY)} />;
+    onFile={(f) => fromFile(which, f)} onAuthor={(au) => fromAuthor(which, au)}
+    onRotate={() => s.original && load(which, s.original, s.name, s.author, ((s.rotation || 0) + 90) % 360)} onPick={(i) => set(which, { ...s, pick: i })} onClear={() => set(which, EMPTY)} />;
 
   return (
     <div className="space-y-5">
@@ -148,8 +151,8 @@ export function FaceCompareView({ data }: { data: AppData }) {
   );
 }
 
-function FaceSlot({ side, label, data, busy, onFile, onAuthor, onPick, onClear }: {
-  side: Side; label: string; data: AppData; busy: boolean;
+function FaceSlot({ side, label, data, busy, onFile, onAuthor, onPick, onClear, onRotate }: {
+  side: Side; label: string; data: AppData; busy: boolean; onRotate: () => void;
   onFile: (f?: File | null) => void; onAuthor: (a: Author) => void; onPick: (i: number) => void; onClear: () => void;
 }) {
   const [q, setQ] = useState("");
@@ -163,7 +166,10 @@ function FaceSlot({ side, label, data, busy, onFile, onAuthor, onPick, onClear }
       <CardContent>
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="pm-heading text-base">{label}{side.name && <span className="ml-2 text-sm font-semibold normal-case text-pm-muted">{side.name}</span>}</h3>
-          {side.url && <Button size="icon" variant="ghost" title="Trocar foto" onClick={onClear}><X /></Button>}
+          {side.url && <div className="flex gap-1">
+            <Button size="sm" variant="ghost" title="Girar a foto e procurar o rosto de novo" disabled={side.status === "lendo"} onClick={onRotate}>↻ Girar</Button>
+            <Button size="icon" variant="ghost" title="Trocar foto" onClick={onClear}><X /></Button>
+          </div>}
         </div>
         {!side.url ? (
           <div className="space-y-3" onPaste={(e) => { const f = [...e.clipboardData.files].find((x) => x.type.startsWith("image/")); if (f) onFile(f); }} tabIndex={0}>
@@ -196,7 +202,8 @@ function FaceSlot({ side, label, data, busy, onFile, onAuthor, onPick, onClear }
               )}
               {side.status === "lendo" && <div className="absolute inset-0 grid place-items-center bg-black/50 text-sm font-bold text-white"><span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Procurando o rosto…</span></div>}
             </div>
-            {side.status === "sem-rosto" && <p className="text-sm font-semibold text-status-late">Nenhum rosto encontrado. Tente uma foto mais próxima, de frente e com o rosto visível.</p>}
+            {side.status === "sem-rosto" && <p className="text-sm font-semibold text-status-late">Nenhum rosto encontrado, mesmo girando a foto. Tente recortar mais perto do rosto ou outra foto com o rosto mais visível.</p>}
+            {side.status === "pronto" && side.rotation ? <p className="text-xs font-semibold text-pm-gold-dark">A foto foi girada {side.rotation}° para achar o rosto (pessoa deitada ou celular de lado).</p> : null}
             {side.status === "erro" && <p className="text-sm font-semibold text-status-late">Não foi possível ler a imagem.</p>}
             {side.faces.length > 1 && <p className="text-xs text-pm-muted">{side.faces.length} rostos na foto — toque no rosto certo (o amarelo é o usado).</p>}
             {side.faces[side.pick] && <p className="text-xs text-pm-muted">Pontos verdes: os 68 pontos do rosto usados para alinhar (olhos, sobrancelhas, nariz, boca e mandíbula).{side.faces[side.pick].warnings.length ? <b className="text-status-risk"> Qualidade: {side.faces[side.pick].warnings.join(", ")}.</b> : ""}</p>}
