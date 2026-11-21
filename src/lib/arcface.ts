@@ -134,8 +134,8 @@ export function cosine(a: Float32Array, b: Float32Array) {
 }
 
 // Limiares INICIAIS para este tipo de modelo (cosseno ≈ 0,30–0,35 é o ponto de decisão usual); a calibrar com testes reais.
-/** Índice 0–100: 50 no ponto de decisão (0,33). Não é probabilidade. */
-export function arcIndex(sim: number) { return Math.round(100 / (1 + Math.exp(-(sim - 0.33) / 0.06))); }
+/** Índice 0–100: 50 no ponto de decisão (0,33); curva íngreme (0,45 ≈ 95, 0,40 ≈ 85, 0,28 ≈ 22, 0,20 ≈ 4). Não é probabilidade. */
+export function arcIndex(sim: number) { return Math.round(100 / (1 + Math.exp(-(sim - 0.33) / 0.04))); }
 
 export function arcVerdict(sim: number, hard = false): { label: string; tone: "done" | "risk" | "late" | "muted" } {
   if (sim >= 0.5) return { label: "Muito provável que seja a mesma pessoa", tone: "done" };
