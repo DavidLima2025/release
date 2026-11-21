@@ -1,7 +1,7 @@
 // Sugestão de funções e de hierarquia do organograma a partir do histórico (BOs e parceiros).
 // É uma proposta para o analista conferir: não substitui o conhecimento de campo.
 import type { Author, AuthorFile } from "./domain";
-import type { InvestigationItem, InvestigationTarget } from "./investigation";
+import { TARGET_ROLES, type InvestigationItem, type InvestigationTarget } from "./investigation";
 import { indexReds } from "./companions";
 
 export type Proposal = {
@@ -100,7 +100,7 @@ export function proposeHierarchy(targets: InvestigationTarget[], authors: Author
     return best ? { area: best[0], why: `${best[1]} de ${places.length} BO(s) no bairro` } : { area: t.area, why: "" };
   };
 
-  const roleOf = (b: (typeof base)[number], rank: number) => {
+  const guessRole = (b: (typeof base)[number], rank: number) => {
     const a = authorOf.get(b.t.authorId);
     const clue = clueRole(b.t);
     if (clue) return clue.role;
@@ -113,6 +113,11 @@ export function proposeHierarchy(targets: InvestigationTarget[], authors: Author
     if (b.ps.length >= 2 && b.score >= top * 0.55) return "Gerente";
     if (b.s.bos > 0) return "Executor";
     return b.t.role || "Associado";
+  };
+  // Só sugere papéis que ainda existem no catálogo (um papel excluído não volta pela sugestão): senão mantém o papel atual.
+  const roleOf = (b: (typeof base)[number], rank: number) => {
+    const r = guessRole(b, rank);
+    return TARGET_ROLES.includes(r) ? r : b.t.role || r;
   };
   const roles = new Map(ranked.map((b, i) => [b.t.id, roleOf(b, i)]));
   const scoreOf = new Map(base.map((b) => [b.t.authorId, b.score]));

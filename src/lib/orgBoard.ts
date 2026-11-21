@@ -32,7 +32,9 @@ export const AUTO_GROUPS: Record<string, { name: string; level: number }> = {
 export const LEVEL_LABELS = ["1º — Topo (liderança)", "2º — Gerência / finanças", "3º — Execução / apoio", "4º — Associados", "5º — Vítimas / testemunhas", "6º", "7º"];
 export const roleOfAutoGroup = (name: string) => Object.entries(AUTO_GROUPS).find(([, g]) => g.name === name)?.[0] || "";
 export const GROUP_COLORS = ["#B3261E", "#C28A12", "#7A6C45", "#231F20", "#2F5D7C", "#5B3E8A", "#2E6B3A", "#8A3B12", "#0F6E6E"];
-export const autoLevel = (role: string) => (AUTO_GROUPS[role] || AUTO_GROUPS["Associado"]).level;
+/** Núcleo e linha do papel. Papel que não está mais no catálogo cai em "Associados". */
+export const autoGroupOf = (role: string) => AUTO_GROUPS[role] || AUTO_GROUPS["Associado"] || { name: "ASSOCIADOS", level: 3 };
+export const autoLevel = (role: string) => autoGroupOf(role).level;
 export const MAX_GRADE = 7;
 /** Grau do alvo (0 = topo): o definido pelo analista ou o da função. */
 export const levelOf = (t: InvestigationTarget) => (t.grade ? Math.min(MAX_GRADE, t.grade) - 1 : autoLevel(t.role));
@@ -52,7 +54,7 @@ const rank = (role: string) => { const i = TARGET_ROLES.indexOf(role); return i 
 export function groupKeyOf(t: InvestigationTarget, custom: OrgGroup[]) {
   if (t.cluster && custom.some((g) => g.name === t.cluster)) return `c:${t.cluster}`;
   // Mesmo núcleo da função em graus diferentes vira um quadro por grau.
-  return `a:${(AUTO_GROUPS[t.role] || AUTO_GROUPS["Associado"]).name}|${levelOf(t)}`;
+  return `a:${autoGroupOf(t.role).name}|${levelOf(t)}`;
 }
 
 /** Quebra o texto em linhas de até `max` caracteres. */

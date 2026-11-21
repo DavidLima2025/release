@@ -7,6 +7,7 @@ import {
 } from "../lib/investigation";
 import type { AppData, Notify } from "./useAppData";
 import type { ReportImage, ReportPerson } from "../lib/report/model";
+import { DEFAULT_ROLES, applyRoleCatalog, normalizeRole, sameRole, type RoleDef } from "../lib/roles";
 
 const INV_FIELDS: Record<string, string> = {
   title: "title", objective: "objective", origin: "origin", destination: "destination", summary: "summary", analysis: "analysis",
@@ -79,6 +80,8 @@ export function useInvestigations(data: AppData, notify: Notify) {
   const [targets, setTargets] = useState<InvestigationTarget[]>([]);
   const [links, setLinks] = useState<InvestigationLink[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [roles, setRoles] = useState<RoleDef[]>(DEFAULT_ROLES);
+  const rolesSig = useRef("");
   const enabled = data.permissions.investigations;
   const busy = useRef(false);
 
@@ -86,12 +89,19 @@ export function useInvestigations(data: AppData, notify: Notify) {
     if (!enabled || busy.current) return;
     busy.current = true;
     try {
-      const [inv, it, tg, lk] = await Promise.all([
+      const [inv, it, tg, lk, rl] = await Promise.all([
         supabase.from("investigations").select("*").order("opened_at", { ascending: false }),
         supabase.from("investigation_items").select("*").order("item_date", { ascending: true, nullsFirst: false }),
         supabase.from("investigation_targets").select("*").order("position", { ascending: true }),
         supabase.from("investigation_links").select("*").order("created_at", { ascending: true }),
+        supabase.from("target_roles").select("*").order("position", { ascending: true }).order("created_at", { ascending: true }),
       ]);
+      // Papéis: se a tabela ainda não existe (script 14 não rodou), segue com os papéis de sempre.
+      if (!rl.error && rl.data) {
+        const list = rl.data.map(normalizeRole).filter((r) => r.name);
+        const sig = JSON.stringify(list);
+        if (sig !== rolesSig.current) { rolesSig.current = sig; applyRoleCatalog(list); setRoles(list.length ? list : DEFAULT_ROLES); }
+      }
       if (inv.error) {
         if (/relation .* does not exist|Could not find the table/i.test(inv.error.message)) notify("Rode o script supabase/02_investigacoes.sql para ativar as investigações.", "error");
       } else setInvestigations((inv.data || []).map(normalizeInvestigation));
@@ -337,6 +347,46 @@ export function useInvestigations(data: AppData, notify: Notify) {
     return true;
   }
 
+  // ---------- Papéis dos alvos (criar e excluir) ----------
+  const setCatalog = (list: RoleDef[]) => { rolesSig.current = JSON.stringify(list); applyRoleCatalog(list); setRoles(list); };
+
+  async function addRole(def: { name: string; color: string; level: number; group: string }) {
+    const name = def.name.trim().replace(/\s+/g, " ");
+    if (name.length < 2 || name.length > 40) { notify("O nome do papel precisa ter de 2 a 40 letras.", "error"); return false; }
+    if (roles.some((r) => sameRole(r.name, name))) { notify(`Já existe o papel “${name}”.`, "error"); return false; }
+    const row = { name, color: def.color, level: def.level, group_name: def.group.trim().toUpperCase(), position: roles.length, created_by: data.currentUser?.id || null };
+    const { data: created, error } = await supabase.from("target_roles").insert(row).select("*").single();
+    if (error) {
+      if (/duplicate|unique/i.test(error.message)) { notify(`Já existe o papel “${name}”.`, "error"); return false; }
+      if (/relation .* does not exist|Could not find the table/i.test(error.message)) { notify("Rode o script supabase/14_papeis_dos_alvos.sql para ativar os papéis.", "error"); return false; }
+      fail(error, "Erro ao criar o papel."); return false;
+    }
+    setCatalog([...roles, normalizeRole(created)]);
+    audit("Papel criado", `Criou o papel ${name} (${def.level + 1}º grau).`);
+    notify(`Papel “${name}” criado.`);
+    return true;
+  }
+
+  /** Exclui o papel. Se há alvos com ele, `moveTo` diz para qual papel eles passam (o histórico do alvo registra). */
+  async function deleteRole(role: RoleDef, moveTo = "") {
+    if (!role.id) { notify("O catálogo de papéis ainda não carregou. Tente de novo em instantes.", "error"); return false; }
+    if (roles.length <= 1) { notify("Mantenha pelo menos um papel.", "error"); return false; }
+    const using = targets.filter((t) => t.role === role.name);
+    if (using.length) {
+      if (!moveTo || moveTo === role.name || !roles.some((r) => r.name === moveTo)) { notify("Escolha para qual papel os alvos vão.", "error"); return false; }
+      const ok = await applyTargets(using.map((t) => ({ target: t, role: moveTo, parentId: t.parentId })), `papel ${role.name} → ${moveTo}`);
+      if (!ok) return false;
+      // A exclusão do papel não tem volta: não deixa o "Desfazer" devolver alvos a um papel que deixou de existir.
+      undoStack.current.pop(); setUndoCount(undoStack.current.length);
+    }
+    const { error } = await supabase.from("target_roles").delete().eq("id", role.id);
+    if (error) { fail(error, "Erro ao excluir o papel."); return false; }
+    setCatalog(roles.filter((r) => r.id !== role.id));
+    audit("Papel excluído", `Excluiu o papel ${role.name}${using.length ? ` (${using.length} alvo(s) passaram para ${moveTo})` : ""}.`);
+    notify(`Papel “${role.name}” excluído.`);
+    return true;
+  }
+
   /** Salva as posições arrastadas à mão no quadro por núcleos (com "Desfazer"). */
   async function setOrgLayout(inv: Investigation, layout: BoardLayout, label: string) {
     pushUndo({ label, layout: { invId: inv.id, value: inv.orgLayout } });
@@ -448,7 +498,7 @@ export function useInvestigations(data: AppData, notify: Notify) {
   }
 
   return {
-    investigations, items, targets, links, loaded, reload: load,
+    investigations, items, targets, links, loaded, reload: load, roles, addRole, deleteRole,
     createInvestigation, updateInvestigation, toggleStageItem, setStage, deleteInvestigation,
     saveItem, deleteItem, openItemFile, setItemLocation, itemFileUrl, addTarget, addUnknownTarget, createAndAddTarget, updateTarget, applyTargets, setOrgLayout, undo, undoLabel, undoCount, removeTarget, addLink, deleteLink, generateReport,
   };

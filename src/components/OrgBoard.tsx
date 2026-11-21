@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import { ROLE_COLOR, emptyLayout, type InvestigationLink, type InvestigationTarget, type OrgGroup, type BoardLayout } from "../lib/investigation";
+import { roleCatalogVersion } from "../lib/roles";
 import { CARD_H, CARD_W, buildBoard, layoutWithCard, layoutWithGroup, snap, type AutoLink } from "../lib/orgBoard";
 
 export type BoardPerson = {
@@ -53,11 +54,13 @@ type Moving = { kind: "card" | "group"; id: string; g: string; x: number; y: num
 
 export function OrgBoard({ targets, links, groups: custom, autoLinks = [], people, selectedId, onSelect, onOpen, dragMode = "superior", layout, onLayoutChange, onDropOnTarget, onLinkDrop, onDropOnGroup, exportMode, scale }: Props) {
   const lay = layout || NO_LAYOUT;
+  // Papéis criados/excluídos mudam cor, grau e núcleo: refaz o quadro.
+  const catalog = roleCatalogVersion();
   const [mv, setMv] = useState<Moving | null>(null);
-  const baseBoard = useMemo(() => buildBoard(targets, links, custom, autoLinks, lay), [targets, links, custom, autoLinks, lay]);
+  const baseBoard = useMemo(() => buildBoard(targets, links, custom, autoLinks, lay), [targets, links, custom, autoLinks, lay, catalog]);
   // Durante o arraste o quadro é recalculado a cada movimento: as setas acompanham o cartão.
   const liveLayout = useMemo(() => (!mv ? lay : mv.kind === "card" ? layoutWithCard(lay, mv.id, mv.g, mv) : layoutWithGroup(lay, baseBoard, mv.id, mv)), [lay, mv, baseBoard]);
-  const board = useMemo(() => (mv ? buildBoard(targets, links, custom, autoLinks, liveLayout) : baseBoard), [mv, baseBoard, liveLayout, targets, links, custom, autoLinks]);
+  const board = useMemo(() => (mv ? buildBoard(targets, links, custom, autoLinks, liveLayout) : baseBoard), [mv, baseBoard, liveLayout, targets, links, custom, autoLinks, catalog]);
   const byId = new Map(targets.map((t) => [t.id, t]));
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
