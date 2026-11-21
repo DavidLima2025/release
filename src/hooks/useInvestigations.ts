@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { INVESTIGATION_BUCKET, supabase } from "../supabase";
 import { safeFileName, Author } from "../lib/domain";
 import {
-  Investigation, InvestigationItem, InvestigationLink, InvestigationTarget, StageKey, STAGES,
+  BoardLayout, Investigation, InvestigationItem, InvestigationLink, InvestigationTarget, StageKey, STAGES,
   normalizeInvestigation, normalizeItem, normalizeLink, normalizeTarget, slug, stageIndex, newId,
 } from "../lib/investigation";
 import type { AppData, Notify } from "./useAppData";
@@ -12,7 +12,7 @@ const INV_FIELDS: Record<string, string> = {
   title: "title", objective: "objective", origin: "origin", destination: "destination", summary: "summary", analysis: "analysis",
   conclusion: "conclusion", recommendations: "recommendations", methodology: "methodology", classification: "classification",
   status: "status", stage: "stage", stages: "stages", priority: "priority", nature: "nature", area: "area", responsibleId: "responsible_id",
-  team: "team", openedAt: "opened_at", dueDate: "due_date", closedAt: "closed_at", orgGroups: "org_groups",
+  team: "team", openedAt: "opened_at", dueDate: "due_date", closedAt: "closed_at", orgGroups: "org_groups", orgLayout: "org_layout",
 };
 const ITEM_FIELDS: Record<string, string> = {
   kind: "kind", title: "title", itemDate: "item_date", source: "source", reference: "reference", url: "url", sourceRating: "source_rating",
@@ -255,7 +255,7 @@ export function useInvestigations(data: AppData, notify: Notify) {
   }
 
   // ---------- Desfazer (organograma) ----------
-  type Undo = { label: string; targets?: InvestigationTarget[]; linkAdded?: string; linkRemoved?: InvestigationLink };
+  type Undo = { label: string; targets?: InvestigationTarget[]; linkAdded?: string; linkRemoved?: InvestigationLink; layout?: { invId: string; value: BoardLayout } };
   const undoStack = useRef<Undo[]>([]);
   const [undoCount, setUndoCount] = useState(0);
   const pushUndo = (u: Undo) => { undoStack.current = [...undoStack.current.slice(-29), u]; setUndoCount(undoStack.current.length); };
@@ -337,6 +337,12 @@ export function useInvestigations(data: AppData, notify: Notify) {
     return true;
   }
 
+  /** Salva as posições arrastadas à mão no quadro por núcleos (com "Desfazer"). */
+  async function setOrgLayout(inv: Investigation, layout: BoardLayout, label: string) {
+    pushUndo({ label, layout: { invId: inv.id, value: inv.orgLayout } });
+    return updateInvestigation(inv, { orgLayout: layout }, "");
+  }
+
   /** Volta a última mudança do organograma (função, superior, núcleo, área ou vínculo). */
   async function undo() {
     const u = undoStack.current.pop(); setUndoCount(undoStack.current.length);
@@ -344,6 +350,11 @@ export function useInvestigations(data: AppData, notify: Notify) {
     if (u.targets) {
       setTargets((list) => list.map((t) => { const o = u.targets!.find((x) => x.id === t.id); return o ? { ...t, role: o.role, parentId: o.parentId, cluster: o.cluster, area: o.area, history: o.history, grade: o.grade } : t; }));
       await Promise.all(u.targets.map((o) => supabase.from("investigation_targets").update(toRowT({ role: o.role, parentId: o.parentId, cluster: o.cluster, area: o.area, history: o.history, grade: o.grade })).eq("id", o.id)));
+    }
+    if (u.layout) {
+      const { invId, value } = u.layout;
+      setInvestigations((list) => list.map((i) => (i.id === invId ? { ...i, orgLayout: value } : i)));
+      await supabase.from("investigations").update({ org_layout: value }).eq("id", invId);
     }
     if (u.linkAdded) {
       setLinks((list) => list.filter((l) => l.id !== u.linkAdded));
@@ -439,7 +450,7 @@ export function useInvestigations(data: AppData, notify: Notify) {
   return {
     investigations, items, targets, links, loaded, reload: load,
     createInvestigation, updateInvestigation, toggleStageItem, setStage, deleteInvestigation,
-    saveItem, deleteItem, openItemFile, setItemLocation, itemFileUrl, addTarget, addUnknownTarget, createAndAddTarget, updateTarget, applyTargets, undo, undoLabel, undoCount, removeTarget, addLink, deleteLink, generateReport,
+    saveItem, deleteItem, openItemFile, setItemLocation, itemFileUrl, addTarget, addUnknownTarget, createAndAddTarget, updateTarget, applyTargets, setOrgLayout, undo, undoLabel, undoCount, removeTarget, addLink, deleteLink, generateReport,
   };
 }
 

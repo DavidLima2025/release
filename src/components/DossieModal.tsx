@@ -55,7 +55,7 @@ export function DossieModal({ open, onClose, data, api, inv, targets, links }: P
       boardPeople.set(t.id, { name: a.name, alias: a.alias, photo: img?.dataUrl, role: t.role, area: t.area, evidence: t.evidence.length, bos, status: groupStatus(t), confidence });
     }
     const { renderBoardImage } = await import("../lib/boardImage");
-    const orgImage = await renderBoardImage(targets, links, inv.orgGroups, boardPeople, autoLinksFor(targets, data.authors)).catch((e) => { console.error(e); return undefined; });
+    const orgImage = await renderBoardImage(targets, links, inv.orgGroups, boardPeople, autoLinksFor(targets, data.authors), inv.orgLayout).catch((e) => { console.error(e); return undefined; });
     const fichas: Uint8Array[] = [];
     const list = ordered.filter((t) => chosen.has(t.id));
     for (const [i, t] of list.entries()) {

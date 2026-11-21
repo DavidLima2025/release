@@ -2,7 +2,7 @@
 // Regras de posição FIXAS e previsíveis: a linha de cada quadro depende só da função (ou do nível
 // escolhido para o núcleo), nunca das setas. Assim, ligar um alvo a outro não faz o líder "descer"
 // nem o receptador "subir": muda só a seta.
-import { TARGET_ROLES, ROLE_COLOR, type InvestigationLink, type InvestigationTarget, type OrgGroup } from "./investigation";
+import { TARGET_ROLES, ROLE_COLOR, type InvestigationLink, type InvestigationTarget, type OrgGroup, type BoardLayout } from "./investigation";
 
 export const CARD_W = 112;
 export const CARD_H = 166;
@@ -39,8 +39,9 @@ export const levelOf = (t: InvestigationTarget) => (t.grade ? Math.min(MAX_GRADE
 /** Nome do núcleo a partir da chave ("a:EXECUTORES|2" → "EXECUTORES"). */
 export const groupNameOfKey = (key: string) => key.slice(2).split("|")[0];
 
-export type BoardCard = { targetId: string; x: number; y: number };
-export type BoardGroup = { key: string; name: string; custom: boolean; color: string; activities: string[]; level: number; order: number; x: number; y: number; w: number; h: number; cards: BoardCard[]; lanesTop: number; actTop: number };
+/** x,y relativos ao quadro; manual = o analista arrastou este cartão para fora do lugar automático. */
+export type BoardCard = { targetId: string; x: number; y: number; manual?: boolean };
+export type BoardGroup = { key: string; name: string; custom: boolean; color: string; activities: string[]; level: number; order: number; x: number; y: number; w: number; h: number; cards: BoardCard[]; lanesTop: number; actTop: number; manual?: boolean };
 /** from/to: alvos ligados pela seta (para destacar a cadeia de comando do alvo selecionado). */
 export type BoardArrow = { d: string; kind: "chefia" | "vinculo" | "auto"; label?: string; lx?: number; ly?: number; id: string; from?: string; to?: string[]; ends?: { x: number; y: number }[] };
 export type AutoLink = { a: string; b: string; label: string };
@@ -65,7 +66,27 @@ export function wrapText(text: string, max: number) {
   return out;
 }
 
-export function buildBoard(targets: InvestigationTarget[], links: InvestigationLink[], custom: OrgGroup[], autoLinks: AutoLink[] = []): Board {
+/** Arredonda a posição arrastada (grade de 4 px: alinha sem "travar"). */
+export const snap = (v: number) => Math.max(0, Math.round(v / 4) * 4);
+
+/** Layout com um cartão colocado em (x,y) absoluto, ou sem ele (null) para voltar ao automático. */
+export function layoutWithCard(layout: BoardLayout, id: string, groupKey: string, pos: { x: number; y: number } | null): BoardLayout {
+  const cards = { ...layout.cards };
+  if (pos) cards[id] = { x: Math.max(0, Math.round(pos.x)), y: Math.max(0, Math.round(pos.y)), g: groupKey }; else delete cards[id];
+  return { ...layout, cards };
+}
+
+/** Layout com o núcleo em (x,y): os cartões dele que já estavam soltos acompanham. `board` = tabuleiro ANTES do movimento. */
+export function layoutWithGroup(layout: BoardLayout, board: Board, key: string, pos: { x: number; y: number }): BoardLayout {
+  const g = board.groups.find((k) => k.key === key); if (!g) return layout;
+  const x = Math.max(0, Math.round(pos.x)); const y = Math.max(0, Math.round(pos.y));
+  const dx = x - g.x; const dy = y - g.y;
+  const cards = { ...layout.cards };
+  for (const c of g.cards) { const o = cards[c.targetId]; if (o && o.g === key) cards[c.targetId] = { x: Math.max(0, Math.round(o.x + dx)), y: Math.max(0, Math.round(o.y + dy)), g: key }; }
+  return { groups: { ...layout.groups, [key]: { x, y } }, cards };
+}
+
+export function buildBoard(targets: InvestigationTarget[], links: InvestigationLink[], custom: OrgGroup[], autoLinks: AutoLink[] = [], layout?: BoardLayout): Board {
   const byId = new Map(targets.map((t) => [t.id, t]));
   const groupOf = new Map<string, string>();
   const groups = new Map<string, BoardGroup>();
@@ -88,13 +109,22 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
   // Núcleo do analista sem nível escolhido: fica na linha da função mais alta entre os membros.
   for (const g of groups.values()) if (g.level < 0) g.level = Math.min(...g.cards.map((c) => levelOf(byId.get(c.targetId)!)));
 
+  // Cartões que o analista arrastou para fora do lugar: as setas deles não usam as "faixas" do quadro.
+  const movedCards = new Set<string>(); const movedGroups = new Set<string>();
+  for (const g of groups.values()) {
+    if (layout?.groups[g.key]) movedGroups.add(g.key);
+    for (const c of g.cards) { const o = layout?.cards[c.targetId]; if (o && o.g === g.key) movedCards.add(c.targetId); }
+  }
+  const sameBox = (a: string, b: string) => groupOf.get(a) === groupOf.get(b) && !movedCards.has(a) && !movedCards.has(b);
+  const moved = (id: string) => movedCards.has(id) || movedGroups.has(groupOf.get(id)!);
+
   // Ligações dentro do mesmo quadro usam "faixas" embaixo dos cartões.
   type Inner = { kind: "chefia" | "vinculo" | "auto"; a: string; b: string; label?: string; id: string };
   const inner = new Map<string, Inner[]>();
   const addInner = (g: string, v: Inner) => { inner.set(g, [...(inner.get(g) || []), v]); };
-  for (const t of targets) if (t.parentId && byId.has(t.parentId) && groupOf.get(t.parentId) === groupOf.get(t.id)) addInner(groupOf.get(t.id)!, { kind: "chefia", a: t.parentId, b: t.id, id: `h-${t.id}` });
-  for (const l of links) if (byId.has(l.fromTarget) && byId.has(l.toTarget) && groupOf.get(l.fromTarget) === groupOf.get(l.toTarget)) addInner(groupOf.get(l.fromTarget)!, { kind: "vinculo", a: l.fromTarget, b: l.toTarget, label: l.relation, id: `l-${l.id}` });
-  for (const [i, l] of autoLinks.entries()) if (byId.has(l.a) && byId.has(l.b) && groupOf.get(l.a) === groupOf.get(l.b)) addInner(groupOf.get(l.a)!, { kind: "auto", a: l.a, b: l.b, label: l.label, id: `x-${i}` });
+  for (const t of targets) if (t.parentId && byId.has(t.parentId) && sameBox(t.parentId, t.id)) addInner(groupOf.get(t.id)!, { kind: "chefia", a: t.parentId, b: t.id, id: `h-${t.id}` });
+  for (const l of links) if (byId.has(l.fromTarget) && byId.has(l.toTarget) && sameBox(l.fromTarget, l.toTarget)) addInner(groupOf.get(l.fromTarget)!, { kind: "vinculo", a: l.fromTarget, b: l.toTarget, label: l.relation, id: `l-${l.id}` });
+  for (const [i, l] of autoLinks.entries()) if (byId.has(l.a) && byId.has(l.b) && sameBox(l.a, l.b)) addInner(groupOf.get(l.a)!, { kind: "auto", a: l.a, b: l.b, label: l.label, id: `x-${i}` });
 
   // Tamanho de cada quadro.
   for (const g of groups.values()) {
@@ -131,13 +161,20 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
     rows.push({ groups: row, top: y, bottom: y + h, level: lv });
     y += h + GAP_ROW;
   }
-  const width = LEFT + Math.max(360, ...rows.map((r) => r.groups.reduce((s, g) => s + g.w, 0) + GAP_GROUP * (r.groups.length - 1) + MARGIN * 2));
+  const baseW = LEFT + Math.max(360, ...rows.map((r) => r.groups.reduce((s, g) => s + g.w, 0) + GAP_GROUP * (r.groups.length - 1) + MARGIN * 2));
   for (const r of rows) {
     const rw = r.groups.reduce((s, g) => s + g.w, 0) + GAP_GROUP * (r.groups.length - 1);
-    const off = LEFT + (width - LEFT - rw) / 2 - MARGIN;
+    const off = LEFT + (baseW - LEFT - rw) / 2 - MARGIN;
     r.groups.forEach((g) => { g.x += off; });
   }
-  const height = y - GAP_ROW + MARGIN + 24;
+  // Posições arrastadas à mão: os demais quadros ficam onde estão (não "andam"); o quadro cresce se precisar.
+  for (const g of groups.values()) { const o = layout?.groups[g.key]; if (o) { g.x = o.x; g.y = o.y; g.manual = true; } }
+  for (const g of groups.values()) for (const c of g.cards) { if (movedCards.has(c.targetId)) { const o = layout!.cards[c.targetId]; c.x = o.x - g.x; c.y = o.y - g.y; c.manual = true; } }
+  let width = baseW; let height = y - GAP_ROW + MARGIN + 24;
+  for (const g of groups.values()) {
+    width = Math.max(width, g.x + g.w + MARGIN); height = Math.max(height, g.y + g.h + MARGIN);
+    for (const c of g.cards) { width = Math.max(width, g.x + c.x + CARD_W + MARGIN); height = Math.max(height, g.y + c.y + CARD_H + MARGIN); }
+  }
   const rowOf = (g: BoardGroup) => rows.findIndex((r) => r.groups.includes(g));
 
   const cardBox = (id: string) => { const g = groups.get(groupOf.get(id)!)!; const c = g.cards.find((k) => k.targetId === id)!; return { x: g.x + c.x, y: g.y + c.y, cx: g.x + c.x + CARD_W / 2, g }; };
@@ -179,6 +216,48 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
     }
     arrows.push({ id, kind: "chefia", d, from, to });
   };
+  /** Seta de comando quando um dos lados foi movido à mão: cotovelo que tenta não atravessar quadros nem cartões soltos. */
+  let freeN = 0;
+  const freeRoute = (pid: string, tid: string | null, tg: BoardGroup, id: string, to: string[]) => {
+    const p = cardBox(pid);
+    const pBot = movedCards.has(pid) ? p.y + CARD_H : p.g.y + p.g.h; const pTop = movedCards.has(pid) ? p.y : p.g.y;
+    let tx: number; let tTop: number; let tBot: number;
+    if (tid) { const c = cardBox(tid); tx = c.cx; tTop = movedCards.has(tid) ? c.y : c.g.y; tBot = movedCards.has(tid) ? c.y + CARD_H : c.g.y + c.g.h; }
+    else { tx = tg.x + tg.w / 2; tTop = tg.y; tBot = tg.y + tg.h; }
+    const sx = p.cx;
+    // Obstáculos: quadros (menos os do próprio chefe/subordinado, se ainda estão dentro deles) e cartões soltos.
+    const skipG = [movedCards.has(pid) ? null : p.g, tid && movedCards.has(tid) ? null : tg];
+    const obs = [
+      ...all.filter((g) => !skipG.includes(g)).map((g) => ({ x: g.x, y: g.y, w: g.w, h: g.h })),
+      ...[...movedCards].filter((m) => m !== pid && m !== tid).map((m) => { const b = cardBox(m); return { x: b.x, y: b.y, w: CARD_W, h: CARD_H }; }),
+    ];
+    const hits = (pts: [number, number][]) => obs.filter((o) => pts.some((a, i) => {
+      if (!i) return false; const b = pts[i - 1];
+      return Math.max(a[0], b[0]) > o.x - 4 && Math.min(a[0], b[0]) < o.x + o.w + 4 && Math.max(a[1], b[1]) > o.y - 4 && Math.min(a[1], b[1]) < o.y + o.h + 4;
+    })).length;
+    const len = (pts: [number, number][]) => pts.reduce((n, a, i) => (i ? n + Math.abs(a[0] - pts[i - 1][0]) + Math.abs(a[1] - pts[i - 1][1]) : 0), 0);
+    const toD = (pts: [number, number][]) => `M${pts.map((q) => q.join(",")).join(" L")}`;
+    let pts: [number, number][];
+    const down = tTop >= pBot + 24; const up = !down && tBot <= pTop - 24;
+    if (down || up) {
+      const sy = down ? pBot : pTop; const ey = down ? tTop - 2 : tBot + 2; const dir = down ? 1 : -1;
+      const f = 0.3 + (freeN++ % 5) * 0.1; const mid = sy + (ey - sy) * f;
+      const lo = Math.min(sy, ey) + 8; const hi = Math.max(sy, ey) - 8;
+      const ys = [mid, ...obs.flatMap((o) => [o.y - 12, o.y + o.h + 12])].filter((y) => y > lo && y < hi);
+      const cands: [number, number][][] = ys.map((y) => [[sx, sy], [sx, y], [tx, y], [tx, ey]]);
+      // Dando a volta por um corredor livre entre quadros (ou pela margem).
+      if (Math.abs(ey - sy) > 48) {
+        const yA = sy + dir * 14; const yB = ey - dir * 14;
+        const xs = [MARGIN / 2, width - MARGIN / 2, ...all.flatMap((g) => [g.x - GAP_GROUP / 2, g.x + g.w + GAP_GROUP / 2])].filter((x) => x > 0 && x < width);
+        xs.forEach((cx) => cands.push([[sx, sy], [sx, yA], [cx, yA], [cx, yB], [tx, yB], [tx, ey]]));
+      }
+      pts = cands.map((c) => ({ c, h: hits(c), l: len(c) })).sort((a, b) => a.h - b.h || a.l - b.l)[0].c;
+    } else {
+      const yb = Math.max(pBot, tBot) + 14 + lane("free");
+      pts = [[sx, pBot], [sx, yb], [tx, yb], [tx, tBot + 2]];
+    }
+    arrows.push({ id, kind: "chefia", d: toD(pts), from: pid, to });
+  };
   const handled = new Set<string>();
   // Um superior que comanda o quadro inteiro: uma seta só, até o quadro.
   for (const g of groups.values()) {
@@ -186,14 +265,17 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
     if (g.cards.length < 2 || parents.size !== 1) continue;
     const pid = [...parents][0];
     if (!pid || !byId.has(pid) || groupOf.get(pid) === g.key) continue;
+    if (g.cards.some((c) => movedCards.has(c.targetId))) continue;
     const p = cardBox(pid);
-    route(p.cx, p.g, g.x + g.w / 2, g, `g-${g.key}`, pid, g.cards.map((c) => c.targetId));
+    if (moved(pid) || movedGroups.has(g.key)) freeRoute(pid, null, g, `g-${g.key}`, g.cards.map((c) => c.targetId));
+    else route(p.cx, p.g, g.x + g.w / 2, g, `g-${g.key}`, pid, g.cards.map((c) => c.targetId));
     g.cards.forEach((c) => handled.add(c.targetId));
   }
   for (const t of targets) {
-    if (!t.parentId || !byId.has(t.parentId) || handled.has(t.id) || groupOf.get(t.parentId) === groupOf.get(t.id)) continue;
+    if (!t.parentId || !byId.has(t.parentId) || handled.has(t.id) || sameBox(t.parentId, t.id)) continue;
     const p = cardBox(t.parentId); const c = cardBox(t.id);
-    route(p.cx, p.g, c.cx, c.g, `h-${t.id}`, t.parentId, [t.id]);
+    if (moved(t.parentId) || moved(t.id)) freeRoute(t.parentId, t.id, c.g, `h-${t.id}`, [t.id]);
+    else route(p.cx, p.g, c.cx, c.g, `h-${t.id}`, t.parentId, [t.id]);
   }
   // Ligações dentro do quadro: faixas embaixo dos cartões.
   for (const g of groups.values()) {
@@ -227,14 +309,15 @@ export function buildBoard(targets: InvestigationTarget[], links: InvestigationL
       return x > o.x + 6 && x < o.x + CARD_W - 6 && y > o.y && y < o.y + CARD_H - 10;
     }));
     if (blocked) {
-      const yL = Math.max(a.g.y + a.g.h, b.g.y + b.g.h) + 12 + lane(`lk${rowOf(a.g)}`);
+      const bot = (id: string, k: { y: number; g: BoardGroup }) => (movedCards.has(id) ? k.y + CARD_H : k.g.y + k.g.h);
+      const yL = Math.max(bot(ida, a), bot(idb, b)) + 12 + lane(`lk${rowOf(a.g)}`);
       const s1 = { x: ac.x, y: a.y + CARD_H - 4 }; const s2 = { x: bc.x, y: b.y + CARD_H - 4 };
       arrows.push({ id, kind, label, d: `M${s1.x},${s1.y} V${yL} H${s2.x} V${s2.y}`, lx: (s1.x + s2.x) / 2, ly: yL, from: ida, to: [idb], ends: [s1, s2] });
       return;
     }
     arrows.push({ id, kind, label, d: `M${p1.x},${p1.y} L${p2.x},${p2.y}`, lx: (p1.x + p2.x) / 2, ly: (p1.y + p2.y) / 2, from: ida, to: [idb], ends: [p1, p2] });
   };
-  for (const l of links) if (byId.has(l.fromTarget) && byId.has(l.toTarget) && groupOf.get(l.fromTarget) !== groupOf.get(l.toTarget)) straight(l.fromTarget, l.toTarget, "vinculo", l.relation, `l-${l.id}`);
-  autoLinks.forEach((l, i) => { if (byId.has(l.a) && byId.has(l.b) && groupOf.get(l.a) !== groupOf.get(l.b)) straight(l.a, l.b, "auto", l.label, `x-${i}`); });
+  for (const l of links) if (byId.has(l.fromTarget) && byId.has(l.toTarget) && !sameBox(l.fromTarget, l.toTarget)) straight(l.fromTarget, l.toTarget, "vinculo", l.relation, `l-${l.id}`);
+  autoLinks.forEach((l, i) => { if (byId.has(l.a) && byId.has(l.b) && !sameBox(l.a, l.b)) straight(l.a, l.b, "auto", l.label, `x-${i}`); });
   return { width, height, groups: [...groups.values()], arrows, groupOf, rows: rows.map((r) => ({ level: r.level, top: r.top, bottom: r.bottom })) };
 }

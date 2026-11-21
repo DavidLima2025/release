@@ -13,7 +13,7 @@ import { BoAuthorModal } from "../components/BoAuthorModal";
 import { DossieModal } from "../components/DossieModal";
 import { CompareModal, EvidenceModal, GroupTimeline, GroupsModal, HierarchyModal, LinkDropModal, SharedContactsPanel, UnknownModal } from "../components/OrgTools";
 import { autoLinksFor } from "../lib/sharedContacts";
-import { groupStatus, type Confidence } from "../lib/investigation";
+import { emptyLayout, groupStatus, layoutIsEmpty, type Confidence } from "../lib/investigation";
 import { OrgBoard, type BoardPerson } from "../components/OrgBoard";
 import { AUTO_GROUPS, LEVEL_LABELS, MAX_GRADE, autoLevel, groupKeyOf, groupNameOfKey, levelOf, roleOfAutoGroup } from "../lib/orgBoard";
 import { redsCount } from "../lib/companions";
@@ -390,7 +390,7 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
   const [compareOpen, setCompareOpen] = useState(false);
   const [ficha, setFicha] = useState<Author | null>(null);
   const [orgView, setOrgView] = useState<"quadro" | "arvore">("quadro");
-  const [dragMode, setDragMode] = useState<"superior" | "vinculo">("superior");
+  const [dragMode, setDragMode] = useState<"superior" | "vinculo" | "mover">("superior");
   const [linkPair, setLinkPair] = useState<{ from: string; to: string } | null>(null);
   const [unknownOpen, setUnknownOpen] = useState(false);
   const [identify, setIdentify] = useState<InvestigationTarget | null>(null);
@@ -544,12 +544,16 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
             </div>} />
           {targets.length > 0 && (
             <div className="mb-2 flex flex-wrap items-center gap-2 rounded-sm bg-pm-cream/70 px-2 py-1.5 text-xs">
-              <span className="font-bold uppercase text-pm-muted">Arrastar um alvo sobre outro:</span>
+              <span className="font-bold uppercase text-pm-muted">Ao arrastar:</span>
               <div className="flex overflow-hidden rounded-sm border border-pm-line font-bold">
                 <button type="button" onClick={() => setDragMode("superior")} className={`px-3 py-1.5 ${dragMode === "superior" ? "bg-[#C0201A] text-white" : "bg-white"}`}>▼ define o superior</button>
                 <button type="button" onClick={() => setDragMode("vinculo")} className={`px-3 py-1.5 ${dragMode === "vinculo" ? "bg-[#2E6B3A] text-white" : "bg-white"}`}>⇢ cria vínculo</button>
+                <button type="button" onClick={() => setDragMode("mover")} className={`px-3 py-1.5 ${dragMode === "mover" ? "bg-[#2F5D7C] text-white" : "bg-white"}`}>✥ move livremente</button>
               </div>
-              <span className="text-pm-muted">A altura de cada alvo é o <b>grau</b>: pela função ou o que você definir.</span>
+              {dragMode === "mover"
+                ? <span className="text-pm-muted">Arraste um <b>cartão</b> ou um <b>núcleo</b> (pelo título ou fundo do quadro) para onde quiser — a posição fica salva.</span>
+                : <span className="text-pm-muted">A altura de cada alvo é o <b>grau</b>: pela função ou o que você definir.</span>}
+              <Button size="sm" disabled={layoutIsEmpty(inv.orgLayout)} onClick={() => api.setOrgLayout(inv, emptyLayout(), "posições soltas → automático")} title="Tira todas as posições arrastadas e volta ao desenho automático (dá para desfazer)">⟲ Reorganizar automático</Button>
               {selT && (
                 <span className="flex items-center gap-1 rounded-sm border border-pm-gold bg-white px-2 py-1">
                   <b className="max-w-[160px] truncate uppercase">{nameOf(selT.id)}</b>: {levelOf(selT) + 1}º grau ·
@@ -565,7 +569,13 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
             </div>
           )}
           {targets.length === 0 ? <EmptyState icon={Users} title="Nenhum alvo no dossiê">Vincule alvos do banco de alvos ou cadastre novos ao lado.</EmptyState>
-            : orgView === "quadro" ? <OrgBoard targets={targets} links={links} groups={inv.orgGroups} autoLinks={autoLinks} people={boardPeople} selectedId={selected} onSelect={(t) => setSelected((cur) => (cur === t.id ? "" : t.id))} onOpen={(t) => (authorOf(t) ? setFicha(authorOf(t)!) : setIdentify(t))}
+            : orgView === "quadro" ? <OrgBoard targets={targets} links={links} groups={inv.orgGroups} autoLinks={autoLinks} people={boardPeople} selectedId={selected}
+                layout={inv.orgLayout} onLayoutChange={(next, what) => {
+                  // Só guarda posições de alvos que ainda existem no dossiê.
+                  const ids = new Set(targets.map((t) => t.id));
+                  const cards = Object.fromEntries(Object.entries(next.cards).filter(([id]) => ids.has(id)));
+                  api.setOrgLayout(inv, { ...next, cards }, what.kind === "card" ? `posição de ${nameOf(what.id)}` : `posição do núcleo ${groupNameOfKey(what.id)}`);
+                }} onSelect={(t) => setSelected((cur) => (cur === t.id ? "" : t.id))} onOpen={(t) => (authorOf(t) ? setFicha(authorOf(t)!) : setIdentify(t))}
                 dragMode={dragMode} onLinkDrop={(t, to) => setLinkPair({ from: t.id, to })}
                 onDropOnTarget={(t, parentId) => api.updateTarget(t, { parentId })}
                 onDropOnGroup={(t, key) => {
