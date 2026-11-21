@@ -60,14 +60,16 @@ export function FaceCompareView({ data }: { data: AppData }) {
   };
 
   const fa = a.faces[a.pick]; const fb = b.faces[b.pick];
-  const dist = fa && fb ? faceDistance(fa.descriptor, fb.descriptor) : null;
-  const v = dist !== null ? verdict(dist) : null;
+  const dist = fa && fb ? faceDistance(fa.emb, fb.emb) : null;
+  const rawDist = fa && fb ? faceDistance(fa.descriptor, fb.descriptor) : null;
+  const hard = !!fa && !!fb && (fa.warnings.length > 0 || fb.warnings.length > 0);
+  const v = dist !== null ? verdict(dist, hard) : null;
   const score = dist !== null ? similarity(dist) : null;
   const toneCls: Record<string, string> = { done: "bg-status-done text-white", risk: "bg-status-risk text-white", late: "bg-status-late text-white", muted: "bg-pm-sand text-pm-ink" };
 
   useEffect(() => {
     if (dist === null) return;
-    data.addAudit("Comparação facial", `${a.name || "foto A"} × ${b.name || "foto B"}: índice ${score}% (distância ${dist.toFixed(3)}).`);
+    data.addAudit("Comparação facial", `${a.name || "foto A"} × ${b.name || "foto B"}: índice ${score}% (distância ${dist.toFixed(3)}; sem alinhar ${rawDist !== null ? rawDist.toFixed(3) : "-"}).`);
   }, [dist]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Junta as duas fotos (rostos recortados) com o resultado numa imagem. */
@@ -134,8 +136,9 @@ export function FaceCompareView({ data }: { data: AppData }) {
                 </div>
                 <div className="flex justify-between text-[10px] font-bold uppercase text-pm-muted"><span>diferentes</span><span>inconclusivo</span><span>mesma pessoa</span></div>
                 <p className="text-xs text-pm-muted">Distância entre as "impressões" dos rostos: <b>{dist.toFixed(3)}</b> (quanto menor, mais parecidos; limiar usual do modelo: 0,60).</p>
+                <p className="text-[11px] text-pm-muted">{fa!.aligned && fb!.aligned ? <>Rostos endireitados pela linha dos olhos e comparados também espelhados. Sem esse ajuste a distância seria <b>{rawDist!.toFixed(3)}</b>.</> : <>Não foi possível endireitar {fa!.aligned ? "o rosto B" : fb!.aligned ? "o rosto A" : "os rostos"}; usada a leitura direta do modelo{rawDist !== null ? ` (${rawDist.toFixed(3)})` : ""}.</>}</p>
                 {[...fa!.warnings.map((w) => `Foto A: ${w}`), ...fb!.warnings.map((w) => `Foto B: ${w}`)].length > 0 && (
-                  <p className="rounded-sm bg-status-risk/10 px-2 py-1 text-xs font-semibold text-status-risk">Atenção à qualidade — {[...fa!.warnings.map((w) => `A: ${w}`), ...fb!.warnings.map((w) => `B: ${w}`)].join("; ")}. O resultado é menos confiável.</p>
+                  <p className="rounded-sm bg-status-risk/10 px-2 py-1 text-xs font-semibold text-status-risk">Atenção à qualidade — {[...fa!.warnings.map((w) => `A: ${w}`), ...fb!.warnings.map((w) => `B: ${w}`)].join("; ")}. Com foto assim a distância sobe mesmo para a mesma pessoa: o resultado é menos confiável e "diferentes" só vale com distância bem alta.</p>
                 )}
                 <div className="flex flex-wrap gap-2 pt-1">
                   <Button size="sm" onClick={download}><Download />Baixar resultado (imagem)</Button>
@@ -206,6 +209,7 @@ function FaceSlot({ side, label, data, busy, onFile, onAuthor, onPick, onClear, 
             {side.status === "pronto" && side.rotation ? <p className="text-xs font-semibold text-pm-gold-dark">A foto foi girada {side.rotation}° para achar o rosto (pessoa deitada ou celular de lado).</p> : null}
             {side.status === "erro" && <p className="text-sm font-semibold text-status-late">Não foi possível ler a imagem.</p>}
             {side.faces.length > 1 && <p className="text-xs text-pm-muted">{side.faces.length} rostos na foto — toque no rosto certo (o amarelo é o usado).</p>}
+            {side.faces[side.pick]?.aligned && Math.abs(side.faces[side.pick].roll) >= 8 ? <p className="text-xs font-semibold text-pm-gold-dark">Cabeça inclinada {Math.abs(Math.round(side.faces[side.pick].roll))}°: o rosto é endireitado antes de comparar.</p> : null}
             {side.faces[side.pick] && <p className="text-xs text-pm-muted">Pontos verdes: os 68 pontos do rosto usados para alinhar (olhos, sobrancelhas, nariz, boca e mandíbula).{side.faces[side.pick].warnings.length ? <b className="text-status-risk"> Qualidade: {side.faces[side.pick].warnings.join(", ")}.</b> : ""}</p>}
           </div>
         )}
