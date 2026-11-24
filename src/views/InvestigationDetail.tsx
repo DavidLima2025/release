@@ -1,14 +1,14 @@
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  ArrowLeft, Check, ChevronRight, Download, Edit3, ExternalLink, FileSearch, FileText, GitFork, History, Link2, Loader2,
+  ArrowLeft, Check, ChevronDown, ChevronRight, Download, Edit3, ExternalLink, FileSearch, FileText, GitFork, History, Link2, Loader2,
   Map as MapIcon, Paperclip, Plus, Presentation, Save, ScanText, Search, Sparkles, Layers, Binoculars, MapPin, Trash2, UserRound, UserPlus, Users,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, EmptyState, SectionHeader } from "../components/ui/card";
+import { Card, CardContent, Collapsible, EmptyState, SectionHeader } from "../components/ui/card";
 import { Field, Input, Select, Textarea } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Modal } from "../components/ui/modal";
-import { LinkChart, Organogram } from "../components/Organogram";
+import { Organogram } from "../components/Organogram";
 import { BoAuthorModal } from "../components/BoAuthorModal";
 import { RoleSelect } from "../components/RoleTools";
 import { DossieModal } from "../components/DossieModal";
@@ -142,7 +142,7 @@ function StageBoard({ inv, api }: { inv: Investigation; api: InvestigationsApi }
             );
           })}
         </ol>
-        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
+        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
           <div>
             <p className="pm-eyebrow">Etapa {current + 1} de {STAGES.length} · {progress.count}/{progress.total} itens</p>
             <p className="pm-heading mt-0.5">{stage.name}</p>
@@ -385,6 +385,10 @@ function ItemModal({ open, boMode, data, api, inv, item, targets, onClose }: {
 // ---------- Alvos, hierarquia e vínculos ----------
 function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: InvestigationsApi; inv: Investigation; targets: InvestigationTarget[]; links: InvestigationLink[] }) {
   const [selected, setSelected] = useState<string>("");
+  // Linhas da lista de alvos abertas (começam todas recolhidas).
+  const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
+  const toggleRow = (id: string) => setOpenIds((cur) => { const next = new Set(cur); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const allOpen = targets.length > 0 && targets.every((t) => openIds.has(t.id));
   const [picked, setPicked] = useState<string[]>([]);
   const [dossieOpen, setDossieOpen] = useState(false);
   const [hierOpen, setHierOpen] = useState(false);
@@ -576,7 +580,7 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
                   const ids = new Set(targets.map((t) => t.id));
                   const cards = Object.fromEntries(Object.entries(next.cards).filter(([id]) => ids.has(id)));
                   api.setOrgLayout(inv, { ...next, cards }, what.kind === "card" ? `posição de ${nameOf(what.id)}` : `posição do núcleo ${groupNameOfKey(what.id)}`);
-                }} onSelect={(t) => setSelected((cur) => (cur === t.id ? "" : t.id))} onOpen={(t) => (authorOf(t) ? setFicha(authorOf(t)!) : setIdentify(t))}
+                }} onSelect={(t) => { setSelected((cur) => (cur === t.id ? "" : t.id)); setOpenIds((cur) => (cur.has(t.id) ? cur : new Set(cur).add(t.id))); }} onOpen={(t) => (authorOf(t) ? setFicha(authorOf(t)!) : setIdentify(t))}
                 dragMode={dragMode} onLinkDrop={(t, to) => setLinkPair({ from: t.id, to })}
                 onDropOnTarget={(t, parentId) => api.updateTarget(t, { parentId })}
                 onDropOnGroup={(t, key) => api.updateTarget(t, groupDropPatch(t, key))} />
@@ -596,41 +600,105 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
         </CardContent>
       </Card>
 
-      {api.items.some((i) => i.investigationId === inv.id && i.authorIds.length) && (
-        <Card>
-          <CardContent>
-            <SectionHeader icon={Link2} title="Alvos × ocorrências" subtitle="Em quais BOs e fontes cada alvo aparece. Para ligar um alvo a uma fonte, edite a fonte e marque os alvos citados." />
-            <LinkChart targets={targets} items={api.items.filter((i) => i.investigationId === inv.id)} authors={data.authors} />
-          </CardContent>
-        </Card>
-      )}
+      {/* Vincular alvo e Vínculos ficam acima da lista de alvos */}
+      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-2">
+        <Collapsible icon={UserPlus} title="Vincular alvo" badge={suggestions.length ? `${suggestions.length} sugerido(s)` : undefined} subtitle="Buscar no banco de alvos, cadastrar um novo ou ler o BO.">
+              <div className="grid gap-2">
+            <div className="relative"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-pm-muted" />
+              <Input className="pl-9" placeholder="Buscar: nome, vulgo, RG/CPF, bairro…" value={search} onChange={(e) => setSearch(e.target.value)} autoComplete="off" />
+            </div>
+            {search.trim() && (
+              <div className="max-h-72 space-y-1 overflow-auto">
+                {candidates.length === 0 && <p className="px-1 text-sm text-pm-muted">Nenhum alvo encontrado. Cadastre abaixo.</p>}
+                {candidates.map((a) => row(a))}
+              </div>
+            )}
+            {!search.trim() && suggestions.length > 0 && (
+              <div>
+                <p className="pm-label">Sugeridos — estiveram no mesmo BO que alvos do dossiê</p>
+                <div className="max-h-72 space-y-1 overflow-auto">
+                  {suggestions.map((s) => row(s.author, <p className={`truncate ${s.arrested ? "font-semibold text-status-late" : "text-pm-gold-dark"}`}>{s.arrested ? "Preso junto" : "Junto"} com {s.with.join(", ")} ({s.times}×)</p>))}
+                </div>
+              </div>
+            )}
+            {!search.trim() && !suggestions.length && <p className="px-1 text-xs text-pm-muted">Digite para buscar no banco de alvos. Clique nos alvos para marcar vários, ou no + para vincular na hora.</p>}
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Papel"><RoleSelect value={role} onChange={(e) => setRole(e.target.value)} /></Field>
+              <Field label="Superior"><Select value={parentId} onChange={(e) => setParentId(e.target.value)}><option value="">— topo —</option>{targets.map((x) => <option key={x.id} value={x.id}>{nameOf(x.id)}</option>)}</Select></Field>
+            </div>
+            <label className="flex items-center gap-2 text-xs"><input type="checkbox" className="h-4 w-4 accent-[#7A6C45]" checked={autoLink} onChange={(e) => setAutoLink(e.target.checked)} />Ligar no organograma a quem esteve no mesmo BO</label>
+            <Button variant="primary" disabled={!picked.length || adding} onClick={() => add()}>{adding ? <Loader2 className="animate-spin" /> : <Plus />}{picked.length > 1 ? `Vincular ${picked.length} alvos` : "Vincular ao dossiê"}</Button>
+            <Button onClick={() => setNewOpen(true)}><UserPlus />Cadastrar alvo novo</Button>
+            <Button onClick={() => setBoOpen(true)}><ScanText />Cadastrar alvos pelo BO</Button>
+          </div>
+        </Collapsible>
 
-      <div className="grid items-start gap-5 xl:grid-cols-[1fr_380px]">
-        <Card>
-          <CardContent>
-            <SectionHeader icon={Users} title="Alvos do dossiê" subtitle="Papel no grupo, superior hierárquico e observações desta investigação." />
+        <Collapsible icon={Link2} title="Vínculos" badge={links.length} subtitle="Relações fora da hierarquia (parentesco, fornecedor, comprador…).">
+          <p className="mb-3 text-sm text-pm-muted">Relações fora da hierarquia (parentesco, fornecedor, comprador…). Dica: no organograma, escolha “cria vínculo” e arraste um alvo sobre o outro.</p>
+              {targets.length < 2 ? <p className="text-sm text-pm-muted">Vincule ao menos dois alvos.</p> : (
             <div className="grid gap-2">
-              {targets.map((t) => {
-                const a = authorOf(t);
-                const photo = t.authorId ? data.authorPhotos.find((p) => p.authorId === t.authorId) : undefined;
-                return (
-                  <div key={t.id} className={`space-y-3 rounded-sm border bg-white p-3 ${selected === t.id ? "border-pm-black ring-2 ring-pm-gold" : "border-pm-line"}`} onClick={() => setSelected(t.id)}>
-                    {/* Linha 1: foto, nome e ações */}
-                    <div className="flex items-start gap-3">
-                      <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-sm bg-pm-sand">{photo ? <img src={data.getIntelFileUrl(photo.filePath)} alt="" className="h-full w-full object-cover" /> : <Users className="h-5 w-5 text-pm-muted" />}</div>
-                      <div className="min-w-0 flex-1">
-                        {a ? <p className="font-black uppercase leading-tight [overflow-wrap:anywhere]">{a.name}{groupStatus(t) && <span className="ml-2 rounded-sm bg-pm-black px-1.5 py-0.5 text-[10px] text-pm-gold-light">{groupStatus(t)}</span>}</p>
-                          : <div className="flex flex-wrap gap-1"><Input className="h-8 min-w-[180px] flex-1 font-black uppercase" defaultValue={t.label} key={t.label} onClick={(e) => e.stopPropagation()} onBlur={(e) => e.target.value.trim() && e.target.value.toUpperCase() !== t.label && api.updateTarget(t, { label: e.target.value.toUpperCase() })} /><Button size="sm" variant="gold" onClick={(e) => { e.stopPropagation(); setIdentify(t); }}>Identificar no banco</Button></div>}
-                        <p className="truncate text-xs text-pm-muted">{a ? <>{a.alias ? `"${a.alias}" · ` : ""}{a.crimes || a.status}</> : "Não identificado — sem card no banco de alvos"}</p>
-                      </div>
-                      <div className="flex shrink-0 gap-1">
-                        <Button size="icon" variant="ghost" title="Indícios da função e área de atuação" onClick={(e) => { e.stopPropagation(); setEvidenceOf(t); }}><Binoculars /></Button>
-                        <Button size="icon" variant="ghost" title="Ver ficha completa" disabled={!a} onClick={(e) => { e.stopPropagation(); setFicha(a || null); }}><UserRound /></Button>
-                        <Button size="icon" variant="ghost" title="Desvincular" onClick={() => api.removeTarget(t)}><Trash2 /></Button>
-                      </div>
+              <Select value={link.from} onChange={(e) => setLink({ ...link, from: e.target.value })}><option value="">Alvo…</option>{targets.map((x) => <option key={x.id} value={x.id}>{nameOf(x.id)}</option>)}</Select>
+              <Select value={link.relation} onChange={(e) => setLink({ ...link, relation: e.target.value })}>{RELATIONS.map((r) => <option key={r}>{r}</option>)}</Select>
+              <Select value={link.to} onChange={(e) => setLink({ ...link, to: e.target.value })}><option value="">…de / com o alvo</option>{targets.filter((x) => x.id !== link.from).map((x) => <option key={x.id} value={x.id}>{nameOf(x.id)}</option>)}</Select>
+              <Input placeholder="Observação (opcional)" value={link.notes} onChange={(e) => setLink({ ...link, notes: e.target.value })} />
+              <Button variant="primary" onClick={async () => { if (await api.addLink(inv, link.from, link.to, link.relation, link.notes)) setLink({ from: "", to: "", relation: link.relation, notes: "" }); }}><Plus />Registrar vínculo</Button>
+            </div>
+          )}
+          <div className="mt-3 divide-y divide-pm-line">
+            {links.map((l) => (
+              <div key={l.id} className="flex items-center gap-2 py-2 text-sm">
+                <span className="min-w-0 flex-1"><b>{nameOf(l.fromTarget)}</b> <span className="text-pm-gold-dark">— {l.relation.toLowerCase()} —</span> <b>{nameOf(l.toTarget)}</b>{l.notes && <span className="block text-xs text-pm-muted">{l.notes}</span>}</span>
+                <Button size="icon" variant="ghost" onClick={() => api.deleteLink(l)}><Trash2 /></Button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 border-t border-pm-line pt-3">
+            <p className="pm-label mb-1">Telefones e veículos em comum</p>
+            <SharedContactsPanel data={data} api={api} inv={inv} targets={targets} links={links} />
+          </div>
+        </Collapsible>
+      </div>
+
+      <Card>
+        <CardContent>
+          <SectionHeader icon={Users} title={<>Alvos do dossiê <span className="rounded-sm bg-pm-black px-2 py-0.5 align-middle text-[11px] font-black text-pm-gold-light">{targets.length}</span></>} subtitle="Toque num alvo para abrir: papel no grupo, superior, grau, núcleo, área e observações desta investigação."
+            actions={targets.length > 1 ? <Button size="sm" className="whitespace-nowrap" onClick={() => setOpenIds(allOpen ? new Set() : new Set(targets.map((x) => x.id)))}>{allOpen ? "Recolher todos" : "Expandir todos"}</Button> : undefined} />
+          <div className="grid gap-2">
+            {targets.map((t) => {
+              const a = authorOf(t);
+              const photo = t.authorId ? data.authorPhotos.find((p) => p.authorId === t.authorId) : undefined;
+              const isOpen = openIds.has(t.id);
+              const status = groupStatus(t);
+              return (
+                <div key={t.id} className={`min-w-0 rounded-sm border bg-white ${selected === t.id ? "border-pm-black ring-2 ring-pm-gold" : "border-pm-line"}`}>
+                  {/* Linha compacta: foto, nome, papel/chefe e ações; toque para abrir */}
+                  <div className="flex items-center gap-1 p-2">
+                    <button type="button" aria-expanded={isOpen} onClick={() => { if (!isOpen) setSelected(t.id); toggleRow(t.id); }} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                      <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-sm bg-pm-sand">{photo ? <img src={data.getIntelFileUrl(photo.filePath)} alt="" className="h-full w-full object-cover" /> : <Users className="h-5 w-5 text-pm-muted" />}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-black uppercase leading-tight [overflow-wrap:anywhere]">{a ? a.name : t.label || "NÃO IDENTIFICADO"}{status && <span className="ml-2 rounded-sm bg-pm-black px-1.5 py-0.5 align-middle text-[10px] text-pm-gold-light">{status}</span>}{!a && <span className="ml-2 rounded-sm border border-pm-line px-1.5 py-0.5 align-middle text-[10px] text-pm-muted">não identificado</span>}</span>
+                        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-pm-muted">
+                          <span className="inline-flex items-center gap-1 font-bold text-pm-ink"><span className="h-2.5 w-2.5 rounded-[2px]" style={{ background: ROLE_COLOR[t.role] || "#6B655A" }} />{t.role}</span>
+                          <span>{levelOf(t) + 1}º grau</span>
+                          <span className="[overflow-wrap:anywhere]">{t.parentId ? <>chefe: <b className="text-[#C0201A]">{nameOf(t.parentId)}</b></> : "sem chefe"}</span>
+                          {t.evidence.length > 0 && <span>{t.evidence.length} indício(s)</span>}
+                        </span>
+                      </span>
+                      {isOpen ? <ChevronDown className="h-5 w-5 shrink-0 text-pm-muted" /> : <ChevronRight className="h-5 w-5 shrink-0 text-pm-muted" />}
+                    </button>
+                    <div className="flex shrink-0 gap-0.5">
+                      <Button size="icon" variant="ghost" title="Indícios da função e área de atuação" onClick={() => setEvidenceOf(t)}><Binoculars /></Button>
+                      <Button size="icon" variant="ghost" title="Ver ficha completa" disabled={!a} onClick={() => setFicha(a || null)}><UserRound /></Button>
+                      <Button size="icon" variant="ghost" title="Desvincular" onClick={() => api.removeTarget(t)}><Trash2 /></Button>
                     </div>
-                    {/* Linha 2: campos — se ajustam à largura disponível */}
-                    <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-2" onClick={(e) => e.stopPropagation()}>
+                  </div>
+                  {isOpen && (
+                    <div className="space-y-3 border-t border-pm-line p-3">
+                      {a
+                        ? <p className="text-xs text-pm-muted [overflow-wrap:anywhere]">{a.alias ? `"${a.alias}" · ` : ""}{a.crimes || a.status}</p>
+                        : <div className="space-y-1"><p className="text-xs text-pm-muted">Não identificado — sem card no banco de alvos.</p>
+                          <div className="flex flex-wrap gap-1"><Input className="h-8 min-w-[180px] flex-1 font-black uppercase" defaultValue={t.label} key={t.label} onClick={(e) => e.stopPropagation()} onBlur={(e) => e.target.value.trim() && e.target.value.toUpperCase() !== t.label && api.updateTarget(t, { label: e.target.value.toUpperCase() })} /><Button size="sm" variant="gold" onClick={(e) => { e.stopPropagation(); setIdentify(t); }}>Identificar no banco</Button></div></div>}
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2">
                       <Field label="Papel"><RoleSelect className="h-9" value={t.role} onChange={(e) => api.updateTarget(t, { role: e.target.value })} /></Field>
                       <Field label="Superior"><Select className="h-9" value={t.parentId} onChange={(e) => api.updateTarget(t, { parentId: e.target.value })}><option value="">— topo —</option>{targets.filter((x) => x.id !== t.id).map((x) => <option key={x.id} value={x.id}>{nameOf(x.id)}</option>)}</Select></Field>
                       <Field label="Grau na hierarquia"><Select className="h-9" value={t.grade ?? ""} onChange={(e) => api.updateTarget(t, { grade: e.target.value ? Number(e.target.value) : null })}>
@@ -640,78 +708,16 @@ function TargetsTab({ data, api, inv, targets, links }: { data: AppData; api: In
                       <Field label="Área de atuação"><div className="relative"><MapPin className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-pm-muted" /><Input className="h-9 pl-8 uppercase" placeholder="bairro / ponto" defaultValue={t.area} key={t.area} onBlur={(e) => e.target.value.toUpperCase() !== t.area && api.updateTarget(t, { area: e.target.value.toUpperCase() })} /></div></Field>
                       <Field label="Indícios"><button type="button" onClick={() => setEvidenceOf(t)} className="h-9 w-full rounded-sm border border-pm-line px-3 text-xs font-bold hover:border-pm-gold">{t.evidence.length ? `${t.evidence.length} indício(s)` : "+ indício"}</button></Field>
                     </div>
-                    <Input className="h-8 text-xs" placeholder="Observação nesta investigação" defaultValue={t.notes} onClick={(e) => e.stopPropagation()} onBlur={(e) => e.target.value !== t.notes && api.updateTarget(t, { notes: e.target.value })} />
-                  </div>
-                );
-              })}
-              {targets.length === 0 && <p className="text-sm text-pm-muted">Nenhum alvo vinculado.</p>}
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-5">
-          <Card>
-            <CardContent>
-              <SectionHeader icon={UserPlus} title="Vincular alvo" />
-              <div className="grid gap-2">
-                <div className="relative"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-pm-muted" />
-                  <Input className="pl-9" placeholder="Buscar: nome, vulgo, RG/CPF, bairro…" value={search} onChange={(e) => setSearch(e.target.value)} autoComplete="off" />
-                </div>
-                {search.trim() && (
-                  <div className="max-h-72 space-y-1 overflow-auto">
-                    {candidates.length === 0 && <p className="px-1 text-sm text-pm-muted">Nenhum alvo encontrado. Cadastre abaixo.</p>}
-                    {candidates.map((a) => row(a))}
-                  </div>
-                )}
-                {!search.trim() && suggestions.length > 0 && (
-                  <div>
-                    <p className="pm-label">Sugeridos — estiveram no mesmo BO que alvos do dossiê</p>
-                    <div className="max-h-72 space-y-1 overflow-auto">
-                      {suggestions.map((s) => row(s.author, <p className={`truncate ${s.arrested ? "font-semibold text-status-late" : "text-pm-gold-dark"}`}>{s.arrested ? "Preso junto" : "Junto"} com {s.with.join(", ")} ({s.times}×)</p>))}
+                    <Input className="h-8 text-xs" placeholder="Observação nesta investigação" defaultValue={t.notes} onBlur={(e) => e.target.value !== t.notes && api.updateTarget(t, { notes: e.target.value })} />
                     </div>
-                  </div>
-                )}
-                {!search.trim() && !suggestions.length && <p className="px-1 text-xs text-pm-muted">Digite para buscar no banco de alvos. Clique nos alvos para marcar vários, ou no + para vincular na hora.</p>}
-                <div className="grid grid-cols-2 gap-2">
-                  <Field label="Papel"><RoleSelect value={role} onChange={(e) => setRole(e.target.value)} /></Field>
-                  <Field label="Superior"><Select value={parentId} onChange={(e) => setParentId(e.target.value)}><option value="">— topo —</option>{targets.map((x) => <option key={x.id} value={x.id}>{nameOf(x.id)}</option>)}</Select></Field>
+                  )}
                 </div>
-                <label className="flex items-center gap-2 text-xs"><input type="checkbox" className="h-4 w-4 accent-[#7A6C45]" checked={autoLink} onChange={(e) => setAutoLink(e.target.checked)} />Ligar no organograma a quem esteve no mesmo BO</label>
-                <Button variant="primary" disabled={!picked.length || adding} onClick={() => add()}>{adding ? <Loader2 className="animate-spin" /> : <Plus />}{picked.length > 1 ? `Vincular ${picked.length} alvos` : "Vincular ao dossiê"}</Button>
-                <Button onClick={() => setNewOpen(true)}><UserPlus />Cadastrar alvo novo</Button>
-                <Button onClick={() => setBoOpen(true)}><ScanText />Cadastrar alvos pelo BO</Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent>
-              <SectionHeader icon={Link2} title="Vínculos" subtitle="Relações fora da hierarquia (parentesco, fornecedor, comprador…). Dica: no organograma, escolha “cria vínculo” e arraste um alvo sobre o outro." />
-              {targets.length < 2 ? <p className="text-sm text-pm-muted">Vincule ao menos dois alvos.</p> : (
-                <div className="grid gap-2">
-                  <Select value={link.from} onChange={(e) => setLink({ ...link, from: e.target.value })}><option value="">Alvo…</option>{targets.map((x) => <option key={x.id} value={x.id}>{nameOf(x.id)}</option>)}</Select>
-                  <Select value={link.relation} onChange={(e) => setLink({ ...link, relation: e.target.value })}>{RELATIONS.map((r) => <option key={r}>{r}</option>)}</Select>
-                  <Select value={link.to} onChange={(e) => setLink({ ...link, to: e.target.value })}><option value="">…de / com o alvo</option>{targets.filter((x) => x.id !== link.from).map((x) => <option key={x.id} value={x.id}>{nameOf(x.id)}</option>)}</Select>
-                  <Input placeholder="Observação (opcional)" value={link.notes} onChange={(e) => setLink({ ...link, notes: e.target.value })} />
-                  <Button variant="primary" onClick={async () => { if (await api.addLink(inv, link.from, link.to, link.relation, link.notes)) setLink({ from: "", to: "", relation: link.relation, notes: "" }); }}><Plus />Registrar vínculo</Button>
-                </div>
-              )}
-              <div className="mt-3 divide-y divide-pm-line">
-                {links.map((l) => (
-                  <div key={l.id} className="flex items-center gap-2 py-2 text-sm">
-                    <span className="min-w-0 flex-1"><b>{nameOf(l.fromTarget)}</b> <span className="text-pm-gold-dark">— {l.relation.toLowerCase()} —</span> <b>{nameOf(l.toTarget)}</b>{l.notes && <span className="block text-xs text-pm-muted">{l.notes}</span>}</span>
-                    <Button size="icon" variant="ghost" onClick={() => api.deleteLink(l)}><Trash2 /></Button>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 border-t border-pm-line pt-3">
-                <p className="pm-label mb-1">Telefones e veículos em comum</p>
-                <SharedContactsPanel data={data} api={api} inv={inv} targets={targets} links={links} />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+              );
+            })}
+            {targets.length === 0 && <p className="text-sm text-pm-muted">Nenhum alvo vinculado.</p>}
+          </div>
+        </CardContent>
+      </Card>
       {targets.length > 0 && (
         <Card>
           <CardContent>
@@ -824,7 +830,7 @@ function ReportTab({ inv, items, targets, links, generating, onGenerate, onTab }
   ];
   const ok = checks.filter(([v]) => v).length;
   return (
-    <div className="grid items-start gap-5 lg:grid-cols-[1fr_360px]">
+    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
       <Card>
         <CardContent>
           <SectionHeader icon={Download} title="Gerar relatório de inteligência" subtitle={`${ok}/${checks.length} itens prontos. Dá para gerar a qualquer momento — o que estiver vazio fica de fora.`} />
